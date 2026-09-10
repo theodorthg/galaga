@@ -1,0 +1,81 @@
+[gd_scene format=3 uid="uid://dmv50krf4bo5r"]
+
+[ext_resource type="Script" uid="uid://bwkr2t4ku15qq" path="res://ship.gd" id="1_78o8j"]
+[ext_resource type="Texture2D" uid="uid://bniyrxn3r2v8h" path="res://assets/ship.png" id="3_pdppw"]
+[ext_resource type="Texture2D" uid="uid://d0bh8am2qd005" path="res://assets/gem_icon.png" id="5_h3paj"]
+[ext_resource type="PackedScene" uid="uid://dgf54k70yiiff" path="res://assets/ship_visual_effects/main_thruster/main_thruster.tscn" id="5_q7c3l"]
+[ext_resource type="PackedScene" uid="uid://bklom8bhpxg4h" path="res://assets/ship_visual_effects/side_thruster/side_thruster.tscn" id="6_1updt"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_wcjqx"]
+radius = 42.190044
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_5xifn"]
+bg_color = Color(0.62352943, 0.8666667, 0.31764707, 1)
+corner_radius_top_left = 4
+corner_radius_top_right = 4
+corner_radius_bottom_right = 4
+corner_radius_bottom_left = 4
+
+[sub_resource type="LabelSettings" id="LabelSettings_wcjqx"]
+font_size = 20
+outline_size = 8
+outline_color = Color(0, 0, 0, 1)
+
+[node name="Ship" type="Area2D" unique_id=1709569917]
+position = Vector2(262, 828)
+collision_mask = 2
+script = ExtResource("1_78o8j")
+
+[node name="Sprite2D" type="Sprite2D" parent="." unique_id=245057395]
+position = Vector2(1.5258789e-05, 8.9999695)
+rotation = -1.5833673
+texture = ExtResource("3_pdppw")
+
+[node name="MainThruster" parent="Sprite2D" unique_id=1548958609 instance=ExtResource("5_q7c3l")]
+position = Vector2(-33, 0)
+
+[node name="SideThruster" parent="Sprite2D" unique_id=751778080 instance=ExtResource("6_1updt")]
+position = Vector2(-44, -21)
+rotation = 1.74987
+
+[node name="SideThruster2" parent="Sprite2D" unique_id=55010892 instance=ExtResource("6_1updt")]
+position = Vector2(-45, 19)
+rotation = 1.36715
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=2069234749]
+position = Vector2(0, 12)
+shape = SubResource("CircleShape2D_wcjqx")
+
+[node name="UI" type="Control" parent="." unique_id=1942165343]
+layout_mode = 3
+anchors_preset = 0
+offset_left = 946.0
+offset_top = 504.0
+offset_right = 986.0
+offset_bottom = 544.0
+
+[node name="HealthBar" type="ProgressBar" parent="UI" unique_id=1788446238]
+layout_mode = 0
+offset_left = -991.0
+offset_top = -392.0
+offset_right = -891.0
+offset_bottom = -384.0
+theme_override_styles/fill = SubResource("StyleBoxFlat_5xifn")
+value = 7.84
+show_percentage = false
+
+[node name="Sprite2D" type="Sprite2D" parent="UI" unique_id=1924102248]
+visible = false
+position = Vector2(-950, -560)
+scale = Vector2(0.75, 0.75)
+texture = ExtResource("5_h3paj")
+
+[node name="GemCount" type="Label" parent="UI" unique_id=1413791338]
+visible = false
+layout_mode = 0
+offset_left = -936.0
+offset_top = -560.0
+offset_right = -896.0
+offset_bottom = -532.0
+text = "x0"
+label_settings = SubResource("LabelSettings_wcjqx")

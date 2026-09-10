@@ -1,0 +1,9 @@
+[gd_scene format=3 uid="uid://0uu76vxlq51l"]
+
+[ext_resource type="Script" uid="uid://cll25uljlnnsa" path="res://random_item_placer.gd" id="1_1wax0"]
+
+[node name="RandomItemPlacer" type="Node2D" unique_id=1400510507]
+script = ExtResource("1_1wax0")
+
+[node name="Timer" type="Timer" parent="." unique_id=275343889]
+autostart = true

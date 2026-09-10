@@ -1,0 +1,16 @@
+[gd_scene format=3 uid="uid://x1gstl5hxa7j"]
+
+[node name="GameOver" type="Node2D" unique_id=160076444]
+
+[node name="Label" type="Label" parent="." unique_id=1549358711]
+offset_left = 871.0
+offset_top = 490.0
+offset_right = 1044.0
+offset_bottom = 526.0
+theme_override_colors/font_color = Color(1, 0.99215686, 1, 0.9882353)
+theme_override_colors/font_shadow_color = Color(0, 0, 0, 0)
+theme_override_colors/font_outline_color = Color(0, 0, 0, 1)
+theme_override_constants/outline_size = 8
+theme_override_font_sizes/font_size = 36
+text = "Game Over"
+horizontal_alignment = 1
