@@ -47,6 +47,7 @@ position = Vector2(0, 12)
 shape = SubResource("CircleShape2D_wcjqx")
 
 [node name="UI" type="Control" parent="." unique_id=1942165343]
+visible = false
 layout_mode = 3
 anchors_preset = 0
 offset_left = 946.0

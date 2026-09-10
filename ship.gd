@@ -36,16 +36,29 @@ func set_ship_count(new_ship_count: int) -> void:
 	if ship_count <= 0:
 		get_tree().change_scene_to_file("res://game_over.tscn")
 
+# Maus als zusätzliche Steuerung: sobald die Maus bewegt wird, folgt das Schiff
+# ihrer X-Position; die nächste Tastatur-/Pad-Eingabe übernimmt wieder.
+var _mouse_aim := false
+
 func _process(delta: float) -> void:
-	# 1. Nur noch horizontale Eingaben abfragen
 	var direction_x := Input.get_axis("move_left", "move_right")
 
-	# 2. Direkte Bewegung ohne Trägheit (Steering) für das Arcade-Gefühl
-	position.x += direction_x * speed * delta
+	if direction_x != 0.0:
+		_mouse_aim = false
+		position.x += direction_x * speed * delta
+	elif _mouse_aim:
+		position.x = move_toward(position.x, get_global_mouse_position().x, speed * delta)
 
-	# 3. Bewegung an den Rändern blockieren (clamp statt wrapf)
+	# Bewegung an den Rändern blockieren
 	position.x = clamp(position.x, ship_half_width, viewport_width - ship_half_width)
+
 	if Input.is_action_just_pressed("shoot"):
+		shoot()
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventMouseMotion:
+		_mouse_aim = true
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		shoot()
 
 # (Optional kannst Du das auch ganz oben bei Deinen Variablen definieren)

@@ -33,3 +33,8 @@ templates.tpz
 
 # editor backup files
 *~
+
+# throwaway capture harness
+/_capture.gd
+/_capture.tscn
+/_capture.gd.uid
