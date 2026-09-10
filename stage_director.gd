@@ -6,17 +6,17 @@ extends Node2D
 ##     curve; emits `stage_populated` once every spawned enemy has locked in
 ##     or been destroyed.
 ##  2. attacks — once `begin_attacks()` is called, periodically sends a random
-##     formation enemy diving (capped at MAX_DIVERS at once).
+##     formation enemy diving (capped at `_atk.max_divers` at once).
+##
+## `configure()` overrides the attack tuning from the difficulty setting.
+## `abort()` cancels an in-flight fly-in (used on quit-to-title).
 
 const ENEMY_SCENE := preload("res://enemy.tscn")
 const GROUP_SIZE := 8
 const GROUP_GAP := 0.9
 const LAUNCH_GAP := 0.16
 
-const ATTACK_FIRST := 1.8
-const ATTACK_MIN := 1.3
-const ATTACK_MAX := 3.2
-const MAX_DIVERS := 3
+const ATTACK_DEFAULT := {"first": 1.8, "min": 1.3, "max": 3.2, "max_divers": 3}
 
 var _formation: Formation
 var _spawn_parent: Node
@@ -24,6 +24,8 @@ var _pending := 0
 var _spawning := false
 var _attacks_on := false
 var _attack_t := 0.0
+var _atk := ATTACK_DEFAULT.duplicate()
+var _run_id := 0
 
 signal stage_populated
 signal enemy_killed(points)
@@ -32,12 +34,23 @@ func setup(formation: Formation, spawn_parent: Node) -> void:
 	_formation = formation
 	_spawn_parent = spawn_parent
 
+func configure(params: Dictionary) -> void:
+	for k in params:
+		_atk[k] = params[k]
+
 # --- fly-in ------------------------------------------------------------
 func start_stage(stage: int) -> void:
 	_attacks_on = false
-	_run_stage(stage)
+	_run_id += 1
+	_run_stage(stage, _run_id)
 
-func _run_stage(stage: int) -> void:
+func abort() -> void:
+	_run_id += 1
+	_attacks_on = false
+	_spawning = false
+	_pending = 0
+
+func _run_stage(stage: int, run_id: int) -> void:
 	_spawning = true
 	_pending = 0
 	var vp := get_viewport_rect().size
@@ -54,7 +67,7 @@ func _run_stage(stage: int) -> void:
 				break
 			_spawn(idx, curve, k * LAUNCH_GAP)
 		await get_tree().create_timer(GROUP_GAP).timeout
-		if not is_instance_valid(self):
+		if not is_instance_valid(self) or run_id != _run_id:
 			return
 
 	_spawning = false
@@ -79,7 +92,7 @@ func _check_done() -> void:
 # --- attacks ---------------------------------------------------------
 func begin_attacks() -> void:
 	_attacks_on = true
-	_attack_t = ATTACK_FIRST
+	_attack_t = _atk["first"]
 
 func stop_attacks() -> void:
 	_attacks_on = false
@@ -90,7 +103,7 @@ func _process(delta: float) -> void:
 	_attack_t -= delta
 	if _attack_t > 0.0:
 		return
-	_attack_t = randf_range(ATTACK_MIN, ATTACK_MAX)
+	_attack_t = randf_range(_atk["min"], _atk["max"])
 	_launch_dive()
 
 func _launch_dive() -> void:
@@ -101,6 +114,6 @@ func _launch_dive() -> void:
 			divers += 1
 		elif e.is_available_to_dive():
 			ready_to_dive.append(e)
-	if divers >= MAX_DIVERS or ready_to_dive.is_empty():
+	if divers >= int(_atk["max_divers"]) or ready_to_dive.is_empty():
 		return
 	ready_to_dive.pick_random().dive()

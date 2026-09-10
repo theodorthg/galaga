@@ -69,6 +69,10 @@ func release(enemy: Node) -> void:
 	if i != -1:
 		_occupant[i] = null
 
+func reset() -> void:
+	for i in _occupant.size():
+		_occupant[i] = null
+
 func live_count() -> int:
 	var n := 0
 	for o in _occupant:

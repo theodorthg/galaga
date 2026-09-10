@@ -18,6 +18,7 @@ var _alive := true
 var _invuln := 0.0
 var _mouse_aim := false
 var _touch := false
+var _snd: Node
 
 signal died
 
@@ -25,6 +26,7 @@ func _ready() -> void:
 	add_to_group("player")
 	add_to_group("touch_layout_listeners")
 	_touch = OS.has_feature("mobile") or DisplayServer.is_touchscreen_available()
+	_snd = get_node_or_null("/root/Snd")
 	area_entered.connect(_on_area_entered)
 	viewport_width = get_viewport_rect().size.x
 
@@ -71,6 +73,8 @@ func shoot() -> void:
 	laser.add_to_group("player_lasers")
 	get_parent().add_child(laser)
 	laser.global_position = global_position + Vector2(0, -22)
+	if _snd:
+		_snd.play("shoot")
 
 func _on_area_entered(area: Area2D) -> void:
 	if not _alive or _invuln > 0.0:
@@ -85,6 +89,8 @@ func _destroy() -> void:
 	_alive = false
 	visible = false
 	set_deferred("monitoring", false)
+	if _snd:
+		_snd.play("player_boom")
 	died.emit()
 
 func respawn() -> void:

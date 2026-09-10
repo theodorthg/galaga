@@ -1,17 +1,15 @@
 class_name Hud
 extends Control
 
-## Score (top-left), stage (bottom-right), remaining lives as little ship marks
-## (bottom-left, drawn), centre banner ("STAGE n"), game-over panel, and — on
-## touch devices — a pause button in the top band plus a PAUSED overlay.
+## In-play HUD only: score (top-left), stage (bottom-right), remaining lives as
+## little ship marks (bottom-left, drawn), the centre "STAGE n" banner, and — on
+## touch devices — a pause button in the top band.
+## Title / pause / settings / game-over screens live in menus.gd.
 
 @onready var _score: Label = $Score
 @onready var _stage: Label = $Stage
 @onready var _banner: Label = $Banner
-@onready var _scrim: ColorRect = $Scrim
-@onready var _over: Label = $GameOver
 @onready var _pause_btn: Button = $PauseButton
-@onready var _paused_label: Label = $Paused
 
 const LIFE_ICON := Color("ffd23f")
 
@@ -38,9 +36,9 @@ func set_lives(n: int) -> void:
 func set_touch(on: bool) -> void:
 	_pause_btn.visible = on
 
-func set_paused(on: bool) -> void:
-	_scrim.visible = on
-	_paused_label.visible = on
+# hide the whole HUD while a full-screen menu is up
+func set_playing(on: bool) -> void:
+	visible = on
 
 func flash_banner(text: String) -> void:
 	_banner.text = text
@@ -48,11 +46,6 @@ func flash_banner(text: String) -> void:
 
 func hide_banner() -> void:
 	_banner.visible = false
-
-func show_game_over(score: int) -> void:
-	_over.text = "GAME OVER\n\nSCORE  %06d\n\nSHOOT TO RESTART" % score
-	_scrim.visible = true
-	_over.visible = true
 
 func _draw() -> void:
 	var y := size.y - 20.0

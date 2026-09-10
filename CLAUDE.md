@@ -3,33 +3,59 @@
 Ergänzt die übergeordnete `CLAUDE.md` unter
 `~/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/`.
 
-**Stand: v0.1.0.** Scaffolding steht. Fertig: **Formation + Einflug**,
-**Sturzflüge + Gegnerfeuer** (Phase 1), **Leben / HUD / Game-Over** (Phase 2),
-**Touch + Aspect-Umschaltung + Pause** (Phase 3).
+**Stand: v0.1.0.** Scaffolding + Phasen 1–4 durch. Fertig: **Formation +
+Einflug**, **Sturzflüge + Gegnerfeuer** (P1), **Leben / HUD / Game-Over** (P2),
+**Touch + Aspect-Umschaltung + Pause** (P3), **Menüs / Settings / Sound /
+Hall of Fame** (P4).
 40er-Formation, gruppenweiser Einflug entlang Kurven, prozedurale Platzhalter
 mit 2-Frame-Flap. Divers peelen einzeln raus, sweepen am Spieler vorbei (Bomben
-werfend), fliegen unten raus und kehren von oben in ihren Slot zurück. 3 Leben,
-Extra-Leben alle 20 000 Punkte, HUD (Score / Stage / Leben-Marken), Game-Over-
-Overlay (Scrim + „SHOOT TO RESTART" → `reload_current_scene`). Als Nächstes:
-Phase 3 (Touch + `content_scale_aspect`-Umschaltung).
+werfend), fliegen unten raus und kehren von oben in ihren Slot zurück.
+Start-Screen (Play / Einstellungen / Steuerung / Beenden), Pausenmenü,
+Einstellungen (Leben / Extra-Leben / Schwierigkeit → live in die nächste Runde),
+Sound-Unterseite (Regler pro Sound), bildlose Hilfe (3 Seiten), Game-Over mit
+Hall of Fame + Namenseingabe. **Sounds sind Platzhalter-WAVs** (synthetisch via
+`gen_sounds.py`) — echte Audios kommen später.
+Als Nächstes: Polish + auf echten Geräten testen, Sprites/Splash vom Nutzer.
 
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,
 StageDirector, Ship, HUD-CanvasLayer.
 
-- `game.gd` (`class_name Game`) — State-Machine READY → ENTERING → FORMATION →
-  GAME_OVER, Stage-Zähler, Score, 3 Leben (`START_LIVES`), Extra-Leben alle
-  `EXTRA_LIFE_EVERY` (20 000). Ship `died` → Leben−1 → respawn nach 1,2 s bzw.
-  bei 0 → GAME_OVER (`_unhandled_input`: Schuss/Klick → `reload_current_scene`).
-  `content_scale_aspect = KEEP` (Desktop; Touch-Umschaltung noch offen).
-  Formation leergeräumt → nächste Stage.
-- `hud.gd` (`class_name Hud`, Control auf dem HUD-`CanvasLayer`) — Score
-  (oben links), Stage (unten rechts), Leben als gezeichnete Marken (unten
-  links, `_draw`), Center-Banner (`flash_banner`/`hide_banner`), Game-Over
-  (`Scrim` + `GameOver`-Label), Touch-Pause-Button (oben rechts, nur Touch,
-  `set_touch`) + PAUSED-Overlay (`set_paused`), Signal `pause_pressed`.
-  `HUD/Root` läuft `process_mode = ALWAYS` (Button muss bei `tree.paused` gehen).
+- `game.gd` (`class_name Game`) — State-Machine TITLE → READY → ENTERING →
+  FORMATION → GAME_OVER + `_paused`. `_new_run()` (aus Titel/„Nochmal"): liest
+  `GameSettings`, setzt Leben/Extra-Leben-Schwelle, `_director.configure(...)`
+  aus der Schwierigkeit, räumt das Feld (`_clear_board`), entpausiert, Musik an.
+  Ship `died` → Leben−1 → respawn nach 1,2 s bzw. bei 0 → GAME_OVER (1 s Delay,
+  dann `menus.show_game_over`, Tree pausiert). Pause (`pause`-Action / HUD-Button)
+  → Tree pausiert + `menus.show_pause()`. `_enter_title()` bei „Zum Titel".
+  `_snd` = `get_node_or_null("/root/Snd")` (bare `Snd` bricht `_selftest`).
+  `content_scale_aspect` KEEP/KEEP_WIDTH je Touch. `process_mode = ALWAYS`.
+- `hud.gd` (`class_name Hud`) — **nur noch das In-Game-HUD**: Score (oben links),
+  Stage (unten rechts), Leben als gezeichnete Marken (unten links, `_draw`),
+  Center-Banner, Touch-Pause-Button (`set_touch`), Signal `pause_pressed`,
+  `set_playing(on)` blendet das ganze HUD bei offenem Menü aus. Titel / Pause /
+  Settings / Game-Over macht jetzt `menus.gd`.
+- `menus.gd` (`class_name Menus`, eigener `CanvasLayer` in `game.tscn`,
+  `process_mode = ALWAYS`) — alle Menü-Screens im Code wie tetris' `ui.gd`:
+  Titel, Pause, Einstellungen (Stepper Leben / Extra-Leben / Schwierigkeit),
+  Sound-Unterseite (HSlider pro Sound, Loslassen = Vorhören), Hilfe (3 Textseiten
+  mit ‹/›), Game-Over + Hall-of-Fame-Liste + Namenseingabe bei Qualifikation.
+  Signale `start_game` / `resume_game` / `to_title` / `settings_changed`.
+  „Beenden" nur wenn nicht `OS.has_feature("web")`.
+- `game_settings.gd` (`class_name GameSettings`) — `user://settings.cfg` `[s]`:
+  `lives` (2–5), `extra_life` (0/10k/20k/30k), `difficulty` (0–2).
+  `dive_params(difficulty)` → `{first, min, max, max_divers}` für den Director.
+- `hall_of_fame.gd` (`class_name HallOfFame`) — `user://hall_of_fame.cfg`, Top 10
+  nach Score (`qualifies` / `insert`).
+- `sound_manager.gd` (Autoload `Snd`, `project.godot [autoload]`) — ein
+  `AudioStreamPlayer` je Key, Clip `res://assets/sounds/<key>.wav` (fällt auf
+  `.ogg` zurück; fehlt die Datei → still). Pro-Sound-Lautstärke 0–100 in
+  `user://settings.cfg [sound]` + `calib_version`, `_BASE_DB`-Kalibrierung je
+  Sound. Musik-Loop manuell über `finished` (WAV-Import loopt nicht von selbst).
+  Keys: `music shoot hit dive player_boom extra stage`. **Aktuell
+  Platzhalter-WAVs** aus `gen_sounds.py` (synthetische
+  Blips) — bei echten Audios einfach die Dateien in `assets/sounds/` ersetzen.
 
 ### Geräte-Layout (Phase 3)
 
@@ -147,56 +173,30 @@ bash projects/galaga/build.sh web        # einzeln: linux | web | android
 
 ## Offen / als Nächstes
 
-1. **Design-Canvas ausprobieren:** 540×960 gewählt, weil das exakt der 16:9-Ratio
-   des Galaxy S4 entspricht (dort perfekter Vollbild-Fit, kein verschenkter
-   Rand) und die 2,2:1-Geräte (OPPO Find X2 Pro, OnePlus 12) mit
-   `CONTENT_SCALE_ASPECT_KEEP_WIDTH` ein komfortables Touch-Band unter dem
-   Spielfeld bekommen. Sobald Start-Screen + Spielfeld + HUD stehen: in allen
-   drei Geräte-Ratios (2,2:1 und 16:9) im Browser screenshotten und ggf.
-   nachziehen. Canvas-Wechsel ist ein Einzeiler in `project.godot` + Layout-Code,
-   der ohnehin aus `get_viewport_rect()` rechnet.
-2. **Sturzflüge + Gegnerfeuer** (nächster Schritt): Angriffs-Scheduler im
-   StageDirector, DIVING/RETURNING-States im `enemy.gd`, Angriffskurven,
-   Boss-Capture-Mechanik. Danach: mehrere Waves/Stages, Challenging Stage.
-3. ~~Ship-Treffer, 3 Leben, HUD, Game-Over~~ — **erledigt (Phase 2)**.
-   Offen dabei noch: „1UP"-Feedback beim Extra-Leben, echter Win-/Endlos-Modus,
-   `game_over.tscn` ist gelöscht (Overlay jetzt im HUD).
-4. ~~Aspect-Umschaltung + Touch-Steuerung + Touch-HUD~~ — **erledigt (Phase 3)**.
-   Offen dabei: auf echtem Gerät testen (OPPO/OnePlus/S4), Pause-Overlay ist noch
-   nur „PAUSED" (echtes Pausenmenü kommt mit Phase 4), Auto-Fire evtl. als
-   Setting abschaltbar.
-5. **Menüs + Settings + `sound_manager.gd` nach pacman-/tetris-Muster.** Umfasst:
-   - Start-Screen (Play / Settings / How to Play), Pause-Overlay, Exit als
-     letzter Button (unter `OS.has_feature("web")` ausgeblendet).
-   - **Hilfe / „How to Play"** — bildbasiert wie tetris (`assets/help_src/*.svg`
-     → `render.sh` → PNG), erreichbar aus Start **und** Pause. Maus- **und**
-     Touch-Seitensatz.
-   - **Einstellungs-Screen** aus Start **und** Pause: Schwierigkeits-/Punkte-
-     Gruppe (Leben, Extra-Leben-Schwelle, Diver-Frequenz, Bomben-Tempo,
-     Gegner-/Schiff-Speed …) → `user://settings.cfg` Abschnitt `s`,
-     Live-Anwendung per `settings_changed`.
-   - **Sound-Unterseite** mit Lautstärke-Regler **pro Einzel-Sound** (0–100 %),
-     `sound_manager.gd` (Autoload `Snd`), `_BASE_DB`-Kalibrierung, Vorhören,
-     `_CALIB_VERSION`. Sounds selbst kommen später (globale CLAUDE.md #12).
-   - **Highscore / Hall of Fame** wie tetris (`user://hall_of_fame.cfg`, Top 10
-     nach Score, Namenseingabe bei Qualifikation am Ende jedes Laufs).
-6. **Sprites vom Nutzer** — kommen nach, je Einheit **mind. 2 Frames als
-   Animation**, evtl. als `.gif`. Pipeline: `.gif` → Aseprite-MCP
-   (`open_sprite`/Frames extrahieren) → `export_sprite_sheet` bzw.
-   `generate_spriteframes_tres` → `SpriteFrames`. Ersetzt das `_draw()` in
-   `enemy.gd`. Bis dahin bleiben die prozeduralen Platzhalter.
-7. **`splash-screen.png`** (Bindestrich, Wurzelverzeichnis) fehlt noch —
-   vom Nutzer liefern lassen oder generieren, dann als Boot-Splash + Ladescreen.
-8. **Design-Canvas ausprobieren:** 540×960 gewählt = exakt 16:9 des Galaxy S4
-   (perfekter Vollbild-Fit); 2,2:1-Geräte (OPPO Find X2 Pro, OnePlus 12) kriegen
-   mit `KEEP_WIDTH` ein Touch-Band unter dem Spielfeld. Sobald Start-Screen +
-   HUD stehen: in beiden Ratios im Browser screenshotten, ggf. nachziehen
-   (Einzeiler in `project.godot`, Layout rechnet aus `get_viewport_rect()`).
-9. `assets/` aufräumen (lose Test-PNGs, Loot-System entscheiden), HUD responsiv,
-   Formation-Feinschliff.
-10. Später evtl.: Boss-Capture-Mechanik (Traktorstrahl fängt Schiff → nach
-    Abschuss des Bosses Doppel-Jäger), Challenging/Bonus-Stage, Combo-Scoring,
-    „1UP"/Extra-Leben-Feedback. Fällt uns sicher noch mehr ein.
+**Erledigt:** Phasen 1–4 (Formation+Einflug, Sturzflüge+Gegnerfeuer, Leben/HUD/
+Game-Over, Touch+Aspect+Pause, Menüs/Settings/Sound/HoF).
+
+1. **Echte Sounds** — aktuell synthetische Platzhalter-WAVs (`gen_sounds.py` in der Projektwurzel). Der Nutzer liefert richtige; dann die 7 Dateien in
+   `assets/sounds/` ersetzen (`music shoot hit dive player_boom extra stage`).
+   `_BASE_DB` je Sound ggf. neu kalibrieren, `calib_version` hochzählen.
+2. **Sprites vom Nutzer** — je Einheit **mind. 2 Frames**, evtl. `.gif`.
+   Pipeline: `.gif` → Aseprite-MCP → `SpriteFrames`. Ersetzt das `_draw()` in
+   `enemy.gd` (und Schiff/Laser/Bombe). Bis dahin prozedurale Platzhalter.
+3. **`splash-screen.png`** (Bindestrich, Wurzel) fehlt — liefern/generieren,
+   dann Boot-Splash + Ladescreen.
+4. **Auf echten Geräten testen** (OPPO Find X2 Pro, OnePlus 12 ≈ 2,2:1;
+   Galaxy S4 = 16:9): Aspect-Umschaltung, Touch-Drag, Pause-Button-Position,
+   Formation-Größe. In beiden Ratios im echten Browser screenshotten.
+   Canvas-Wechsel bliebe ein Einzeiler in `project.godot`.
+5. **Hilfe bildbasiert** (optional) — derzeit 3 Textseiten in `menus.gd`
+   (`HELP_PAGES`). tetris macht's mit SVG→PNG (`assets/help_src/` + `render.sh`).
+   Reicht vorerst als Text.
+6. `assets/` aufräumen (lose Test-PNGs, Loot-System `item.gd`/`gem.tscn`/… —
+   Galaga hat keins), HUD-Feinschliff, „1UP"-Flash beim Extra-Leben.
+7. Später evtl.: Boss-Capture (Traktorstrahl fängt Schiff → nach Boss-Abschuss
+   Doppel-Jäger), Challenging/Bonus-Stage, Combo-Scoring, Auto-Fire als
+   abschaltbares Setting, Diver/Bomben gegen die 960er-Canvas festnageln statt
+   `get_viewport_rect()`. Fällt uns sicher noch mehr ein.
 
 ## Aseprite MCP Pro
 

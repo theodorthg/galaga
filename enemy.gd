@@ -58,6 +58,8 @@ func setup(p_kind: int, p_formation: Formation, p_slot: int, p_curve: Curve2D, s
 	visible = true
 	set_physics_process(true)
 
+@onready var _snd: Node = get_node_or_null("/root/Snd")
+
 func _ready() -> void:
 	add_to_group("enemy")
 	area_entered.connect(_on_area_entered)
@@ -77,6 +79,8 @@ func dive() -> void:
 	_state = DIVING
 	_bombs_left = 2
 	_bomb_t = 0.55
+	if _snd:
+		_snd.play("dive")
 	var vp := get_viewport_rect().size
 	var player := get_tree().get_first_node_in_group("player")
 	var ppos: Vector2 = player.global_position if player else Vector2(vp.x * 0.5, vp.y * 0.82)
@@ -156,6 +160,8 @@ func _explode() -> void:
 	if _formation:
 		_formation.release(self)
 	killed.emit(int(EnemyKinds.DATA[kind]["points"]))
+	if _snd:
+		_snd.play("hit")
 	_finish()
 	var t := create_tween()
 	t.set_parallel(true)
