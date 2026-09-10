@@ -7,7 +7,7 @@ extends Node2D
 ## curves first and then lock onto slot_global(idx) every frame.
 
 const COL_SPACING := 44.0
-const ROW_SPACING := 42.0
+const ROW_SPACING := 52.0
 const SWAY_AMP := 24.0
 const SWAY_SPEED := 0.7          # rad/s
 const FLAP_INTERVAL := 0.28      # 2-frame wing-flap cadence for every enemy
