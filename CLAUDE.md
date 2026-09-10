@@ -4,20 +4,29 @@ Ergänzt die übergeordnete `CLAUDE.md` unter
 `~/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/`.
 
 **Stand: v0.1.0.** Scaffolding steht. Fertig: **Formation + Einflug**,
-**Sturzflüge + Gegnerfeuer** (Phase 1). 40er-Formation, gruppenweiser Einflug
-entlang Kurven, prozedurale Platzhalter mit 2-Frame-Flap. Divers peelen einzeln
-raus, sweepen am Spieler vorbei (Bomben werfend), fliegen unten raus und kehren
-von oben in ihren Slot zurück. Schiff wird von Diver/Bombe zerstört und
-respawnt (noch ohne Leben-Zähler). Als Nächstes: Phase 2 (Leben/HUD/Game-Over).
+**Sturzflüge + Gegnerfeuer** (Phase 1), **Leben / HUD / Game-Over** (Phase 2).
+40er-Formation, gruppenweiser Einflug entlang Kurven, prozedurale Platzhalter
+mit 2-Frame-Flap. Divers peelen einzeln raus, sweepen am Spieler vorbei (Bomben
+werfend), fliegen unten raus und kehren von oben in ihren Slot zurück. 3 Leben,
+Extra-Leben alle 20 000 Punkte, HUD (Score / Stage / Leben-Marken), Game-Over-
+Overlay (Scrim + „SHOOT TO RESTART" → `reload_current_scene`). Als Nächstes:
+Phase 3 (Touch + `content_scale_aspect`-Umschaltung).
 
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,
 StageDirector, Ship, HUD-CanvasLayer.
 
-- `game.gd` (`class_name Game`) — State-Machine READY → ENTERING → FORMATION,
-  Stage-Zähler, Score, `content_scale_aspect = KEEP` (Desktop; Touch-Umschaltung
-  noch offen). Formation leergeräumt → nächste Stage.
+- `game.gd` (`class_name Game`) — State-Machine READY → ENTERING → FORMATION →
+  GAME_OVER, Stage-Zähler, Score, 3 Leben (`START_LIVES`), Extra-Leben alle
+  `EXTRA_LIFE_EVERY` (20 000). Ship `died` → Leben−1 → respawn nach 1,2 s bzw.
+  bei 0 → GAME_OVER (`_unhandled_input`: Schuss/Klick → `reload_current_scene`).
+  `content_scale_aspect = KEEP` (Desktop; Touch-Umschaltung noch offen).
+  Formation leergeräumt → nächste Stage.
+- `hud.gd` (`class_name Hud`, Control auf dem HUD-`CanvasLayer`) — Score
+  (oben links), Stage (unten rechts), Leben als gezeichnete Marken (unten
+  links, `_draw`), Center-Banner (`flash_banner`/`hide_banner`), Game-Over
+  (`Scrim` + `GameOver`-Label).
 - `formation.gd` (`class_name Formation`) — 40 Slots (`ROWS`: 4 Boss / 8+8 Goei /
   10+10 Zako), Slot-Geometrie, „Breathing"-Sway des ganzen Blocks, Flap-Timer
   (`flap_toggled`), Belegungs-Tracking (`assign`/`release`/`live_count`).
@@ -125,11 +134,27 @@ bash projects/galaga/build.sh web        # einzeln: linux | web | android
 2. **Sturzflüge + Gegnerfeuer** (nächster Schritt): Angriffs-Scheduler im
    StageDirector, DIVING/RETURNING-States im `enemy.gd`, Angriffskurven,
    Boss-Capture-Mechanik. Danach: mehrere Waves/Stages, Challenging Stage.
-3. Ship-Treffer (Layer/Maske Ship↔Enemy + Enemy-Shots), echte 3 Leben statt
-   `ship_count=100`, HUD (Leben, Stage), Game-Over/Win-Screen neu bauen.
-4. Laufzeit-`content_scale_aspect`-Umschaltung (Desktop KEEP / Touch KEEP_WIDTH)
-   + Touch-Swipe-Steuerung + Touch-HUD oben.
-5. Menüs + Settings + `sound_manager.gd` nach pacman-Muster.
+3. ~~Ship-Treffer, 3 Leben, HUD, Game-Over~~ — **erledigt (Phase 2)**.
+   Offen dabei noch: „1UP"-Feedback beim Extra-Leben, echter Win-/Endlos-Modus,
+   `game_over.tscn` ist gelöscht (Overlay jetzt im HUD).
+4. **Laufzeit-`content_scale_aspect`-Umschaltung** (Desktop KEEP / Touch
+   KEEP_WIDTH) + **Touch-Swipe-Steuerung** + **Touch-HUD oben** (Pause-Button).
+   ← nächster Schritt (Phase 3).
+5. **Menüs + Settings + `sound_manager.gd` nach pacman-/tetris-Muster.** Umfasst:
+   - Start-Screen (Play / Settings / How to Play), Pause-Overlay, Exit als
+     letzter Button (unter `OS.has_feature("web")` ausgeblendet).
+   - **Hilfe / „How to Play"** — bildbasiert wie tetris (`assets/help_src/*.svg`
+     → `render.sh` → PNG), erreichbar aus Start **und** Pause. Maus- **und**
+     Touch-Seitensatz.
+   - **Einstellungs-Screen** aus Start **und** Pause: Schwierigkeits-/Punkte-
+     Gruppe (Leben, Extra-Leben-Schwelle, Diver-Frequenz, Bomben-Tempo,
+     Gegner-/Schiff-Speed …) → `user://settings.cfg` Abschnitt `s`,
+     Live-Anwendung per `settings_changed`.
+   - **Sound-Unterseite** mit Lautstärke-Regler **pro Einzel-Sound** (0–100 %),
+     `sound_manager.gd` (Autoload `Snd`), `_BASE_DB`-Kalibrierung, Vorhören,
+     `_CALIB_VERSION`. Sounds selbst kommen später (globale CLAUDE.md #12).
+   - **Highscore / Hall of Fame** wie tetris (`user://hall_of_fame.cfg`, Top 10
+     nach Score, Namenseingabe bei Qualifikation am Ende jedes Laufs).
 6. **Sprites vom Nutzer** — kommen nach, je Einheit **mind. 2 Frames als
    Animation**, evtl. als `.gif`. Pipeline: `.gif` → Aseprite-MCP
    (`open_sprite`/Frames extrahieren) → `export_sprite_sheet` bzw.
@@ -143,7 +168,10 @@ bash projects/galaga/build.sh web        # einzeln: linux | web | android
    HUD stehen: in beiden Ratios im Browser screenshotten, ggf. nachziehen
    (Einzeiler in `project.godot`, Layout rechnet aus `get_viewport_rect()`).
 9. `assets/` aufräumen (lose Test-PNGs, Loot-System entscheiden), HUD responsiv,
-   Formation-Feinschliff (Reihenabstand etwas eng).
+   Formation-Feinschliff.
+10. Später evtl.: Boss-Capture-Mechanik (Traktorstrahl fängt Schiff → nach
+    Abschuss des Bosses Doppel-Jäger), Challenging/Bonus-Stage, Combo-Scoring,
+    „1UP"/Extra-Leben-Feedback. Fällt uns sicher noch mehr ein.
 
 ## Aseprite MCP Pro
 

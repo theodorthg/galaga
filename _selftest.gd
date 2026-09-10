@@ -17,6 +17,7 @@ const SCRIPTS := [
 	"res://stage_director.gd",
 	"res://bomb.gd",
 	"res://game.gd",
+	"res://hud.gd",
 	"res://item.gd",
 	"res://random_item_placer.gd",
 ]
