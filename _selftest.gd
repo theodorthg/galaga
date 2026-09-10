@@ -13,7 +13,9 @@ const SCRIPTS := [
 	"res://enemy_kinds.gd",
 	"res://formation.gd",
 	"res://entry_paths.gd",
+	"res://attack_paths.gd",
 	"res://stage_director.gd",
+	"res://bomb.gd",
 	"res://game.gd",
 	"res://item.gd",
 	"res://random_item_placer.gd",
@@ -54,6 +56,18 @@ func _init() -> void:
 		var c := EntryPaths.make(pat, canvas)
 		fails += _expect(c.get_baked_length() > 400.0,
 			"entry path %d bakes a real curve (len %.0f)" % [pat, c.get_baked_length()])
+
+	# --- attack paths ---------------------------------------------------
+	var slot := Vector2(canvas.x * 0.3, canvas.y * 0.2)
+	var ppos := Vector2(canvas.x * 0.5, canvas.y * 0.8)
+	var dv := AttackPaths.dive(slot, ppos, canvas)
+	fails += _expect(dv.get_baked_length() > 600.0, "dive curve bakes (len %.0f)" % dv.get_baked_length())
+	fails += _expect(dv.sample_baked(dv.get_baked_length()).y > canvas.y,
+		"dive curve exits below the screen")
+	var rt := AttackPaths.return_to(slot, canvas)
+	fails += _expect(rt.sample_baked(0.0).y < 0.0, "return curve starts above the screen")
+	fails += _expect(rt.sample_baked(rt.get_baked_length()).distance_to(slot) < 4.0,
+		"return curve ends on the slot")
 
 	print("SELFTEST: %s (%d failure(s))" % ["PASS" if fails == 0 else "FAIL", fails])
 	quit(fails)

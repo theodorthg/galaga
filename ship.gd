@@ -1,94 +1,83 @@
 extends Area2D
 
-# Hier lädt das Schiff die Laser-Vorlage (Klasse) in den Speicher
-var laser_scene = preload("res://laser.tscn")
+## Player fighter. Movement: keyboard/pad axis, plus mouse (ship follows the
+## cursor's x, left-click fires). Gets destroyed by a diving enemy or a bomb;
+## Game respawns it. Lives / game-over economy comes in phase 2.
 
-# Konstante Geschwindigkeit für ein typisches Arcade-Gefühl
-var speed := 550.0 
-var ship_count := 100 # In Galaga eher "Leben", z.B. 3
-var gem_count := 0
+const LASER_SCENE := preload("res://laser.tscn")
+const MAX_LASERS := 2
+const RESPAWN_INVULN := 1.6
 
-# Definiert den halben Durchmesser des Sprites, damit das Schiff 
-# nicht zur Hälfte aus dem Bildschirm ragt, bevor es stoppt.
-var ship_half_width := 50.0 
+var speed := 480.0
+var ship_half_width := 34.0
 var viewport_width := 0.0
 
-func _ready() -> void:
-	area_entered.connect(_on_area_entered)
-	set_ship_count(ship_count)
-	# get_node("Sprite2D").rotation = -1.58
-	# Bildschirmbreite einmalig speichern
-	viewport_width = get_viewport_rect().size.x
-# NEU: Das Schiff automatisch im unteren Bereich platzieren
-	# get_viewport_rect().size.y ist die maximale Bildschirmhöhe. 
-	# Wir ziehen z.B. 80 Pixel ab, damit es etwas über dem unteren Rand schwebt.
-	# position.y = get_viewport_rect().size.y + 130.0
-func set_gem_count(new_gem_count: int) -> void:
-	gem_count = new_gem_count
-	get_node("UI/GemCount").text = "x" + str(gem_count)
-
-func set_ship_count(new_ship_count: int) -> void:
-	ship_count = new_ship_count
-	# Optional: Verhindern, dass Health über 100 steigt
-	ship_count = clampi(ship_count, 0, 100) 
-	get_node("UI/HealthBar").value = ship_count
-	
-	if ship_count <= 0:
-		get_tree().change_scene_to_file("res://game_over.tscn")
-
-# Maus als zusätzliche Steuerung: sobald die Maus bewegt wird, folgt das Schiff
-# ihrer X-Position; die nächste Tastatur-/Pad-Eingabe übernimmt wieder.
+var _alive := true
+var _invuln := 0.0
 var _mouse_aim := false
 
-func _process(delta: float) -> void:
-	var direction_x := Input.get_axis("move_left", "move_right")
+signal died
 
-	if direction_x != 0.0:
+func _ready() -> void:
+	add_to_group("player")
+	area_entered.connect(_on_area_entered)
+	viewport_width = get_viewport_rect().size.x
+
+func _process(delta: float) -> void:
+	if _invuln > 0.0:
+		_invuln -= delta
+		modulate.a = 0.35 + 0.4 * (0.5 + 0.5 * sin(_invuln * 32.0))
+		if _invuln <= 0.0:
+			modulate.a = 1.0
+
+	if not _alive:
+		return
+
+	var dir := Input.get_axis("move_left", "move_right")
+	if dir != 0.0:
 		_mouse_aim = false
-		position.x += direction_x * speed * delta
+		position.x += dir * speed * delta
 	elif _mouse_aim:
 		position.x = move_toward(position.x, get_global_mouse_position().x, speed * delta)
-
-	# Bewegung an den Rändern blockieren
-	position.x = clamp(position.x, ship_half_width, viewport_width - ship_half_width)
+	position.x = clampf(position.x, ship_half_width, viewport_width - ship_half_width)
 
 	if Input.is_action_just_pressed("shoot"):
 		shoot()
 
 func _input(event: InputEvent) -> void:
+	if not _alive:
+		return
 	if event is InputEventMouseMotion:
 		_mouse_aim = true
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		shoot()
 
-# (Optional kannst Du das auch ganz oben bei Deinen Variablen definieren)
-var max_lasers := 3 
-
 func shoot() -> void:
-	# 1. Wir zählen, wie viele Objekte aktuell in der Gruppe "player_lasers" sind
-	var current_lasers = get_tree().get_nodes_in_group("player_lasers").size()
-	
-	# 2. Wenn das Limit erreicht ist, brechen wir die Funktion hier ab (return)
-	if current_lasers >= max_lasers:
-		return 
-		
-	# 3. Das Limit ist nicht erreicht: Wir erzeugen den Laser
-	var laser = laser_scene.instantiate()
-	
-	# NEU: 4. Wir kleben dem neuen Laser das "Namensschild" an
+	if get_tree().get_nodes_in_group("player_lasers").size() >= MAX_LASERS:
+		return
+	var laser := LASER_SCENE.instantiate()
 	laser.add_to_group("player_lasers")
-	
-	# 5. Dem Level hinzufügen und positionieren
 	get_parent().add_child(laser)
-	laser.position = position
-	laser.position.y -= 20.0
+	laser.global_position = global_position + Vector2(0, -22)
 
-func _on_area_entered(area_that_entered: Area2D) -> void:
-	if area_that_entered.is_in_group("healing_item"):
-		set_ship_count(ship_count + 1)
-	elif area_that_entered.is_in_group("gem"):
-		set_gem_count(gem_count + 1)
-	elif area_that_entered.is_in_group("enemy"):
-		# Späterer Galaga-Code: Kollision mit einem Gegner
-		set_ship_count(ship_count - 1) # Oder: Leben - 1
-		# area_that_entered.queue_free() # Zerstört den Gegner bei Ramm-Kollision
+func _on_area_entered(area: Area2D) -> void:
+	if not _alive or _invuln > 0.0:
+		return
+	if area.is_in_group("enemy_shots"):
+		area.queue_free()
+		_destroy()
+	elif area.is_in_group("enemy") and area.is_active_diver():
+		_destroy()
+
+func _destroy() -> void:
+	_alive = false
+	visible = false
+	set_deferred("monitoring", false)
+	died.emit()
+
+func respawn() -> void:
+	position.x = viewport_width * 0.5
+	_alive = true
+	visible = true
+	_invuln = RESPAWN_INVULN
+	set_deferred("monitoring", true)

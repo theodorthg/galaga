@@ -3,10 +3,12 @@
 Ergänzt die übergeordnete `CLAUDE.md` unter
 `~/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/`.
 
-**Stand: v0.1.0.** Scaffolding steht. **Formation + Einflug fertig** (erster
-Galaga-Baustein): 40er-Formation in 5 Reihen, gruppenweiser Einflug entlang
-Kurven, prozedurale Platzhalter-Gegner mit 2-Frame-Flügelschlag. Als Nächstes:
-Sturzflüge + Gegnerfeuer.
+**Stand: v0.1.0.** Scaffolding steht. Fertig: **Formation + Einflug**,
+**Sturzflüge + Gegnerfeuer** (Phase 1). 40er-Formation, gruppenweiser Einflug
+entlang Kurven, prozedurale Platzhalter mit 2-Frame-Flap. Divers peelen einzeln
+raus, sweepen am Spieler vorbei (Bomben werfend), fliegen unten raus und kehren
+von oben in ihren Slot zurück. Schiff wird von Diver/Bombe zerstört und
+respawnt (noch ohne Leben-Zähler). Als Nächstes: Phase 2 (Leben/HUD/Game-Over).
 
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
@@ -19,18 +21,30 @@ StageDirector, Ship, HUD-CanvasLayer.
 - `formation.gd` (`class_name Formation`) — 40 Slots (`ROWS`: 4 Boss / 8+8 Goei /
   10+10 Zako), Slot-Geometrie, „Breathing"-Sway des ganzen Blocks, Flap-Timer
   (`flap_toggled`), Belegungs-Tracking (`assign`/`release`/`live_count`).
-- `entry_paths.gd` (`class_name EntryPaths`) — 3 klassische Einflug-Muster
-  (`BOTTOM_UP`, `TOP_LEFT`, `TOP_RIGHT`) als `Curve2D`, viewport-skaliert,
-  Catmull-Rom-Tangenten.
-- `stage_director.gd` (`class_name StageDirector`) — teilt die 40 Slots in
-  5er-Gruppen à 8, schickt jede Gruppe entlang einer Kurve (Launch-Versatz
-  0,16 s; Gruppen-Abstand 0,9 s), meldet `stage_populated`, reicht
-  `enemy_killed(points)` durch.
-- `enemy.gd` (Area2D, kein `class_name`) — States FLYING_IN → LOCKING →
-  IN_FORMATION. Kurvenfahrt mit konstant 480 px/s + Ausrichtung nach
-  Fahrtrichtung, dann 0,45-s-Tween in den Slot. `_draw()` zeichnet den
-  Platzhalter je Kind (nach unten gerichtet), Flügelschlag aus `Formation.flap`.
-  Kollision: Layer 4 (enemies) / Maske 8 (player_shots); Laser jetzt Layer 8.
+- `entry_paths.gd` (`class_name EntryPaths`) — 3 Einflug-Muster (`BOTTOM_UP`,
+  `TOP_LEFT`, `TOP_RIGHT`) als viewport-skalierte `Curve2D`, Catmull-Rom-Tangenten.
+- `attack_paths.gd` (`class_name AttackPaths`) — `dive(slot, player, vp)` (peelt
+  zur Wand, sweept am Spieler vorbei, unten raus) und `return_to(slot, vp)`
+  (von oben zurück in den Slot). Gleiches Catmull-Rom-Smoothing wie EntryPaths.
+- `stage_director.gd` (`class_name StageDirector`) — **Fly-in**: 40 Slots in
+  5er-Gruppen à 8 entlang einer Kurve (Launch-Versatz 0,16 s; Gruppen 0,9 s),
+  meldet `stage_populated`. **Attacks**: nach `begin_attacks()` schickt alle
+  1,3–3,2 s einen zufälligen Formations-Gegner ins `dive()`, max. 3 gleichzeitig
+  (`_launch_dive` zählt über `is_active_diver()`/`is_available_to_dive()`).
+  `stop_attacks()` beim Stage-Wechsel. Reicht `enemy_killed(points)` durch.
+- `enemy.gd` (Area2D, kein `class_name`) — States FLYING_IN / LOCKING /
+  IN_FORMATION / **DIVING / RETURNING**. Generischer Path-Follower
+  (`_start_path(curve, speed, done_callable)`): FLY 480 / DIVE 300 / RETURN
+  360 px/s, Ausrichtung nach Fahrtrichtung, dann 0,4-s-Tween in den Slot.
+  Beim `dive()` gibt der Gegner seinen Slot frei (`_formation.release`), wirft
+  bis zu 2 Bomben (`bomb.tscn`), kehrt nach dem Kurvenende via `return_to`
+  zurück und belegt den Slot neu. `_draw()` je Kind (nach unten gerichtet),
+  Flap aus `Formation.flap`. Kollision Layer 4 / Maske 8.
+- `bomb.gd` / `bomb.tscn` — Gegner-Schuss, fällt (leicht Richtung Spieler-x zum
+  Abwurfzeitpunkt), Platzhalter-Raute. Layer 16 (enemy_shots) / Maske 9
+  (player + player_shots — Laser können Bomben abschießen).
+- `laser.gd` — Platzhalter-Strich im `_draw()` (laser.png raus), Layer 8,
+  Hitbox 5×16.
 - `enemy_kinds.gd` (`class_name EnemyKinds`) — ZAKO/GOEI/BOSS: Radius + Punkte.
 
 `_capture.tscn`/`_capture.gd` (gitignored): lädt `game.tscn`, schießt Frames des

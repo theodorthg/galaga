@@ -38,3 +38,8 @@ templates.tpz
 /_capture.gd
 /_capture.tscn
 /_capture.gd.uid
+
+# Claude Desktop auto-saves the live transcript here (session-UUID name); the
+# deliberate end-of-project "Claude Code transcript.pdf" is still committable.
+Claude Code transcript — *.pdf
+Claude Code transcript*.html
