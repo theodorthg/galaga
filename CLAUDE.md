@@ -4,7 +4,8 @@ Ergänzt die übergeordnete `CLAUDE.md` unter
 `~/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/`.
 
 **Stand: v0.1.0.** Scaffolding steht. Fertig: **Formation + Einflug**,
-**Sturzflüge + Gegnerfeuer** (Phase 1), **Leben / HUD / Game-Over** (Phase 2).
+**Sturzflüge + Gegnerfeuer** (Phase 1), **Leben / HUD / Game-Over** (Phase 2),
+**Touch + Aspect-Umschaltung + Pause** (Phase 3).
 40er-Formation, gruppenweiser Einflug entlang Kurven, prozedurale Platzhalter
 mit 2-Frame-Flap. Divers peelen einzeln raus, sweepen am Spieler vorbei (Bomben
 werfend), fliegen unten raus und kehren von oben in ihren Slot zurück. 3 Leben,
@@ -26,7 +27,30 @@ StageDirector, Ship, HUD-CanvasLayer.
 - `hud.gd` (`class_name Hud`, Control auf dem HUD-`CanvasLayer`) — Score
   (oben links), Stage (unten rechts), Leben als gezeichnete Marken (unten
   links, `_draw`), Center-Banner (`flash_banner`/`hide_banner`), Game-Over
-  (`Scrim` + `GameOver`-Label).
+  (`Scrim` + `GameOver`-Label), Touch-Pause-Button (oben rechts, nur Touch,
+  `set_touch`) + PAUSED-Overlay (`set_paused`), Signal `pause_pressed`.
+  `HUD/Root` läuft `process_mode = ALWAYS` (Button muss bei `tree.paused` gehen).
+
+### Geräte-Layout (Phase 3)
+
+Feste Design-Canvas 540×960 + `stretch/mode=canvas_items`. `game.gd` erkennt
+Touch (`OS.has_feature("mobile") or DisplayServer.is_touchscreen_available()`,
+gecacht) und schaltet zur Laufzeit `content_scale_aspect`:
+Desktop → `KEEP` (Letterbox), Touch → `KEEP_WIDTH` (Feld oben angepinnt,
+Überhöhe fällt unter das Feld — Fingerbereich). **Retroaktiver Flip**: `game.gd`
+und `ship.gd` sind in Gruppe `touch_layout_listeners` mit `apply_touch_layout()`;
+`game._input` löst beim ersten echten `InputEventScreenTouch/Drag` einen
+`call_group(...)` aus (manche Mobil-Browser melden Touch verspätet).
+
+Gameplay-Positionen (Formation `home.y`, Schiff-y, HUD) sind **fix gegen die
+960er-Canvas**, nicht gegen `get_viewport_rect()` — die Überhöhe bleibt so
+freier Raum unten. (Ausnahme: `attack_paths`/`bomb` nehmen noch die echte
+Viewport-Höhe; Divers/Bomben laufen auf hohen Phones etwas weiter runter, bevor
+sie despawnen — unkritisch, ggf. später gegen 960 festnageln.)
+
+Steuerung Touch: **Drag irgendwo** = relatives Lenken (`ship._unhandled_input`,
+`event.relative.x`), **Auto-Fire** solange lebendig. Pause: Button oder
+`pause`-Action; bei Pause zusätzlich Tap = Resume.
 - `formation.gd` (`class_name Formation`) — 40 Slots (`ROWS`: 4 Boss / 8+8 Goei /
   10+10 Zako), Slot-Geometrie, „Breathing"-Sway des ganzen Blocks, Flap-Timer
   (`flap_toggled`), Belegungs-Tracking (`assign`/`release`/`live_count`).
@@ -137,9 +161,10 @@ bash projects/galaga/build.sh web        # einzeln: linux | web | android
 3. ~~Ship-Treffer, 3 Leben, HUD, Game-Over~~ — **erledigt (Phase 2)**.
    Offen dabei noch: „1UP"-Feedback beim Extra-Leben, echter Win-/Endlos-Modus,
    `game_over.tscn` ist gelöscht (Overlay jetzt im HUD).
-4. **Laufzeit-`content_scale_aspect`-Umschaltung** (Desktop KEEP / Touch
-   KEEP_WIDTH) + **Touch-Swipe-Steuerung** + **Touch-HUD oben** (Pause-Button).
-   ← nächster Schritt (Phase 3).
+4. ~~Aspect-Umschaltung + Touch-Steuerung + Touch-HUD~~ — **erledigt (Phase 3)**.
+   Offen dabei: auf echtem Gerät testen (OPPO/OnePlus/S4), Pause-Overlay ist noch
+   nur „PAUSED" (echtes Pausenmenü kommt mit Phase 4), Auto-Fire evtl. als
+   Setting abschaltbar.
 5. **Menüs + Settings + `sound_manager.gd` nach pacman-/tetris-Muster.** Umfasst:
    - Start-Screen (Play / Settings / How to Play), Pause-Overlay, Exit als
      letzter Button (unter `OS.has_feature("web")` ausgeblendet).

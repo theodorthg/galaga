@@ -1,8 +1,10 @@
 extends Area2D
 
-## Player fighter. Movement: keyboard/pad axis, plus mouse (ship follows the
-## cursor's x, left-click fires). Gets destroyed by a diving enemy or a bomb;
-## Game respawns it. Lives / game-over economy comes in phase 2.
+## Player fighter.
+##   Keyboard / pad : move_left/move_right axis, shoot action
+##   Mouse          : ship follows cursor x, left-click fires
+##   Touch          : drag anywhere to steer (relative), auto-fire while alive
+## Destroyed by a diving enemy or a bomb; Game handles lives / respawn.
 
 const LASER_SCENE := preload("res://laser.tscn")
 const MAX_LASERS := 2
@@ -15,13 +17,20 @@ var viewport_width := 0.0
 var _alive := true
 var _invuln := 0.0
 var _mouse_aim := false
+var _touch := false
 
 signal died
 
 func _ready() -> void:
 	add_to_group("player")
+	add_to_group("touch_layout_listeners")
+	_touch = OS.has_feature("mobile") or DisplayServer.is_touchscreen_available()
 	area_entered.connect(_on_area_entered)
 	viewport_width = get_viewport_rect().size.x
+
+# group "touch_layout_listeners": first real touch event flips us to touch mode
+func apply_touch_layout() -> void:
+	_touch = true
 
 func _process(delta: float) -> void:
 	if _invuln > 0.0:
@@ -41,16 +50,19 @@ func _process(delta: float) -> void:
 		position.x = move_toward(position.x, get_global_mouse_position().x, speed * delta)
 	position.x = clampf(position.x, ship_half_width, viewport_width - ship_half_width)
 
-	if Input.is_action_just_pressed("shoot"):
+	if _touch or Input.is_action_just_pressed("shoot"):
 		shoot()
 
-func _input(event: InputEvent) -> void:
+func _unhandled_input(event: InputEvent) -> void:
 	if not _alive:
 		return
 	if event is InputEventMouseMotion:
 		_mouse_aim = true
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
 		shoot()
+	elif event is InputEventScreenDrag:
+		position.x = clampf(position.x + event.relative.x,
+			ship_half_width, viewport_width - ship_half_width)
 
 func shoot() -> void:
 	if get_tree().get_nodes_in_group("player_lasers").size() >= MAX_LASERS:

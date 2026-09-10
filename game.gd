@@ -23,16 +23,44 @@ var _stage := 1
 var _score := 0
 var _lives := START_LIVES
 var _next_extra := EXTRA_LIFE_EVERY
+var _touch := false
+var _paused := false
 
 func _ready() -> void:
-	get_window().content_scale_aspect = Window.CONTENT_SCALE_ASPECT_KEEP
+	process_mode = Node.PROCESS_MODE_ALWAYS
+	add_to_group("touch_layout_listeners")
+	_touch = OS.has_feature("mobile") or DisplayServer.is_touchscreen_available()
+	_apply_display_mode()
+
 	_director.setup(_formation, self)
 	_director.stage_populated.connect(_on_stage_populated)
 	_director.enemy_killed.connect(_on_enemy_killed)
 	_ship.died.connect(_on_ship_died)
+	_hud.pause_pressed.connect(_toggle_pause)
 	_hud.set_score(0)
 	_hud.set_lives(_lives)
 	_start_ready()
+
+# --- device layout: fixed design canvas, aspect handled at runtime ------
+func _apply_display_mode() -> void:
+	get_window().content_scale_aspect = (
+		Window.CONTENT_SCALE_ASPECT_KEEP_WIDTH if _touch
+		else Window.CONTENT_SCALE_ASPECT_KEEP)
+	_hud.set_touch(_touch)
+
+# group "touch_layout_listeners": first real touch event flips us to touch mode
+func apply_touch_layout() -> void:
+	if _touch:
+		return
+	_touch = true
+	_apply_display_mode()
+
+func _toggle_pause() -> void:
+	if _state == GAME_OVER:
+		return
+	_paused = not _paused
+	get_tree().paused = _paused
+	_hud.set_paused(_paused)
 
 func _start_ready() -> void:
 	_state = READY
@@ -71,11 +99,21 @@ func _on_ship_died() -> void:
 	if is_instance_valid(_ship) and _state != GAME_OVER:
 		_ship.respawn()
 
+func _input(event: InputEvent) -> void:
+	# retroactive flip: some mobile browsers report touch late
+	if not _touch and (event is InputEventScreenTouch or event is InputEventScreenDrag):
+		get_tree().call_group("touch_layout_listeners", "apply_touch_layout")
+
 func _unhandled_input(event: InputEvent) -> void:
-	if _state != GAME_OVER:
+	if _state == GAME_OVER:
+		if event.is_action_pressed("shoot") or (event is InputEventMouseButton and event.pressed) \
+				or (event is InputEventScreenTouch and event.pressed):
+			get_tree().reload_current_scene()
 		return
-	if event.is_action_pressed("shoot") or (event is InputEventMouseButton and event.pressed):
-		get_tree().reload_current_scene()
+	if event.is_action_pressed("pause"):
+		_toggle_pause()
+	elif _paused and (event is InputEventScreenTouch and event.pressed):
+		_toggle_pause()
 
 func _process(_delta: float) -> void:
 	if _state == FORMATION and _formation.live_count() == 0:
