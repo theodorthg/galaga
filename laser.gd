@@ -4,27 +4,20 @@ extends Area2D
 var speed := 850.0
 
 func _ready() -> void:
-	# Wir verbinden das Signal des Notifiers, um mitzubekommen, 
-	# wann der Laser den sichtbaren Bereich verlässt.
-	# print("!!!Der Laser ist aktiv!!!")
+	# Signal des Notifiers verbinden: wann verlässt der Laser den Schirm?
 	var notifier = $VisibleOnScreenNotifier2D
 	if notifier:
 		notifier.screen_exited.connect(_on_screen_exited)
-		
-	# Wenn wir später Gegner haben, brauchen wir auch dieses Signal:
-	# area_entered.connect(_on_area_entered)
+	queue_redraw()
 
 func _process(delta: float) -> void:
 	# In Godot ist "oben" auf der Y-Achse negativ.
-	# Der Laser bewegt sich also jeden Frame weiter nach oben.
 	position.y -= speed * delta
-	# NEU: Schießen abfragen
-	
+
 func _on_screen_exited() -> void:
-	# queue_free() löscht den Node und alle seine Kinder sicher aus dem Speicher
 	queue_free()
 
-# (Vorbereitung für später)
-# func _on_area_entered(area: Area2D) -> void:
-# 	if area.is_in_group("enemy"):
-# 		queue_free() # Laser zerstört sich selbst beim Treffer
+# Temporärer Platzhalter statt des zu großen laser.png — kurzer heller Strich.
+func _draw() -> void:
+	draw_rect(Rect2(-1.5, -8.0, 3.0, 16.0), Color("cfefff"))
+	draw_rect(Rect2(-1.5, -8.0, 3.0, 5.0), Color.WHITE)
