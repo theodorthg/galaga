@@ -76,6 +76,11 @@ bash projects/galaga/build.sh web        # einzeln: linux | web | android
 2. **`splash-screen.png`** (Bindestrich, Wurzelverzeichnis) fehlt noch —
    vom Nutzer liefern lassen oder generieren, dann als Boot-Splash + Ladescreen
    einbinden.
+7. **Sprites vom Nutzer** — kommen nach, je Einheit **mind. 2 Frames als
+   Animation**, evtl. als `.gif`. Pipeline: `.gif` → Aseprite-MCP
+   (`open_sprite`/Frames extrahieren) → `export_sprite_sheet` bzw.
+   `generate_spriteframes_tres` → `SpriteFrames` in Godot. Bis dahin die
+   Bestands-Sprites (`assets/Images/`) als Platzhalter nutzen.
 3. Laufzeit-`content_scale_aspect`-Umschaltung (Desktop KEEP / Touch KEEP_WIDTH).
 4. Galaga-Gameplay von vorn: Formation, Einflug, Sturzflüge, Gegnerfeuer, Wellen.
 5. Menüs + Settings + `sound_manager.gd` nach pacman-Muster.
