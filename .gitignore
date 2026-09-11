@@ -24,6 +24,9 @@ templates.tpz
 # OS noise
 .DS_Store
 
+# Python bytecode cache (claude_transcript_to_html.py)
+__pycache__/
+
 # NOTE: the following ARE committed on purpose — Godot needs them:
 #   *.import, *.uid, export_presets.cfg, project.godot, assets/**
 
