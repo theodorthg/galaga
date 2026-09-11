@@ -54,6 +54,21 @@ Als Nächstes: Polish + auf echten Geräten testen, Sprites/Splash vom Nutzer.
   Screen. Dabei entdeckt + gefixt: `_build_help`s Body-Label ohne `autowrap_mode`
   ließ eine lange Zeile bei größerer Schrift den ganzen Panel-Rahmen sprengen
   (randlos über den ganzen Bildschirm) → `autowrap_mode = AUTOWRAP_WORD`.
+- **Kaputte Zeichen im Hilfetext** — die Pfeil-Glyphen `← → ↑` (U+2190/2192/2191)
+  fehlen offenbar im tatsächlich verwendeten Font-Subset; durch Worte ersetzt
+  ("Pfeiltasten links/rechts", "Pfeiltaste hoch") bzw. durch `=`. Em-Dash `—`
+  und Mittelpunkt `·` sind unauffällig geblieben, nicht angefasst.
+- Button „Steuerung" (Start/Pause) → **„Hilfe"** umbenannt (führte zur Hilfe,
+  nicht zu Steuerungs-Einstellungen — die Seitentitel *innerhalb* der Hilfe
+  heißen weiter „Steuerung — …").
+- **Kein Dauerfeuer auf Tastatur/Maus** (Touch hatte es schon) — `ship.gd`
+  feuerte pro Tastendruck/Klick nur einmal (`is_action_just_pressed`, Klick nur
+  auf die `pressed`-Flanke). Jetzt `Input.is_action_pressed("shoot")` (gehalten)
+  bzw. ein `_mouse_down`-Flag (an/aus bei Maus-Press/Release) — Halten feuert
+  jetzt auf allen drei Eingabewegen kontinuierlich nach, sobald ein Laser-Slot
+  frei wird (weiter gedeckelt durch `MAX_LASERS`). Verifiziert per Diagnose-
+  Capture: 2 Laser bleiben über 4 s gehaltener Taste/Maustaste konstant in der
+  Luft (einzelner Laser lebt nur ~1,1 s, muss also laufend nachgefeuert werden).
 
 ## Gameplay-Architektur (alles im Code, wie tetris)
 

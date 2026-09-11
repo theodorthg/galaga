@@ -24,8 +24,8 @@ const HELP_PAGES := [
 	{
 		"h": "Steuerung — Tastatur / Maus",
 		"l": [
-			"← →  oder  A / D   bewegen",
-			"Leertaste  oder  ↑    schießen",
+			"Pfeiltasten links/rechts  oder  A / D   bewegen",
+			"Leertaste  oder  Pfeiltaste hoch   schießen",
 			"Maus: Schiff folgt dem Zeiger, Linksklick schießt",
 			"Esc / P    Pause",
 		],
@@ -33,7 +33,7 @@ const HELP_PAGES := [
 	{
 		"h": "Steuerung — Touch",
 		"l": [
-			"Irgendwo ziehen  →  Schiff lenken",
+			"Irgendwo ziehen, um das Schiff zu lenken",
 			"Es wird automatisch geschossen",
 			"Pause-Knopf oben rechts",
 		],
@@ -44,7 +44,7 @@ const HELP_PAGES := [
 			"Räume die Formation ab, bevor sie dich erwischt.",
 			"Gegner tauchen einzeln herab und werfen Bomben —",
 			"ausweichen und zurückschießen.",
-			"Alle weg  →  nächste Stage.",
+			"Alle weg = nächste Stage.",
 			"",
 			"Bienen 50  ·  Schmetterlinge 80  ·  Flaggschiffe 150",
 		],
@@ -193,7 +193,7 @@ func _build_title() -> Control:
 	box.add_child(_spacer(18))
 	box.add_child(_button("Spielen", func(): start_game.emit()))
 	box.add_child(_button("Einstellungen", func(): _open_settings("title")))
-	box.add_child(_button("Steuerung", func(): _open_help("title")))
+	box.add_child(_button("Hilfe", func(): _open_help("title")))
 	if not IS_WEB:
 		box.add_child(_button("Beenden", func(): get_tree().quit()))
 	return s
@@ -206,7 +206,7 @@ func _build_pause() -> Control:
 	box.add_child(_spacer(14))
 	box.add_child(_button("Weiter", func(): resume_game.emit()))
 	box.add_child(_button("Einstellungen", func(): _open_settings("pause")))
-	box.add_child(_button("Steuerung", func(): _open_help("pause")))
+	box.add_child(_button("Hilfe", func(): _open_help("pause")))
 	box.add_child(_button("Start-Menü", func(): to_title.emit()))
 	if not IS_WEB:
 		box.add_child(_button("Beenden", func(): get_tree().quit()))

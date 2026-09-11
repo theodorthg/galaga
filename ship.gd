@@ -1,9 +1,13 @@
 extends Area2D
 
 ## Player fighter.
-##   Keyboard / pad : move_left/move_right axis, shoot action
-##   Mouse          : ship follows cursor x, left-click fires
+##   Keyboard / pad : move_left/move_right axis, hold shoot action to fire
+##   Mouse          : ship follows cursor x, hold left-click to fire
 ##   Touch          : drag anywhere to steer (relative), auto-fire while alive
+## All three fire continuously (capped at MAX_LASERS in flight) rather than one
+## shot per press — holding the button keeps the queue topped up exactly like
+## touch's auto-fire, so a held position mows down a column the same way on
+## every input method.
 ## Destroyed by a diving enemy or a bomb; Game handles lives / respawn.
 
 const LASER_SCENE := preload("res://laser.tscn")
@@ -17,6 +21,7 @@ var viewport_width := 0.0
 var _alive := true
 var _invuln := 0.0
 var _mouse_aim := false
+var _mouse_down := false
 var _touch := false
 var _snd: Node
 
@@ -53,7 +58,7 @@ func _process(delta: float) -> void:
 		position.x = move_toward(position.x, get_global_mouse_position().x, speed * delta)
 	position.x = clampf(position.x, ship_half_width, viewport_width - ship_half_width)
 
-	if _touch or Input.is_action_just_pressed("shoot"):
+	if _touch or _mouse_down or Input.is_action_pressed("shoot"):
 		shoot()
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -61,8 +66,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseMotion:
 		_mouse_aim = true
-	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		shoot()
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		_mouse_down = event.pressed
 	elif event is InputEventScreenDrag:
 		position.x = clampf(position.x + event.relative.x,
 			ship_half_width, viewport_width - ship_half_width)
