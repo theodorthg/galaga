@@ -17,6 +17,23 @@ Hall of Fame + Namenseingabe. **Sounds sind Platzhalter-WAVs** (synthetisch via
 `gen_sounds.py`) — echte Audios kommen später.
 Als Nächstes: Polish + auf echten Geräten testen, Sprites/Splash vom Nutzer.
 
+**Nach Nutzer-Test gefundene + gefixte Bugs (2026-09-11):**
+- **Linksklick schoss nicht** — `space_background.tscn`s vollflächiges
+  `ColorRect` hatte kein `mouse_filter` gesetzt → Godot-Default `STOP` fraß
+  jeden Mausklick, bevor `ship.gd::_unhandled_input` ihn sah. Fix:
+  `mouse_filter = 2` (IGNORE) auf dem ColorRect.
+- **Pause pausierte das Gameplay nicht wirklich** (nebenbei entdeckt, per
+  Diagnose-Capture verifiziert: 40/41 Objekte bewegten sich trotz Pause) —
+  `Game.process_mode = ALWAYS` (nötig fürs Pausenmenü) vererbt sich an alle
+  Kinder ohne eigene Einstellung. Fix: `process_mode = PROCESS_MODE_PAUSABLE`
+  explizit in `_ready()` von `ship.gd`, `formation.gd`, `stage_director.gd`,
+  `enemy.gd`, `laser.gd`, `bomb.gd` — bricht die Vererbung, alles friert bei
+  `get_tree().paused` jetzt korrekt ein. Bekannte Lücke: `get_tree().create_timer()`
+  läuft standardmäßig mit `process_always=true` weiter, d. h. pausiert man exakt
+  während des ~8-s-Einflugs (READY/ENTERING-State), zählt der Gruppen-Timer im
+  StageDirector im Hintergrund weiter. Seltener Randfall, nicht gefixt.
+- „Zum Titel"/„Titel"-Buttons in Pause/Game-Over → **„Start-Menü"** umbenannt.
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,

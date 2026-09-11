@@ -23,6 +23,7 @@ var _snd: Node
 signal died
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_PAUSABLE  # freeze on pause, not inherit Game's ALWAYS
 	add_to_group("player")
 	add_to_group("touch_layout_listeners")
 	_touch = OS.has_feature("mobile") or DisplayServer.is_touchscreen_available()

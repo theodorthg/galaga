@@ -33,6 +33,7 @@ var _flap_t := 0.0
 signal flap_toggled(state: bool)
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_PAUSABLE  # freeze on pause, not inherit Game's ALWAYS
 	_build_slots()
 	_occupant.resize(_slots_local.size())
 	position = home

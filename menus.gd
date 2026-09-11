@@ -184,7 +184,7 @@ func _build_pause() -> Control:
 	box.add_child(_button("Weiter", func(): resume_game.emit()))
 	box.add_child(_button("Einstellungen", func(): _open_settings("pause")))
 	box.add_child(_button("Steuerung", func(): _open_help("pause")))
-	box.add_child(_button("Zum Titel", func(): to_title.emit()))
+	box.add_child(_button("Start-Menü", func(): to_title.emit()))
 	if not IS_WEB:
 		box.add_child(_button("Beenden", func(): get_tree().quit()))
 	return s
@@ -364,7 +364,7 @@ func _build_gameover() -> Control:
 
 	box.add_child(_spacer(8))
 	box.add_child(_button("Nochmal", func(): start_game.emit()))
-	box.add_child(_button("Titel", func(): to_title.emit()))
+	box.add_child(_button("Start-Menü", func(): to_title.emit()))
 	return s
 
 var _pending := {}

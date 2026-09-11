@@ -6,6 +6,7 @@ extends Area2D
 var _vel := Vector2(0, 430)
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_PAUSABLE  # freeze on pause, not inherit Game's ALWAYS
 	add_to_group("enemy_shots")
 	area_entered.connect(_on_area_entered)
 	var player := get_tree().get_first_node_in_group("player")

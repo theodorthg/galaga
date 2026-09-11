@@ -4,6 +4,9 @@ extends Area2D
 var speed := 850.0
 
 func _ready() -> void:
+	# Game.process_mode=ALWAYS (fürs Pausenmenü) würde sich sonst vererben —
+	# explizit PAUSABLE, damit Laser bei Pause einfrieren statt weiterzufliegen.
+	process_mode = Node.PROCESS_MODE_PAUSABLE
 	# Signal des Notifiers verbinden: wann verlässt der Laser den Schirm?
 	var notifier = $VisibleOnScreenNotifier2D
 	if notifier:

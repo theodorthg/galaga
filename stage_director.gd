@@ -30,6 +30,9 @@ var _run_id := 0
 signal stage_populated
 signal enemy_killed(points)
 
+func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_PAUSABLE  # freeze on pause, not inherit Game's ALWAYS
+
 func setup(formation: Formation, spawn_parent: Node) -> void:
 	_formation = formation
 	_spawn_parent = spawn_parent

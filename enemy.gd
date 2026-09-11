@@ -61,6 +61,7 @@ func setup(p_kind: int, p_formation: Formation, p_slot: int, p_curve: Curve2D, s
 @onready var _snd: Node = get_node_or_null("/root/Snd")
 
 func _ready() -> void:
+	process_mode = Node.PROCESS_MODE_PAUSABLE  # freeze on pause, not inherit Game's ALWAYS
 	add_to_group("enemy")
 	area_entered.connect(_on_area_entered)
 	tree_exiting.connect(_finish)
