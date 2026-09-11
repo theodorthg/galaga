@@ -18,6 +18,7 @@ const SCRIPTS := [
 	"res://bomb.gd",
 	"res://game.gd",
 	"res://hud.gd",
+	"res://ui_style.gd",
 	"res://menus.gd",
 	"res://game_settings.gd",
 	"res://hall_of_fame.gd",

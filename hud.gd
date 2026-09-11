@@ -22,6 +22,7 @@ func _ready() -> void:
 	resized.connect(queue_redraw)
 	_pause_btn.pressed.connect(func(): pause_pressed.emit())
 	_pause_btn.visible = false
+	UiStyle.style_button(_pause_btn)
 
 func set_score(n: int) -> void:
 	_score.text = "%06d" % n

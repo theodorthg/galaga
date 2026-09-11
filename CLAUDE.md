@@ -33,6 +33,27 @@ Als Nächstes: Polish + auf echten Geräten testen, Sprites/Splash vom Nutzer.
   während des ~8-s-Einflugs (READY/ENTERING-State), zählt der Gruppen-Timer im
   StageDirector im Hintergrund weiter. Seltener Randfall, nicht gefixt.
 - „Zum Titel"/„Titel"-Buttons in Pause/Game-Over → **„Start-Menü"** umbenannt.
+- **Namensfeld nahm auf Android keine Eingabe an** — Fokus-per-Tap allein öffnet
+  auf manchen Android-Skins nicht zuverlässig die virtuelle Tastatur. Fix:
+  `grab_focus.call_deferred()` beim Erscheinen + explizites
+  `DisplayServer.virtual_keyboard_show()/hide()` an `focus_entered`/`focus_exited`.
+- **Touch-Ziele zu klein** — einheitliche Mindesthöhe `TOUCH_H=56` für Buttons,
+  Stepper-Pfeile, Help-Nav, Sound-Slider, Namensfeld, Pause-Button (vorher 34–44,
+  Pause-Button 42×36 → 62×56).
+- **Hilfetext zu winzig** (auch am Desktop) — Schriftgrößen in Menüs/Hilfe
+  angehoben (Body 17→22 usw.).
+- **Menüs wirkten „flach"** — `ui_style.gd` (neu, `class_name UiStyle`) liefert
+  gemeinsames Chrome für `menus.gd` + `hud.gd`: bordered/shadowed
+  `PanelContainer` um jeden Screen (`panel_style()`, tetris-Vorbild), Buttons
+  mit Per-State-`StyleBoxFlat` statt Default-Theme (`style_button()`),
+  Überschriften mit Outline (`_title_label`, Größe ≥24 automatisch), **Milchglas-
+  Hintergrund** (`assets/ui/frosted_glass.gdshader`, 1:1 von pacman übernommen —
+  `BackBufferCopy` + `ColorRect`-Shader, in GL Compatibility zwingend über
+  `BackBufferCopy`, sonst kein `SCREEN_TEXTURE`). Ein einziger geteilter
+  Glas-Hintergrund pro `Menus`-CanvasLayer statt einer separaten Instanz pro
+  Screen. Dabei entdeckt + gefixt: `_build_help`s Body-Label ohne `autowrap_mode`
+  ließ eine lange Zeile bei größerer Schrift den ganzen Panel-Rahmen sprengen
+  (randlos über den ganzen Bildschirm) → `autowrap_mode = AUTOWRAP_WORD`.
 
 ## Gameplay-Architektur (alles im Code, wie tetris)
 

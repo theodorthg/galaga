@@ -11,10 +11,10 @@ signal to_title         # pause Quit-to-title, game-over Title
 signal settings_changed # a gameplay setting was saved
 
 const ACCENT := Color("4db2ff")
-const DIM := Color(0.02, 0.03, 0.06, 0.86)
 var IS_WEB := OS.has_feature("web")  # not const: OS.has_feature isn't a constant expr
 
 var _root: Control
+var _glass: ColorRect
 var _screens := {}
 var _return_to := "title"     # where "Fertig" in settings/sound/help goes back to
 var _cfg := {}
@@ -57,6 +57,12 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_cfg = GameSettings.load_all()
 
+	# frosted-glass backdrop, shared by every screen (pacman's trick)
+	var g := UiStyle.make_glass_backdrop()
+	add_child(g.backbuffer)
+	add_child(g.glass)
+	_glass = g.glass
+
 	_root = Control.new()
 	_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -76,6 +82,7 @@ func _ready() -> void:
 func hide_all() -> void:
 	for s in _screens.values():
 		s.hide()
+	_glass.visible = false
 
 func is_open() -> bool:
 	for s in _screens.values():
@@ -97,35 +104,46 @@ func show_game_over(score: int, stage: int) -> void:
 func _swap(name: String) -> void:
 	hide_all()
 	_screens[name].show()
+	_glass.visible = true
 
-func _screen(dim := true) -> Control:
+## Full-rect click-blocker (mouse_filter=STOP keeps clicks from reaching the
+## game underneath) containing a centered, bordered panel — the frosted glass
+## backdrop behind it is shared (see _glass), not per-screen.
+func _screen() -> Control:
 	var c := Control.new()
 	c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	c.mouse_filter = Control.MOUSE_FILTER_STOP
-	if dim:
-		var bg := ColorRect.new()
-		bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		bg.color = DIM
-		c.add_child(bg)
+
+	var center := CenterContainer.new()
+	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	c.add_child(center)
+
+	var panel := PanelContainer.new()
+	panel.add_theme_stylebox_override("panel", UiStyle.panel_style())
+	center.add_child(panel)
+
 	var box := VBoxContainer.new()
 	box.name = "Box"
-	box.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
 	box.add_theme_constant_override("separation", 14)
-	box.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	box.grow_vertical = Control.GROW_DIRECTION_BOTH
-	c.add_child(box)
+	box.custom_minimum_size = Vector2(340, 0)
+	panel.add_child(box)
 	return c
 
 func _box(screen: Control) -> VBoxContainer:
-	return screen.get_node("Box")
+	return screen.find_child("Box", true, false)
 
+## Headings (size >= 24) get a dark outline — flat colored text on the panel
+## read muddy; body/label text stays outline-free so it doesn't get heavy.
 func _title_label(text: String, size := 30, col := Color.WHITE) -> Label:
 	var l := Label.new()
 	l.text = text
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.add_theme_font_size_override("font_size", size)
 	l.add_theme_color_override("font_color", col)
+	if size >= 24:
+		l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+		l.add_theme_constant_override("outline_size", 6)
 	return l
 
 ## Minimum comfortable touch target (Android/iOS guidelines land around 44-48dp;
@@ -139,6 +157,7 @@ func _button(text: String, cb: Callable) -> Button:
 	b.custom_minimum_size = Vector2(270, TOUCH_H)
 	b.add_theme_font_size_override("font_size", 22)
 	b.pressed.connect(cb)
+	UiStyle.style_button(b)
 	return b
 
 func _stepper(label_text: String, get_text: Callable, step: Callable) -> HBoxContainer:
@@ -293,7 +312,8 @@ func _build_help() -> Control:
 	box.add_child(_spacer(8))
 	var body := _title_label("", 22)
 	body.name = "Body"
-	body.custom_minimum_size = Vector2(420, 210)
+	body.custom_minimum_size = Vector2(400, 210)
+	body.autowrap_mode = TextServer.AUTOWRAP_WORD  # long lines wrap instead of stretching the panel
 	box.add_child(body)
 	box.add_child(_spacer(8))
 	var nav := HBoxContainer.new()
