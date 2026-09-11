@@ -381,6 +381,7 @@ func _build_gameover() -> Control:
 	_name_edit.focus_exited.connect(func():
 		if DisplayServer.has_feature(DisplayServer.FEATURE_VIRTUAL_KEYBOARD):
 			DisplayServer.virtual_keyboard_hide())
+	_name_edit.text_submitted.connect(func(_t: String): _commit_score())  # Enter/Return
 	var save_btn := _button("Eintragen", func(): _commit_score())
 	save_btn.name = "SaveBtn"
 	var entry := HBoxContainer.new()
