@@ -128,12 +128,16 @@ func _title_label(text: String, size := 30, col := Color.WHITE) -> Label:
 	l.add_theme_color_override("font_color", col)
 	return l
 
+## Minimum comfortable touch target (Android/iOS guidelines land around 44-48dp;
+## the design canvas maps ~1:1 to device px via KEEP_WIDTH, so we size to that).
+const TOUCH_H := 56.0
+
 func _button(text: String, cb: Callable) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.focus_mode = Control.FOCUS_NONE
-	b.custom_minimum_size = Vector2(260, 44)
-	b.add_theme_font_size_override("font_size", 20)
+	b.custom_minimum_size = Vector2(270, TOUCH_H)
+	b.add_theme_font_size_override("font_size", 22)
 	b.pressed.connect(cb)
 	return b
 
@@ -141,19 +145,19 @@ func _stepper(label_text: String, get_text: Callable, step: Callable) -> HBoxCon
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 8)
-	row.custom_minimum_size = Vector2(320, 40)
+	row.custom_minimum_size = Vector2(340, TOUCH_H)
 
-	var name_l := _title_label(label_text, 18)
+	var name_l := _title_label(label_text, 20)
 	name_l.custom_minimum_size = Vector2(150, 0)
 	name_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 
 	var left := _button("<", func(): step.call(-1); _refresh_settings())
-	left.custom_minimum_size = Vector2(40, 36)
-	var val := _title_label("", 18, ACCENT)
+	left.custom_minimum_size = Vector2(56, TOUCH_H)
+	var val := _title_label("", 20, ACCENT)
 	val.custom_minimum_size = Vector2(110, 0)
 	val.name = "Val"
 	var right := _button(">", func(): step.call(1); _refresh_settings())
-	right.custom_minimum_size = Vector2(40, 36)
+	right.custom_minimum_size = Vector2(56, TOUCH_H)
 
 	row.add_child(name_l)
 	row.add_child(left)
@@ -254,7 +258,7 @@ func _sound_row(key: String, snd) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 10)
-	var name_l := _title_label(snd.SOUNDS[key][0], 16)
+	var name_l := _title_label(snd.SOUNDS[key][0], 18)
 	name_l.custom_minimum_size = Vector2(140, 0)
 	name_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	var sl := HSlider.new()
@@ -262,8 +266,8 @@ func _sound_row(key: String, snd) -> HBoxContainer:
 	sl.max_value = 100
 	sl.step = 5
 	sl.value = snd.get_volume(key)
-	sl.custom_minimum_size = Vector2(180, 20)
-	var val := _title_label("%d%%" % int(sl.value), 15, ACCENT)
+	sl.custom_minimum_size = Vector2(180, TOUCH_H)
+	var val := _title_label("%d%%" % int(sl.value), 17, ACCENT)
 	val.custom_minimum_size = Vector2(48, 0)
 	sl.value_changed.connect(func(v):
 		val.text = "%d%%" % int(v)
@@ -283,13 +287,13 @@ func _build_help() -> Control:
 	var s := _screen()
 	var box := _box(s)
 	box.name = "Box"
-	var head := _title_label("", 26, ACCENT)
+	var head := _title_label("", 30, ACCENT)
 	head.name = "Head"
 	box.add_child(head)
-	box.add_child(_spacer(6))
-	var body := _title_label("", 17)
+	box.add_child(_spacer(8))
+	var body := _title_label("", 22)
 	body.name = "Body"
-	body.custom_minimum_size = Vector2(380, 180)
+	body.custom_minimum_size = Vector2(420, 210)
 	box.add_child(body)
 	box.add_child(_spacer(8))
 	var nav := HBoxContainer.new()
@@ -297,14 +301,14 @@ func _build_help() -> Control:
 	nav.alignment = BoxContainer.ALIGNMENT_CENTER
 	nav.add_theme_constant_override("separation", 10)
 	var prev := _button("‹", func(): _help_go(-1))
-	prev.custom_minimum_size = Vector2(48, 40)
+	prev.custom_minimum_size = Vector2(56, TOUCH_H)
 	nav.add_child(prev)
-	var dots := _title_label("", 16)
+	var dots := _title_label("", 18)
 	dots.name = "Dots"
 	dots.custom_minimum_size = Vector2(80, 0)
 	nav.add_child(dots)
 	var next := _button("›", func(): _help_go(1))
-	next.custom_minimum_size = Vector2(48, 40)
+	next.custom_minimum_size = Vector2(56, TOUCH_H)
 	nav.add_child(next)
 	box.add_child(nav)
 	box.add_child(_button("Fertig", func(): _swap(_return_to)))
@@ -336,7 +340,7 @@ func _build_gameover() -> Control:
 	var s := _screen()
 	var box := _box(s)
 	box.add_child(_title_label("GAME OVER", 34, Color("ff6464")))
-	var sub := _title_label("", 18)
+	var sub := _title_label("", 20)
 	sub.name = "Sub"
 	box.add_child(sub)
 	box.add_child(_spacer(6))
@@ -345,8 +349,18 @@ func _build_gameover() -> Control:
 	_name_edit.placeholder_text = "Name"
 	_name_edit.max_length = 8
 	_name_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_name_edit.custom_minimum_size = Vector2(160, 34)
+	_name_edit.custom_minimum_size = Vector2(180, TOUCH_H)
+	_name_edit.add_theme_font_size_override("font_size", 20)
 	_name_edit.name = "NameEdit"
+	# Android/iOS only raise the on-screen keyboard on a focus change that
+	# clearly comes from a tap; grab_focus() alone is not always enough on
+	# every OEM skin, so nudge the virtual keyboard explicitly too.
+	_name_edit.focus_entered.connect(func():
+		if DisplayServer.has_feature(DisplayServer.FEATURE_VIRTUAL_KEYBOARD):
+			DisplayServer.virtual_keyboard_show(_name_edit.text, Rect2(), DisplayServer.KEYBOARD_TYPE_DEFAULT, _name_edit.max_length))
+	_name_edit.focus_exited.connect(func():
+		if DisplayServer.has_feature(DisplayServer.FEATURE_VIRTUAL_KEYBOARD):
+			DisplayServer.virtual_keyboard_hide())
 	var save_btn := _button("Eintragen", func(): _commit_score())
 	save_btn.name = "SaveBtn"
 	var entry := HBoxContainer.new()
@@ -377,6 +391,8 @@ func _fill_gameover(score: int, stage: int) -> void:
 	box.get_node("Entry").visible = qualifies
 	if qualifies:
 		_name_edit.text = ""
+		# deferred: grab_focus() the same frame a node turns visible is unreliable
+		_name_edit.grab_focus.call_deferred()
 	_render_hof(HallOfFame.load_list(), -1)
 
 func _commit_score() -> void:
@@ -396,11 +412,11 @@ func _render_hof(list: Array, highlight: int) -> void:
 	for c in _hof_box.get_children():
 		c.queue_free()
 	if list.is_empty():
-		_hof_box.add_child(_title_label("— noch keine Einträge —", 15))
+		_hof_box.add_child(_title_label("— noch keine Einträge —", 17))
 		return
 	for i in list.size():
 		var e = list[i]
-		var line := _title_label("%2d.  %-8s  %06d" % [i + 1, str(e.name), int(e.score)], 15,
+		var line := _title_label("%2d.  %-8s  %06d" % [i + 1, str(e.name), int(e.score)], 17,
 			ACCENT if i == highlight else Color.WHITE)
 		line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		_hof_box.add_child(line)
