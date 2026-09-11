@@ -15,7 +15,12 @@ Einstellungen (Leben / Extra-Leben / Schwierigkeit → live in die nächste Rund
 Sound-Unterseite (Regler pro Sound), bildlose Hilfe (3 Seiten), Game-Over mit
 Hall of Fame + Namenseingabe. **Sounds sind Platzhalter-WAVs** (synthetisch via
 `gen_sounds.py`) — echte Audios kommen später.
-Als Nächstes: Polish + auf echten Geräten testen, Sprites/Splash vom Nutzer.
+**Pausiert (Stand 2026-09-11): Gameplay-Weiterbau (Phase 5, Boss-Capture etc.)
+ruht, bis der Nutzer echte Sounds + echte Sprites liefert** — bewusste
+Entscheidung des Nutzers, um nicht immer mehr auf Platzhaltern aufzubauen.
+Bis dahin nur noch Bugfixes/Politur. Sobald Assets da sind: Pipeline aus
+Punkt 6 unten (Sprites) bzw. `assets/sounds/`-Dateien ersetzen, dann erst
+mit der nächsten Gameplay-Phase weitermachen.
 
 **Nach Nutzer-Test gefundene + gefixte Bugs (2026-09-11):**
 - **Linksklick schoss nicht** — `space_background.tscn`s vollflächiges
@@ -33,6 +38,9 @@ Als Nächstes: Polish + auf echten Geräten testen, Sprites/Splash vom Nutzer.
   während des ~8-s-Einflugs (READY/ENTERING-State), zählt der Gruppen-Timer im
   StageDirector im Hintergrund weiter. Seltener Randfall, nicht gefixt.
 - „Zum Titel"/„Titel"-Buttons in Pause/Game-Over → **„Start-Menü"** umbenannt.
+- **Enter im Namensfeld trug den Highscore-Eintrag nicht ein** — nur der
+  „Eintragen"-Button löste `_commit_score()` aus. `LineEdit.text_submitted`
+  (Enter/Return) jetzt zusätzlich verbunden.
 - **Namensfeld nahm auf Android keine Eingabe an** — Fokus-per-Tap allein öffnet
   auf manchen Android-Skins nicht zuverlässig die virtuelle Tastatur. Fix:
   `grab_focus.call_deferred()` beim Erscheinen + explizites
