@@ -20,6 +20,12 @@ const ICON_H := 24.0
 const ICON_GAP := 8.0
 const MANY_THRESHOLD := 5
 
+## Bottom-centre row of collected bonus_item icons (see bonus_item.gd) — most
+## recent BONUS_MAX_SHOWN, oldest drops off the left.
+const BONUS_ICON_H := 22.0
+const BONUS_ICON_GAP := 6.0
+const BONUS_MAX_SHOWN := 8
+
 # Stage banner: full-opacity hold, then a fade tail (tetris' main.gd _flash()
 # does the same "hold then fade" instead of a hard on/off — a banner that
 # just vanishes reads as way too brief even at a longer raw duration).
@@ -29,6 +35,7 @@ const BANNER_TOTAL := BANNER_HOLD + BANNER_FADE
 
 var _lives := 0
 var _banner_tween: Tween
+var _bonus_icons: Array[Texture2D] = []
 
 signal pause_pressed
 
@@ -51,6 +58,16 @@ func set_stage(n: int) -> void:
 
 func set_lives(n: int) -> void:
 	_lives = maxi(n, 0)
+	queue_redraw()
+
+func add_bonus_icon(tex: Texture2D) -> void:
+	_bonus_icons.append(tex)
+	if _bonus_icons.size() > BONUS_MAX_SHOWN:
+		_bonus_icons.pop_front()
+	queue_redraw()
+
+func clear_bonus_icons() -> void:
+	_bonus_icons.clear()
 	queue_redraw()
 
 func set_touch(on: bool) -> void:
@@ -77,6 +94,10 @@ func hide_banner() -> void:
 	_banner.visible = false
 
 func _draw() -> void:
+	_draw_lives()
+	_draw_bonus_icons()
+
+func _draw_lives() -> void:
 	if _lives <= 0:
 		return
 	var y := size.y - ICON_H - 6.0
@@ -92,3 +113,19 @@ func _draw() -> void:
 	var label_pos := Vector2(12.0 + icon_w + 6.0, y + ICON_H - 4.0)
 	draw_string_outline(font, label_pos, "× %d" % _lives, HORIZONTAL_ALIGNMENT_LEFT, -1, fsize, 4, Color(0, 0, 0, 0.85))
 	draw_string(font, label_pos, "× %d" % _lives, HORIZONTAL_ALIGNMENT_LEFT, -1, fsize, UiStyle.ACCENT)
+
+## Bottom-centre — plenty of free space there per the user's own suggestion.
+func _draw_bonus_icons() -> void:
+	if _bonus_icons.is_empty():
+		return
+	var widths: Array[float] = []
+	var total_w := -BONUS_ICON_GAP
+	for tex in _bonus_icons:
+		var w := BONUS_ICON_H * (tex.get_width() / float(tex.get_height()))
+		widths.append(w)
+		total_w += w + BONUS_ICON_GAP
+	var y := size.y - BONUS_ICON_H - 6.0
+	var x := size.x * 0.5 - total_w * 0.5
+	for i in _bonus_icons.size():
+		draw_texture_rect(_bonus_icons[i], Rect2(x, y, widths[i], BONUS_ICON_H), false)
+		x += widths[i] + BONUS_ICON_GAP

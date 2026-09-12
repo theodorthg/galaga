@@ -11,8 +11,11 @@ extends Node2D
 
 enum { TITLE, READY, ENTERING, FORMATION, GAME_OVER }
 
-const RESPAWN_DELAY := 1.2
 const GAME_OVER_DELAY := 1.0
+const RECONSTRUCT_SCENE := preload("res://ship_reconstruct.tscn")
+const BONUS_ITEM_SCENE := preload("res://bonus_item.tscn")
+const BONUS_INTERVAL_MIN := 14.0
+const BONUS_INTERVAL_MAX := 24.0
 
 @onready var _formation: Formation = $Formation
 @onready var _director: StageDirector = $StageDirector
@@ -30,6 +33,7 @@ var _cfg := {}
 var _touch := false
 var _paused := false
 var _snd: Node
+var _bonus_t := 0.0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -100,15 +104,35 @@ func _new_run() -> void:
 	_clear_board()
 	_hud.set_score(0)
 	_hud.set_lives(_lives)
+	_hud.clear_bonus_icons()
 	_hud.set_playing(true)
 	_menus.hide_all()
 
 	_paused = false
 	get_tree().paused = false
-	_ship.respawn()
 	if _snd:
 		_snd.play("music")
+	_ship.visible = false
+	_ship.set_deferred("monitoring", false)
+	_hud.flash_banner("BEREIT")
+	await _play_reconstruct(_ship_spawn_pos())
+	_hud.hide_banner()
+	_ship.respawn()
 	_start_ready()
+
+## Plays the ship-(re)construction.gif materialize animation at `at` and waits
+## for it to finish — used at the start of every run (stage 1) and on every
+## respawn, in place of a flat timer wait that showed nothing happening.
+func _play_reconstruct(at: Vector2) -> void:
+	var r := RECONSTRUCT_SCENE.instantiate()
+	add_child(r)
+	r.global_position = at
+	await r.build_done
+
+## Where the ship reappears — always horizontally centered (respawn() does
+## the same), at whatever y the ship scene was authored with.
+func _ship_spawn_pos() -> Vector2:
+	return Vector2(_ship.viewport_width * 0.5, _ship.position.y)
 
 func _request_pause() -> void:
 	if _paused or _state == TITLE or _state == GAME_OVER:
@@ -143,6 +167,7 @@ func _on_stage_populated() -> void:
 	if _state == ENTERING:
 		_state = FORMATION
 		_director.begin_attacks()
+		_bonus_t = randf_range(BONUS_INTERVAL_MIN, BONUS_INTERVAL_MAX)
 
 ## Arcade-standard cap regardless of genre (Tetris, Galaga, ...) — see the
 ## global CLAUDE.md's life-count rule.
@@ -164,7 +189,7 @@ func _on_ship_rescued() -> void:
 	# The Boss that had been carrying a captured ship just got destroyed — the
 	# prisoner comes home. Common edge case: a laser fired just before you got
 	# captured lands on that same boss a moment later, so the ship rescue
-	# happens while your new ship hasn't respawned yet (mid-RESPAWN_DELAY).
+	# happens while your new ship hasn't respawned yet (mid-reconstruct animation).
 	# Don't just drop the reward on that timing coincidence — queue it for the
 	# respawn that's already on its way.
 	if _state == GAME_OVER:
@@ -195,7 +220,7 @@ func _on_ship_died() -> void:
 		return
 	_lives -= 1
 	_hud.set_lives(_lives)
-	await get_tree().create_timer(RESPAWN_DELAY).timeout
+	await _play_reconstruct(_ship_spawn_pos())
 	if is_instance_valid(_ship) and _state != GAME_OVER and _state != TITLE:
 		_ship.respawn()
 		if _pending_twin:
@@ -215,20 +240,44 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			_request_pause()
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	# Not Formation.live_count() — that only counts enemies currently occupying
 	# a slot. A diving enemy releases its slot the instant it peels off (still
 	# alive, still on screen, still able to return), so if it's the last one
 	# left, live_count() hits 0 while it's still mid-dive and the next stage
 	# would start under it. The "enemy" group covers every state (formation,
 	# diving, returning) and only loses a member once it's actually destroyed.
-	if _state == FORMATION and not _paused and get_tree().get_nodes_in_group("enemy").is_empty():
+	if _state != FORMATION or _paused:
+		return
+	if get_tree().get_nodes_in_group("enemy").is_empty():
 		_stage += 1
 		_start_ready()
+		return
+	_bonus_t -= delta
+	if _bonus_t <= 0.0:
+		_bonus_t = randf_range(BONUS_INTERVAL_MIN, BONUS_INTERVAL_MAX)
+		_spawn_bonus_item()
+
+## Occasional bonus pickup — one of the achivements.jpg ship-gallery icons,
+## worth a flat bonus whether flown through or shot (see bonus_item.gd).
+func _spawn_bonus_item() -> void:
+	var b := BONUS_ITEM_SCENE.instantiate()
+	var vp := get_viewport_rect().size
+	var margin := 70.0
+	add_child(b)
+	b.position = Vector2(randf_range(margin, vp.x - margin), -30.0)
+	b.collected.connect(_on_bonus_collected)
+
+func _on_bonus_collected(points: int, icon: Texture2D) -> void:
+	_score += points
+	_hud.set_score(_score)
+	_hud.add_bonus_icon(icon)
+	if _snd:
+		_snd.play("extra")
 
 # --- helpers -----------------------------------------------------
 func _clear_board() -> void:
-	for group in ["enemy", "player_lasers", "enemy_shots"]:
+	for group in ["enemy", "player_lasers", "enemy_shots", "bonus_item"]:
 		for n in get_tree().get_nodes_in_group(group):
 			n.queue_free()
 	_formation.reset()

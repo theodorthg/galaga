@@ -284,6 +284,71 @@ Sichtbarkeit, Leben-Anzeige.**
   hinterher erfolgreich) — Glück, kein Verdienst. `ps aux`-Check weiterhin vor
   **jedem** Headless-Lauf Pflicht.
 
+**Ship-Reconstruct-Intro/Respawn, Bonus-Sammelobjekte aus achivements.jpg
+(2026-09-12):**
+- **`ship-(re)construction.gif` als Materialisierungs-Animation**: neue
+  `ship_reconstruct.tscn`/`.gd` (`AnimatedSprite2D`, 28 Frames, 16 fps,
+  einmalig, `build_done`-Signal, self-`queue_free()`). Läuft jetzt an zwei
+  Stellen in `game.gd`: beim Rundenstart (`_new_run()`, mit „BEREIT"-Banner
+  über `Hud.flash_banner()`, wie ein Tetris-„Get Ready") und bei jedem Respawn
+  (`_on_ship_died()`, ersetzt den alten reinen Timer-Wait komplett — das Schiff
+  war bisher bei Verlust einfach für `RESPAWN_DELAY` unsichtbar, jetzt sieht
+  man, was passiert). `_play_reconstruct(at)`-Helfer + `_ship_spawn_pos()`
+  (immer horizontal zentriert, wie `respawn()` selbst).
+  **Extraktions-Stolperfalle**: `PIL.Image.seek(i)` auf diesem Gif lieferte für
+  Frame 0 Modus `P` mit `info["transparency"]=255`, ab Frame 1 aber bereits
+  fertig zu `RGBA` gewandelt **ohne** korrekten Alpha-Kanal (überall
+  alpha=255, auch der Hintergrund) — ein bekanntes Pillow-Problem bei
+  Disposal-Methode-2-Gifs. `.convert('RGBA')` naiv aufgerufen ergab dadurch
+  einen **komplett opaken schwarzen Hintergrund** (in Godot als hässlicher
+  schwarzer Kasten sichtbar, der die Formation dahinter verdeckte — per
+  Live-Screenshot entdeckt). Fix: nachträglich per Farbschlüssel
+  (`max(R,G,B) > 8 → alpha 255, sonst 0`) korrigiert, da der echte Hintergrund
+  hier zuverlässig reines Schwarz ist. **Cache-Falle dabei**: der PNG-Fix allein
+  reichte nicht — der bereits offene Editor hatte die alte (kaputte) Textur
+  schon im Speicher; erst ein Editor-Neustart + Reimport zeigte die Korrektur.
+- **Bonus-Sammelobjekte aus `achivements.jpg`**: der Nutzer hat ein
+  4×4-Raster verschiedener Schiffs-Sprites (kein echtes „Achievements"-Asset,
+  aber das Beste, was zur Hand war) mit störendem Sternenhimmel-Hintergrund
+  bereitgestellt. Freigestellt per Python/numpy/scipy
+  (`ndimage.label`-Connected-Components, alles vom Bildrand aus erreichbare
+  Dunkel/Blau als Hintergrund geflutet, kleine Stern-Sprenkel < 6 px separat
+  entfernt) zu 16 `achievement_00..15.png`. **3 Indizes (5, 6, 7) bewusst
+  ausgeschlossen** — lagen mitten im dichtesten Dunst-Fleck der Vorlage, die
+  automatische Freistellung ließ dort deutliche Reste stehen; kein
+  Perfektionsanspruch verfolgt (Nutzer selbst: „vielleicht auch nicht ideal").
+  Neue `bonus_item.tscn`/`.gd`: fällt langsam mit sanftem Schlingern vom
+  oberen Rand, wahlweise per Berührung **oder** per Laser einsammelbar (kein
+  Geschick-Test, beides gleich viel wert), 500 Punkte, Icon-Auswahl zufällig
+  aus den 13 sauberen Indizes. `game.gd` spawnt alle
+  `BONUS_INTERVAL_MIN/MAX` (14–24 s) während `FORMATION` einen Bonus
+  (`_spawn_bonus_item()`), Timer wird bei jedem `_on_stage_populated()` neu
+  gewürfelt. `hud.gd` zeigt die letzten `BONUS_MAX_SHOWN` (8) eingesammelten
+  Icons als Reihe unten in der Bildschirmmitte (`add_bonus_icon()`,
+  `_draw_bonus_icons()`) — genau der freie Platz, den der Nutzer vorschlug.
+  Kollisionslayer: `collectibles` (Layer 2, bisher ungenutzt), Maske
+  `player + player_shots` (9). Per End-to-End-MCP-Test verifiziert (echte
+  Kollisions-Erkennung, nicht nur simuliert) — dabei erst einen
+  Test-Methodik-Fehler bei mir selbst gefunden (Signal in einem früheren
+  Testlauf nur an eine lokale Closure statt an `game._on_bonus_collected`
+  verbunden, sah wie ein Kollisions-Bug aus, war aber keiner).
+- **`ship-warp-drive.gif`, `hyper-ammo.gif`, `cyclone-ammo.gif`** — vom Nutzer
+  bereitgestellt, noch **nicht** eingebaut, nur vorgemerkt:
+  `ship-warp-drive.gif` (19 Frames, 100×100) ohne zugewiesenen Verwendungszweck.
+  `hyper-ammo.gif` (2 Frames, 544×1024) ist vermutlich `hyper-smmo.gif`
+  umbenannt (identische Maße/Dateigröße) — bereits früher als „lose
+  Deko-Icons über statischem Schiffs-Umriss, keine Gegner-Pose" eingestuft
+  (siehe „Zusätzliche Gegnertypen + Hilfe-Politur" weiter oben), also
+  vermutlich weiterhin kein Enemy-Reskin-Kandidat, aber evtl. als
+  Ammo-/Effekt-Grafik brauchbar. `cyclone-ammo.gif` (4 Frames, 544×3616,
+  hochformatiges Spiralband) ungeprüft, Verwendung offen. Nutzer bewusst
+  gebeten, sich Einsatzzweck später zu überlegen.
+- **Menü-Farbkonzept + Laser-Farbe** (Nutzer-Feedback, noch nicht umgesetzt):
+  Farbkonzept der Menüs braucht noch Arbeit (unspezifisch, kein Detail
+  genannt); der Laser (aktuell reines Weiß, `laser.gd::_draw()`) soll
+  „irgendwas Blaues" enthalten. Beides vorgemerkt für einen dedizierten
+  Optik-Durchgang, siehe „Offen" Punkt 8.
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,
@@ -292,9 +357,14 @@ StageDirector, Ship, HUD-CanvasLayer.
 - `game.gd` (`class_name Game`) — State-Machine TITLE → READY → ENTERING →
   FORMATION → GAME_OVER + `_paused`. `_new_run()` (aus Titel/„Nochmal"): liest
   `GameSettings`, setzt Leben/Extra-Leben-Schwelle, `_director.configure(...)`
-  aus der Schwierigkeit, räumt das Feld (`_clear_board`), entpausiert, Musik an.
-  Ship `died` → Leben−1 → respawn nach 1,2 s bzw. bei 0 → GAME_OVER (1 s Delay,
-  dann `menus.show_game_over`, Tree pausiert). Pause (`pause`-Action / HUD-Button)
+  aus der Schwierigkeit, räumt das Feld (`_clear_board`), entpausiert, Musik an,
+  spielt die Ship-Reconstruct-Animation + „BEREIT"-Banner (`_play_reconstruct()`)
+  bevor das Schiff überhaupt erscheint. Ship `died` → Reserve-Check (siehe
+  globale Leben-Anzeige-Regel) → bei Rest: Reconstruct-Animation statt reinem
+  Timer-Wait, dann `respawn()`; bei 0 → GAME_OVER (1 s Delay, dann
+  `menus.show_game_over`, Tree pausiert). Während `FORMATION` außerdem alle
+  `BONUS_INTERVAL_MIN/MAX` ein `bonus_item` (`_spawn_bonus_item()`). Pause
+  (`pause`-Action / HUD-Button)
   → Tree pausiert + `menus.show_pause()`. `_enter_title()` bei „Zum Titel".
   `_snd` = `get_node_or_null("/root/Snd")` (bare `Snd` bricht `_selftest`).
   `content_scale_aspect` KEEP/KEEP_WIDTH je Touch. `process_mode = ALWAYS`.
@@ -403,7 +473,18 @@ Steuerung Touch: **Drag irgendwo** = relatives Lenken (`ship._unhandled_input`,
   (player + player_shots — Laser können Bomben abschießen).
 - `laser.gd` — Platzhalter-Strich im `_draw()` (laser.png raus), Layer 8,
   Hitbox 9×18 (sichtbarer Strahl bleibt 3 px schmal — großzügiger als er
-  aussieht, Nutzer fand Treffen zu schwer).
+  aussieht, Nutzer fand Treffen zu schwer). Farbe rein weiß — soll laut
+  Nutzer noch „irgendwas Blaues" bekommen, siehe „Offen" Punkt 8.
+- `bonus_item.gd` / `bonus_item.tscn` — Bonus-Sammelobjekt, fällt langsam mit
+  Schlingern vom oberen Rand, Layer 2 (collectibles) / Maske 9 (player +
+  player_shots), zufälliges Icon aus `achievement_00..15.png` (siehe „Ship-
+  Reconstruct-Intro/Respawn, Bonus-Sammelobjekte..."), 500 Punkte, per
+  Berührung oder Laser einsammelbar, `collected(points, icon)`-Signal.
+- `ship_reconstruct.gd` / `ship_reconstruct.tscn` — einmalige „Schiff
+  materialisiert sich"-Animation (`AnimatedSprite2D`, 28 Frames aus
+  `ship-(re)construction.gif`), `build_done`-Signal, self-`queue_free()`.
+  Läuft am Rundenstart und bei jedem Respawn (siehe `game.gd::
+  _play_reconstruct()`).
 - `enemy_kinds.gd` (`class_name EnemyKinds`) — ZAKO/GOEI/BOSS: Radius, Punkte,
   Sprite-Textur + Skalierung (siehe „Erste echte Assets"). `pick_visual(kind,
   stage)` liefert ab Stage 2 statt der klassischen Textur eines von
@@ -502,13 +583,10 @@ und „Boss-Capture" weiter oben für Details.
 5. Später evtl.: Challenging/Bonus-Stage, Combo-Scoring, Auto-Fire als
    abschaltbares Setting, Diver/Bomben gegen die 960er-Canvas festnageln statt
    `get_viewport_rect()`. Fällt uns sicher noch mehr ein.
-6. **Neuer Bonus-/Sammelobjekt-Mechanismus** (Nutzerwunsch 2026-09-12,
-   angelehnt an „Achievements"/ein Spritesheet aus einem seiner Downloads,
-   ähnlich tetris' Punkte-Boni) — noch nicht begonnen: welche konkrete Datei
-   gemeint ist, muss der Nutzer noch benennen (Downloads-Ordner hat mehrere
-   Kandidaten, u. a. `Galaga Spritesheet Anpassung*.zip` mit
-   `pickup_power`/`pickup_shield`/`pickup_life`-Frames, aber nichts, das
-   eindeutig nach „Achievements" aussieht). Geplanter Anzeigeort: Mitte unten.
+6. **Bonus-/Sammelobjekt-Mechanismus** — erledigt, siehe „Ship-Reconstruct-
+   Intro/Respawn, Bonus-Sammelobjekte aus achivements.jpg" weiter oben
+   (`bonus_item.gd`/`.tscn`, HUD-Reihe unten mittig). `enemy1.png` (falsche
+   Palette) bleibt separat offen als möglicher vierter kanonischer Gegnertyp.
 7. **Fehlende Soundeffekte für neue Mechanismen** (Nutzerwunsch 2026-09-12,
    "merke Dir, was Du zugefügt hast") — aktuell ohne eigenen Sound:
    - Der neue Splash-Screen (`menus.gd::show_splash()`) — kein Jingle beim
@@ -516,11 +594,20 @@ und „Boss-Capture" weiter oben für Details.
    - Der Fang-Moment selbst (`capture_beam.gd`s `caught`-Signal) — es spielt
      nur das normale `dive`-Geräusch beim Abflug und `extra` erst bei der
      späteren Rettung; kein eigener „Schiff gefangen!"-Alarm.
-   - Der künftige Bonus-/Sammelobjekt-Mechanismus (Punkt 6) — noch nicht
-     gebaut, wird aber sicher einen Pickup-Sound brauchen.
+   - Der Bonus-/Sammelobjekt-Mechanismus (`bonus_item.gd`) — läuft aktuell
+     stumm bis auf den wiederverwendeten `extra`-Sound beim Einsammeln;
+     bräuchte eigentlich einen eigenen, kurzen Pickup-Jingle.
    Nutzer sucht ggf. passende Sounds selbst (auch unter den ursprünglich
    kopierten OGGs, nicht nur den SFX-Rips) — bei Bedarf hier ergänzen und
    `sound_manager.gd`s `SOUNDS`/`ORDER` erweitern.
+8. **Menü-Farbkonzept + Laser-Farbe** (Nutzer-Feedback 2026-09-12, noch nicht
+   umgesetzt) — Menüs brauchen laut Nutzer noch Arbeit am Farbkonzept (kein
+   Detail genannt, erst mal nur vorgemerkt); der Laser (`laser.gd::_draw()`,
+   aktuell reines Weiß/`cfefff`) soll „irgendwas Blaues" enthalten statt nur
+   Weiß zu sein.
+9. **`ship-warp-drive.gif` / `hyper-ammo.gif` / `cyclone-ammo.gif`** —
+   vorhanden (siehe „Ship-Reconstruct-Intro/Respawn..." weiter oben für Maße),
+   Einsatzzweck noch offen, Nutzer will sich das später überlegen.
 
 ## Aseprite MCP Pro
 
