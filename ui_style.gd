@@ -47,6 +47,19 @@ static func heading(text: String, size: int, color := Color.WHITE) -> Label:
 	l.add_theme_constant_override("outline_size", 6)
 	return l
 
+## "Marquee" treatment for big impact moments (GAME OVER, the STAGE banner) —
+## a warm fill + a colored (not just black) outline echoing the Boss enemy's
+## palette, plus a soft drop shadow for an embossed/"plastic" pop instead of
+## flat colored text on the panel.
+static func impact_label(l: Label, fill := Color("ffe066"), outline := Color("0f9668")) -> void:
+	l.add_theme_color_override("font_color", fill)
+	l.add_theme_color_override("font_outline_color", outline)
+	l.add_theme_constant_override("outline_size", 9)
+	l.add_theme_color_override("font_shadow_color", Color(0, 0, 0, 0.55))
+	l.add_theme_constant_override("shadow_offset_x", 3)
+	l.add_theme_constant_override("shadow_offset_y", 4)
+	l.add_theme_constant_override("shadow_outline_size", 2)
+
 ## Frosted-glass backdrop (pacman's trick): BackBufferCopy + a ColorRect running
 ## frosted_glass.gdshader. GL Compatibility needs the explicit BackBufferCopy —
 ## SCREEN_TEXTURE isn't available for free there. Caller adds both to a

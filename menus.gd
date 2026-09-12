@@ -359,7 +359,9 @@ var _hof_box: VBoxContainer
 func _build_gameover() -> Control:
 	var s := _screen()
 	var box := _box(s)
-	box.add_child(_title_label("GAME OVER", 34, Color("ff6464")))
+	var over_title := _title_label("GAME OVER", 36)
+	UiStyle.impact_label(over_title)
+	box.add_child(over_title)
 	var sub := _title_label("", 20)
 	sub.name = "Sub"
 	box.add_child(sub)
@@ -400,6 +402,8 @@ func _build_gameover() -> Control:
 	box.add_child(_spacer(8))
 	box.add_child(_button("Nochmal", func(): start_game.emit()))
 	box.add_child(_button("Start-Menü", func(): to_title.emit()))
+	if not IS_WEB:
+		box.add_child(_button("Beenden", func(): get_tree().quit()))
 	return s
 
 var _pending := {}

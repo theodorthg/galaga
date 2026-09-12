@@ -23,6 +23,10 @@ func _ready() -> void:
 	_pause_btn.pressed.connect(func(): pause_pressed.emit())
 	_pause_btn.visible = false
 	UiStyle.style_button(_pause_btn)
+	UiStyle.impact_label(_banner)
+	_stage.add_theme_color_override("font_color", UiStyle.ACCENT)
+	_stage.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+	_stage.add_theme_constant_override("outline_size", 4)
 
 func set_score(n: int) -> void:
 	_score.text = "%06d" % n

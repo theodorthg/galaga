@@ -178,7 +178,13 @@ func _unhandled_input(event: InputEvent) -> void:
 			_request_pause()
 
 func _process(_delta: float) -> void:
-	if _state == FORMATION and not _paused and _formation.live_count() == 0:
+	# Not Formation.live_count() — that only counts enemies currently occupying
+	# a slot. A diving enemy releases its slot the instant it peels off (still
+	# alive, still on screen, still able to return), so if it's the last one
+	# left, live_count() hits 0 while it's still mid-dive and the next stage
+	# would start under it. The "enemy" group covers every state (formation,
+	# diving, returning) and only loses a member once it's actually destroyed.
+	if _state == FORMATION and not _paused and get_tree().get_nodes_in_group("enemy").is_empty():
 		_stage += 1
 		_start_ready()
 
