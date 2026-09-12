@@ -17,7 +17,12 @@ const GROUP_GAP := 0.9
 const LAUNCH_GAP := 0.16
 
 const ATTACK_DEFAULT := {"first": 1.8, "min": 1.3, "max": 3.2, "max_divers": 3}
-const CAPTURE_CHANCE := 0.33  # of a launched Boss dive, how often it's a capture attempt
+# Capture attempts run on their own clock instead of piggy-backing on the
+# regular dive lottery (4 Bosses out of 40 enemies made that a rare fluke that
+# read as "at most once a stage" rather than a real, repeatable threat).
+const CAPTURE_CHANCE := 0.33      # rolled each time the interval below elapses
+const CAPTURE_INTERVAL_MIN := 6.0
+const CAPTURE_INTERVAL_MAX := 11.0
 
 var _formation: Formation
 var _spawn_parent: Node
@@ -25,6 +30,7 @@ var _pending := 0
 var _spawning := false
 var _attacks_on := false
 var _attack_t := 0.0
+var _capture_t := 0.0
 var _atk := ATTACK_DEFAULT.duplicate()
 var _run_id := 0
 
@@ -99,6 +105,7 @@ func _check_done() -> void:
 func begin_attacks() -> void:
 	_attacks_on = true
 	_attack_t = _atk["first"]
+	_capture_t = randf_range(CAPTURE_INTERVAL_MIN, CAPTURE_INTERVAL_MAX)
 
 func stop_attacks() -> void:
 	_attacks_on = false
@@ -107,27 +114,41 @@ func _process(delta: float) -> void:
 	if not _attacks_on:
 		return
 	_attack_t -= delta
-	if _attack_t > 0.0:
-		return
-	_attack_t = randf_range(_atk["min"], _atk["max"])
-	_launch_dive()
+	if _attack_t <= 0.0:
+		_attack_t = randf_range(_atk["min"], _atk["max"])
+		_launch_dive()
+	_capture_t -= delta
+	if _capture_t <= 0.0:
+		_capture_t = randf_range(CAPTURE_INTERVAL_MIN, CAPTURE_INTERVAL_MAX)
+		_try_capture_dive()
 
 func _launch_dive() -> void:
 	var ready_to_dive: Array = []
 	var divers := 0
-	var captive_exists := false
 	for e in get_tree().get_nodes_in_group("enemy"):
-		if e.is_carrying_captive():
-			captive_exists = true
 		if e.is_active_diver():
 			divers += 1
 		elif e.is_available_to_dive():
 			ready_to_dive.append(e)
 	if divers >= int(_atk["max_divers"]) or ready_to_dive.is_empty():
 		return
-	var chosen: Node = ready_to_dive.pick_random()
-	# Only one captive ship in play at a time (matches the arcade original).
-	if not captive_exists and chosen.kind == EnemyKinds.BOSS and randf() < CAPTURE_CHANCE:
-		chosen.capture_dive()
-	else:
-		chosen.dive()
+	(ready_to_dive.pick_random() as Node).dive()
+
+## Independent of _launch_dive() above: every CAPTURE_INTERVAL_MIN..MAX seconds,
+## roll CAPTURE_CHANCE for a formation Boss to peel off on a capture attempt
+## instead of waiting to maybe get picked by the regular dive lottery.
+func _try_capture_dive() -> void:
+	if randf() >= CAPTURE_CHANCE:
+		return
+	var divers := 0
+	var bosses: Array = []
+	for e in get_tree().get_nodes_in_group("enemy"):
+		if e.is_carrying_captive():
+			return  # only one captive ship in play at a time (arcade original)
+		if e.is_active_diver():
+			divers += 1
+		elif e.kind == EnemyKinds.BOSS and e.is_available_to_dive():
+			bosses.append(e)
+	if divers >= int(_atk["max_divers"]) or bosses.is_empty():
+		return
+	(bosses.pick_random() as Node).capture_dive()

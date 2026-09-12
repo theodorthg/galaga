@@ -26,6 +26,7 @@ var resolution : int = 3
 var _last_frame_rotation := global_rotation
 var _angle_difference_smoothed := 0.0
 var _do_redraw := false
+var _last_parent_x := 0.0
 
 @onready var gpu_particles_2d = %GPUParticles2D
 
@@ -35,12 +36,23 @@ func _ready() -> void:
 	gpu_particles_2d.emitting = Engine.is_editor_hint()
 	if not Engine.is_editor_hint():
 		power = 0.0
+		var parent := get_parent()
+		_last_parent_x = parent.position.x if parent else 0.0
 
 
 func _process(delta: float) -> void:
 	if not Engine.is_editor_hint():
-		var direction := Input.get_vector("move_left", "move_right", "move_left" ,"move_right")
-		if direction.length() > 0.0:
+		# Reading move_left/move_right alone missed mouse- and touch-driven
+		# movement (galaga's ship supports all three, setting position.x
+		# directly for the latter two) — the flame only ever lit up under
+		# keyboard/gamepad input. Tracking the parent ship's actual x-movement
+		# instead works no matter which input method is steering it.
+		var parent := get_parent()
+		var moving := false
+		if parent:
+			moving = absf(parent.position.x - _last_parent_x) > 0.05
+			_last_parent_x = parent.position.x
+		if moving:
 			power = lerp(power, 1.0, 10.0 * delta)
 		else:
 			power = max(0.0, power - 2.0 * delta)

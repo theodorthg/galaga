@@ -99,9 +99,8 @@ geliefert, Platzhalter ersetzt:
   extrahiert → `ship_captured.png` (die klassische rot getönte Optik) — Asset
   liegt bereit, Capture-Mechanik selbst kommt erst mit einer späteren Phase.
 - **Blaue Antriebsflamme**: das schon vorhandene Partikel/Shader-System aus
-  `ship_visual_effects/` (Rest des Twin-Stick-Moduls) zeigt/versteckt sich
-  bereits richtig nach Bewegung — nur die Farbe (Gradient in
-  `thruster_material.tres` + `main_thruster.tscn`) war orange, jetzt blau.
+  `ship_visual_effects/` (Rest des Twin-Stick-Moduls) — nur die Farbe (Gradient
+  in `thruster_material.tres` + `main_thruster.tscn`) war orange, jetzt blau.
   **Echter Bug dabei gefunden** (erst durchs `godot-mcp-pro`-Live-Testen
   aufgefallen, im Screenshot schlicht unsichtbar): `MainThruster` hing als
   Kind am `Sprite2D`, das inzwischen `scale=0.11` hat (fürs viel größere neue
@@ -110,6 +109,12 @@ geliefert, Platzhalter ersetzt:
   `MainThruster` jetzt eigenständiges Kind von `Ship` statt von `Sprite2D`,
   Position neu für die Root-Ebene berechnet. Beide SideThruster-Instanzen
   entfernt (Nutzer wollte nur eine Flamme unten, keine seitlichen Jets).
+  **Zweiter, unabhängiger Bug** (2026-09-12, nach Playtest gemeldet): die
+  Sichtbarkeits-Logik selbst reagierte nur auf die `move_left`/`move_right`
+  Input-Actions (Tastatur/Gamepad) — bei Maus- oder Touch-Steuerung (die das
+  Schiff direkt per `position.x` bewegen, ohne diese Actions) blieb die Flamme
+  fälschlich immer aus. Siehe „Boss-Capture-Race-Condition (Teil 2),
+  Angriffsmuster-Vielfalt, Flammen-Fix" unten für den Fix.
 - **Gegner-Sprites**: `enemy2_trim`/`enemy3_trim`/`enemy4_trim.png` ersetzen
   `enemy.gd`s `_draw_zako/_draw_goei/_draw_boss`. Da es nur je ein Standbild
   gibt, wird der Flügelschlag jetzt per Transform-Wobble simuliert
@@ -158,6 +163,47 @@ geliefert, Platzhalter ersetzt:
   (`ColorRect`-Reihe, wie tetris' `_refresh_help_dots()`), sonst bleibt die
   Hilfe textbasiert (siehe „Offen" Punkt 3 für vollständig bildbasierte
   Seiten wie bei tetris).
+
+**Boss-Capture-Race-Condition (Teil 2), Angriffsmuster-Vielfalt, Flammen-Fix
+(2026-09-12):** Nutzer-Report nach echtem Playtest: Boss (mit gefangenem
+Schiff) wurde erneut abgeschossen, ohne den Doppelschiff-Bonus auszulösen —
+obwohl genau dieser Fall schon einmal gefixt worden war (`_pending_twin` in
+`game.gd`).
+- **Eigentliche Ursache gefunden**: `enemy.gd::_begin_capture_beam()` setzte
+  `_carrying_captive = true` erst NACH dem vollen `CAPTURE_BEAM_TOTAL`-Timer
+  (0,95 s) — fängt der Strahl das Schiff, aber ein bereits abgefeuerter Schuss
+  trifft den Boss noch **innerhalb** dieses Zeitfensters (bevor der Timer
+  abläuft), sieht `_explode()` `_carrying_captive` noch als `false` und lässt
+  die Belohnung stillschweigend fallen. Fix: `_carrying_captive = true` +
+  `_spawn_captive_visual()` laufen jetzt direkt im `beam.caught`-Signal-Handler,
+  synchron im Moment des Fangs — nicht erst nach Ablauf des Timers. Verifiziert
+  per gezieltem MCP-Script-Test (Strahl fängt, Boss wird sofort danach per
+  `_explode()` zerstört, `ship_rescued` feuert korrekt).
+- **Capture-Versuche jetzt zeitbasiert statt Zufalls-Beifang der Dive-Lotterie**:
+  vorher wurde `CAPTURE_CHANCE` nur gewürfelt, wenn die normale Dive-Auswahl
+  (zufällig aus allen 40 Formationsplätzen) zufällig einen Boss traf — bei nur
+  4 Bossen wirkte das wie „höchstens einmal pro Stage". Jetzt läuft in
+  `stage_director.gd` ein eigener Timer (`CAPTURE_INTERVAL_MIN/MAX` = 6–11 s)
+  parallel zur normalen Dive-Lotik; bei Ablauf wird `CAPTURE_CHANCE`
+  gewürfelt und, falls ein Boss frei ist und kein Schiff schon gefangen ist,
+  gezielt `capture_dive()` auf ihn ausgelöst (`_try_capture_dive()`).
+- **Sturzflugmuster variieren jetzt**: `AttackPaths.dive()` wählte bisher immer
+  dieselbe Kurvenform (Wand-Peel + Sweep am Spieler vorbei) — bei Dutzenden
+  Dives pro Stage fiel die Wiederholung auf ("Bewegungsmuster ähneln sich zu
+  sehr pro Stage"). Jetzt wird pro Dive zufällig eine von drei Formen gewählt
+  (`randi() % 3`): das bisherige Wand-Peel, ein weiter Loop-Schlenker mit
+  kurzem Gegenhaken, und ein steilerer Mittel-Plunge mit Wackler — nicht
+  stage-gebunden, sondern jedes Mal neu gewürfelt, damit sich auch innerhalb
+  einer Stage nicht alles gleich anfühlt.
+- **Antriebsflamme unsichtbar unter Maus-/Touch-Steuerung**: `main_thruster.gd`
+  las `Input.get_vector("move_left","move_right",…)` für „bewegt sich gerade"
+  — reagiert nur auf Tastatur/Gamepad-Actions, nicht auf Maus (direktes
+  `position.x`-Snapping) oder Touch-Drag, den beiden anderen Steuerwegen des
+  Schiffs. Fix: verfolgt jetzt die tatsächliche x-Bewegung des Eltern-Knotens
+  (`Ship`) frame-zu-frame statt der Input-Actions — funktioniert unabhängig
+  von der Eingabemethode. Verifiziert per direktem `_process()`-Aufruf im
+  MCP-Script (Power rampt 0,16→0,93 bei simulierter Bewegung, klingt bei
+  Stillstand wieder ab).
 
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
@@ -224,18 +270,22 @@ Steuerung Touch: **Drag irgendwo** = relatives Lenken (`ship._unhandled_input`,
   (`flap_toggled`), Belegungs-Tracking (`assign`/`release`/`live_count`).
 - `entry_paths.gd` (`class_name EntryPaths`) — 3 Einflug-Muster (`BOTTOM_UP`,
   `TOP_LEFT`, `TOP_RIGHT`) als viewport-skalierte `Curve2D`, Catmull-Rom-Tangenten.
-- `attack_paths.gd` (`class_name AttackPaths`) — `dive(slot, player, vp)` (peelt
-  zur Wand, sweept am Spieler vorbei, unten raus) und `return_to(slot, vp)`
-  (von oben zurück in den Slot). Gleiches Catmull-Rom-Smoothing wie EntryPaths.
+- `attack_paths.gd` (`class_name AttackPaths`) — `dive(slot, player, vp)` würfelt
+  bei jedem Aufruf eine von 3 Kurvenformen (Wand-Peel+Sweep / weiter
+  Loop-Schlenker / steiler Mittel-Plunge, siehe „Angriffsmuster-Vielfalt")
+  und `return_to(slot, vp)` (von oben zurück in den Slot). Gleiches
+  Catmull-Rom-Smoothing wie EntryPaths.
 - `stage_director.gd` (`class_name StageDirector`) — **Fly-in**: 40 Slots in
   5er-Gruppen à 8 entlang einer Kurve (Launch-Versatz 0,16 s; Gruppen 0,9 s),
   meldet `stage_populated`. **Attacks**: nach `begin_attacks()` schickt alle
   1,3–3,2 s einen zufälligen Formations-Gegner ins `dive()`, max. 3 gleichzeitig
   (`_launch_dive` zählt über `is_active_diver()`/`is_available_to_dive()`).
-  Ist der Gegner ein Boss und noch kein Schiff gefangen
-  (`is_carrying_captive()` über alle `"enemy"` prüfen), 22 % Chance auf
-  `capture_dive()` statt `dive()` (siehe Boss-Capture unten). `stop_attacks()`
-  beim Stage-Wechsel. Reicht `enemy_killed(points)` und `ship_rescued` durch.
+  **Capture-Versuche laufen auf einem eigenen, unabhängigen Timer**
+  (`_try_capture_dive()`, alle `CAPTURE_INTERVAL_MIN`–`MAX` = 6–11 s, 33 %
+  Chance, nur wenn ein Boss frei ist und noch kein Schiff gefangen ist) —
+  nicht mehr an die Zufallsauswahl der normalen Dive-Lotterie gekoppelt (siehe
+  „Boss-Capture-Race-Condition (Teil 2)"). `stop_attacks()` beim Stage-Wechsel.
+  Reicht `enemy_killed(points)` und `ship_rescued` durch.
 - `enemy.gd` (Area2D, kein `class_name`) — States FLYING_IN / LOCKING /
   IN_FORMATION / DIVING / RETURNING / **CAPTURE_APPROACH / CAPTURE_BEAM**
   (Boss-Capture, siehe unten). Generischer Path-Follower
@@ -251,8 +301,11 @@ Steuerung Touch: **Drag irgendwo** = relatives Lenken (`ship._unhandled_input`,
   lässt `capture_beam.tscn` herab (grüner Strahl, wächst/hält/zieht sich
   zurück, Gruppe `"enemy_shots"` — zerstört das Schiff über den schon
   bestehenden Kollisions-Code in `ship.gd`, kein Sonderfall nötig). Trifft der
-  Strahl (`caught`-Signal), trägt der Boss eine `ship_captured.png`-Sprite als
-  Kind-Node zurück in die Formation (folgt Position/Rotation automatisch).
+  Strahl (`caught`-Signal), wird `_carrying_captive` **sofort im Signal-Handler**
+  gesetzt (nicht erst nach Ablauf des Beam-Timers, siehe
+  „Boss-Capture-Race-Condition (Teil 2)") und der Boss trägt eine
+  `ship_captured.png`-Sprite als Kind-Node zurück in die Formation (folgt
+  Position/Rotation automatisch).
   Wird genau dieser Boss später zerstört (`_explode()`), feuert er
   `ship_rescued` — `game.gd::_on_ship_rescued()` macht daraus
   `ship.become_twin()`: zweites Schiff+Triebwerk (Duplikat, `TWIN_OFFSET=34`),

@@ -38,7 +38,6 @@ var _bomb_t := 0.0
 
 var _carrying_captive := false
 var _captive_visual: Sprite2D = null
-var _captured_ship_this_beam := false
 
 var _resolved := false
 
@@ -127,17 +126,19 @@ func capture_dive() -> void:
 func _begin_capture_beam() -> void:
 	_state = CAPTURE_BEAM
 	rotation = 0.0
-	_captured_ship_this_beam = false
 	var beam := CAPTURE_BEAM_SCENE.instantiate()
 	get_parent().add_child(beam)
 	beam.global_position = global_position
-	beam.caught.connect(func(): _captured_ship_this_beam = true)
+	# Flag the catch (and attach the visual) the instant it happens, not after
+	# the beam's hold/shrink finishes — a bullet already in flight can still
+	# blow up this boss during that tail end, and _explode() only grants the
+	# twin-ship reward if _carrying_captive is already true by then.
+	beam.caught.connect(func():
+		_carrying_captive = true
+		_spawn_captive_visual())
 	await get_tree().create_timer(CAPTURE_BEAM_TOTAL).timeout
 	if not is_instance_valid(self):
 		return
-	if _captured_ship_this_beam:
-		_carrying_captive = true
-		_spawn_captive_visual()
 	_begin_return()
 
 func _spawn_captive_visual() -> void:
