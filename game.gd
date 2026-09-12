@@ -87,6 +87,7 @@ func _new_run() -> void:
 	_lives = int(_cfg.get("lives", 3))
 	_extra_step = int(_cfg.get("extra_life", 0))
 	_next_extra = _extra_step
+	_pending_twin = false
 	_director.configure(GameSettings.dive_params(int(_cfg.get("difficulty", 1))))
 
 	_clear_board()
@@ -146,14 +147,23 @@ func _on_enemy_killed(points: int) -> void:
 		if _snd:
 			_snd.play("extra")
 
+var _pending_twin := false
+
 func _on_ship_rescued() -> void:
 	# The Boss that had been carrying a captured ship just got destroyed — the
-	# prisoner comes home. If the player's current ship is alive, it becomes a
-	# twin fighter (double firepower, one hit ends the bonus for both).
-	if is_instance_valid(_ship) and _state != GAME_OVER:
+	# prisoner comes home. Common edge case: a laser fired just before you got
+	# captured lands on that same boss a moment later, so the ship rescue
+	# happens while your new ship hasn't respawned yet (mid-RESPAWN_DELAY).
+	# Don't just drop the reward on that timing coincidence — queue it for the
+	# respawn that's already on its way.
+	if _state == GAME_OVER:
+		return
+	if is_instance_valid(_ship) and _ship._alive:
 		_ship.become_twin()
-		if _snd:
-			_snd.play("extra")
+	else:
+		_pending_twin = true
+	if _snd:
+		_snd.play("extra")
 
 func _on_ship_died() -> void:
 	_lives -= 1
@@ -173,6 +183,9 @@ func _on_ship_died() -> void:
 	await get_tree().create_timer(RESPAWN_DELAY).timeout
 	if is_instance_valid(_ship) and _state != GAME_OVER and _state != TITLE:
 		_ship.respawn()
+		if _pending_twin:
+			_pending_twin = false
+			_ship.become_twin()
 
 # --- input --------------------------------------------------------
 func _input(event: InputEvent) -> void:

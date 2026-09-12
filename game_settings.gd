@@ -7,13 +7,15 @@ class_name GameSettings
 const CFG_PATH := "user://settings.cfg"
 
 const DEF := {
-	"lives": 3,          # 2..5
-	"extra_life": 20000, # 0 = off, else 10000/20000/30000
+	"lives": 3,          # LIVES_MIN..LIVES_MAX
+	"extra_life": 20000, # 0 = off, sonst EXTRA_STEP..EXTRA_MAX in EXTRA_STEP-Schritten
 	"difficulty": 1,     # 0 easy, 1 normal, 2 hard
 }
 
-const LIVES_CHOICES := [2, 3, 4, 5]
-const EXTRA_CHOICES := [0, 10000, 20000, 30000]
+const LIVES_MIN := 2
+const LIVES_MAX := 9
+const EXTRA_MAX := 30000
+const EXTRA_STEP := 1000
 const DIFF_NAMES := ["Leicht", "Normal", "Schwer"]
 
 static func load_all() -> Dictionary:

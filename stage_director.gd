@@ -17,7 +17,7 @@ const GROUP_GAP := 0.9
 const LAUNCH_GAP := 0.16
 
 const ATTACK_DEFAULT := {"first": 1.8, "min": 1.3, "max": 3.2, "max_divers": 3}
-const CAPTURE_CHANCE := 0.22  # of a launched Boss dive, how often it's a capture attempt
+const CAPTURE_CHANCE := 0.33  # of a launched Boss dive, how often it's a capture attempt
 
 var _formation: Formation
 var _spawn_parent: Node
@@ -70,7 +70,7 @@ func _run_stage(stage: int, run_id: int) -> void:
 			var idx := g * GROUP_SIZE + k
 			if idx >= total:
 				break
-			_spawn(idx, curve, k * LAUNCH_GAP)
+			_spawn(idx, curve, k * LAUNCH_GAP, stage)
 		await get_tree().create_timer(GROUP_GAP).timeout
 		if not is_instance_valid(self) or run_id != _run_id:
 			return
@@ -78,14 +78,14 @@ func _run_stage(stage: int, run_id: int) -> void:
 	_spawning = false
 	_check_done()
 
-func _spawn(idx: int, curve: Curve2D, delay: float) -> void:
+func _spawn(idx: int, curve: Curve2D, delay: float, stage: int) -> void:
 	var e := ENEMY_SCENE.instantiate()
 	_spawn_parent.add_child(e)
 	e.resolved.connect(_on_resolved)
 	e.killed.connect(func(pts: int): enemy_killed.emit(pts))
 	e.ship_rescued.connect(func(): ship_rescued.emit())
 	_pending += 1
-	e.setup(_formation.slot_kind(idx), _formation, idx, curve, delay)
+	e.setup(_formation.slot_kind(idx), _formation, idx, curve, delay, stage)
 
 func _on_resolved() -> void:
 	_pending -= 1

@@ -140,10 +140,13 @@ func _title_label(text: String, size := 30, col := Color.WHITE) -> Label:
 	l.text = text
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.add_theme_font_size_override("font_size", size)
-	l.add_theme_color_override("font_color", col)
 	if size >= 24:
-		l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
-		l.add_theme_constant_override("outline_size", 6)
+		# Every screen heading (GALAGA, PAUSE, Einstellungen, Sound, Hilfe,
+		# GAME OVER) gets the same "Stage 1"-banner look — one consistent
+		# marquee style instead of each screen picking its own flat color.
+		UiStyle.impact_label(l)
+	else:
+		l.add_theme_color_override("font_color", col)
 	return l
 
 ## Minimum comfortable touch target (Android/iOS guidelines land around 44-48dp;
@@ -160,7 +163,11 @@ func _button(text: String, cb: Callable) -> Button:
 	UiStyle.style_button(b)
 	return b
 
-func _stepper(label_text: String, get_text: Callable, step: Callable) -> HBoxContainer:
+## `set_from_text`, if given, makes the value a tappable/clickable field the
+## user can type an exact number into (Enter or tapping away commits it) —
+## on top of the </> steppers, not instead of them. Omit it (e.g. for
+## Schwierigkeit, a named choice rather than a number) to keep a plain label.
+func _stepper(label_text: String, get_text: Callable, step: Callable, set_from_text := Callable()) -> HBoxContainer:
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 8)
@@ -172,9 +179,31 @@ func _stepper(label_text: String, get_text: Callable, step: Callable) -> HBoxCon
 
 	var left := _button("<", func(): step.call(-1); _refresh_settings())
 	left.custom_minimum_size = Vector2(56, TOUCH_H)
-	var val := _title_label("", 20, ACCENT)
-	val.custom_minimum_size = Vector2(110, 0)
+
+	var val: Control
+	if set_from_text.is_valid():
+		var edit := LineEdit.new()
+		edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
+		edit.add_theme_font_size_override("font_size", 20)
+		edit.add_theme_color_override("font_color", ACCENT)
+		edit.add_theme_color_override("font_uneditable_color", ACCENT)
+		edit.select_all_on_focus = true
+		var commit := func():
+			set_from_text.call(edit.text)
+			_refresh_settings()
+		edit.text_submitted.connect(func(_t): commit.call())
+		edit.focus_entered.connect(func():
+			if DisplayServer.has_feature(DisplayServer.FEATURE_VIRTUAL_KEYBOARD):
+				DisplayServer.virtual_keyboard_show(edit.text, Rect2(), DisplayServer.KEYBOARD_TYPE_NUMBER))
+		edit.focus_exited.connect(func():
+			if DisplayServer.has_feature(DisplayServer.FEATURE_VIRTUAL_KEYBOARD):
+				DisplayServer.virtual_keyboard_hide()
+			commit.call())
+		val = edit
+	else:
+		val = _title_label("", 20, ACCENT)
 	val.name = "Val"
+	val.custom_minimum_size = Vector2(110, TOUCH_H if set_from_text.is_valid() else 0.0)
 	var right := _button(">", func(): step.call(1); _refresh_settings())
 	right.custom_minimum_size = Vector2(56, TOUCH_H)
 
@@ -218,8 +247,8 @@ func _build_settings() -> Control:
 	var box := _box(s)
 	box.add_child(_title_label("Einstellungen", 30))
 	box.add_child(_spacer(10))
-	box.add_child(_stepper("Leben", _fmt_lives, _step_lives))
-	box.add_child(_stepper("Extra-Leben", _fmt_extra, _step_extra))
+	box.add_child(_stepper("Leben", _fmt_lives, _step_lives, _set_lives_text))
+	box.add_child(_stepper("Extra-Leben", _fmt_extra, _step_extra, _set_extra_text))
 	box.add_child(_stepper("Schwierigkeit", _fmt_diff, _step_diff))
 	box.add_child(_spacer(8))
 	box.add_child(_button("Sound", func(): _open_sound()))
@@ -234,7 +263,10 @@ func _open_settings(from: String) -> void:
 func _refresh_settings() -> void:
 	for row in _box(_screens["settings"]).get_children():
 		if row.has_meta("get_text"):
-			(row.get_node("Val") as Label).text = str(row.get_meta("get_text").call())
+			var val: Control = row.get_node("Val")
+			if val is LineEdit and val.has_focus():
+				continue  # don't clobber text the user is mid-typing
+			val.text = str(row.get_meta("get_text").call())
 
 func _close_sub() -> void:
 	GameSettings.save(_cfg)
@@ -243,22 +275,25 @@ func _close_sub() -> void:
 
 func _fmt_lives() -> String: return str(_cfg.lives)
 func _step_lives(d: int) -> void:
-	_cfg.lives = _cycle(GameSettings.LIVES_CHOICES, _cfg.lives, d)
+	_cfg.lives = clampi(_cfg.lives + d, GameSettings.LIVES_MIN, GameSettings.LIVES_MAX)
+func _set_lives_text(t: String) -> void:
+	_cfg.lives = clampi(t.to_int(), GameSettings.LIVES_MIN, GameSettings.LIVES_MAX)
 
 func _fmt_extra() -> String:
 	return "aus" if _cfg.extra_life == 0 else str(_cfg.extra_life)
 func _step_extra(d: int) -> void:
-	_cfg.extra_life = _cycle(GameSettings.EXTRA_CHOICES, _cfg.extra_life, d)
+	_cfg.extra_life = clampi(_cfg.extra_life + d * GameSettings.EXTRA_STEP, 0, GameSettings.EXTRA_MAX)
+func _set_extra_text(t: String) -> void:
+	var s := t.strip_edges().to_lower()
+	if s == "" or s == "aus":
+		_cfg.extra_life = 0
+		return
+	var n := clampi(t.to_int(), 0, GameSettings.EXTRA_MAX)
+	_cfg.extra_life = int(roundf(float(n) / GameSettings.EXTRA_STEP)) * GameSettings.EXTRA_STEP
 
 func _fmt_diff() -> String: return GameSettings.DIFF_NAMES[_cfg.difficulty]
 func _step_diff(d: int) -> void:
 	_cfg.difficulty = clampi(_cfg.difficulty + d, 0, 2)
-
-func _cycle(choices: Array, cur, d: int):
-	var i := choices.find(cur)
-	if i == -1:
-		i = 0
-	return choices[wrapi(i + d, 0, choices.size())]
 
 # ---------------------------------------------------------------- sound
 func _build_sound() -> Control:
@@ -359,9 +394,7 @@ var _hof_box: VBoxContainer
 func _build_gameover() -> Control:
 	var s := _screen()
 	var box := _box(s)
-	var over_title := _title_label("GAME OVER", 36)
-	UiStyle.impact_label(over_title)
-	box.add_child(over_title)
+	box.add_child(_title_label("GAME OVER", 36))
 	var sub := _title_label("", 20)
 	sub.name = "Sub"
 	box.add_child(sub)

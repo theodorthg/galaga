@@ -20,3 +20,32 @@ const DATA := {
 	BOSS: {"half": 18.0, "points": 150,
 		"texture": "res://assets/graphics/enemy4_trim.png", "scale": 0.115},
 }
+
+## Stage 2+ visual variety: real 2-frame flap art from the "Gyaraga" fan-art
+## series (ss77relaunched on DeviantArt — see galaga's CLAUDE.md). Unlike
+## DATA's classic single-frame sprites (flap faked via skew/squash wobble,
+## see enemy.gd), these actually swap texture between two drawn frames.
+## Cycles by (stage - 2) so stage 2 always starts at variant 0.
+const GOEI_VARIANTS := [
+	{"frames": ["res://assets/graphics/goei_f0.png", "res://assets/graphics/goei_f1.png"], "scale": 0.24},
+	{"frames": ["res://assets/graphics/neo_goei_f0.png", "res://assets/graphics/neo_goei_f1.png"], "scale": 0.24},
+]
+const ZAKO_VARIANTS := [
+	{"frames": ["res://assets/graphics/sasori_f0.png", "res://assets/graphics/sasori_f1.png"], "scale": 0.27},
+	{"frames": ["res://assets/graphics/neo_tonbo_f0.png", "res://assets/graphics/neo_tonbo_f1.png"], "scale": 0.20},
+]
+
+## Which texture(s) a formation slot should use, given its kind and the
+## current stage. Stage 1 (and Boss at any stage — no curated variant for it
+## yet) always gets the classic DATA look; stage 2+ cycles GOEI/ZAKO through
+## the Gyaraga variants above for stage-to-stage variety.
+static func pick_visual(kind: int, stage: int) -> Dictionary:
+	var variants: Array = []
+	match kind:
+		GOEI:
+			variants = GOEI_VARIANTS
+		ZAKO:
+			variants = ZAKO_VARIANTS
+	if stage >= 2 and not variants.is_empty():
+		return variants[(stage - 2) % variants.size()]
+	return {"frames": [], "texture": DATA[kind]["texture"], "scale": DATA[kind]["scale"]}

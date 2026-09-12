@@ -45,13 +45,14 @@ var _resolved := false
 @onready var _col: CollisionShape2D = $CollisionShape2D
 @onready var _sprite: Sprite2D = $Sprite2D
 var _flap_tween: Tween
+var _flap_frames: Array = []  # 2 texture paths for a real flap (EnemyKinds variants); empty -> wobble
 
 signal locked_in(enemy)
 signal killed(points)
 signal resolved
 signal ship_rescued
 
-func setup(p_kind: int, p_formation: Formation, p_slot: int, p_curve: Curve2D, start_delay: float) -> void:
+func setup(p_kind: int, p_formation: Formation, p_slot: int, p_curve: Curve2D, start_delay: float, p_stage: int = 1) -> void:
 	kind = p_kind
 	_formation = p_formation
 	_slot = p_slot
@@ -60,8 +61,10 @@ func setup(p_kind: int, p_formation: Formation, p_slot: int, p_curve: Curve2D, s
 	circ.radius = float(EnemyKinds.DATA[kind]["half"])
 	_col.shape = circ
 
-	_sprite.texture = load(EnemyKinds.DATA[kind]["texture"])
-	_sprite.scale = Vector2.ONE * float(EnemyKinds.DATA[kind]["scale"])
+	var vis := EnemyKinds.pick_visual(kind, p_stage)
+	_flap_frames = vis.get("frames", [])
+	_sprite.texture = load(_flap_frames[0] if _flap_frames.size() == 2 else vis["texture"])
+	_sprite.scale = Vector2.ONE * float(vis["scale"])
 
 	_formation.flap_toggled.connect(_on_flap)
 	_start_path(p_curve, FLY_SPEED, _begin_lock)
@@ -246,16 +249,21 @@ func _on_flap(state_in: bool) -> void:
 	_animate_flap(state_in)
 
 # ---------------------------------------------------------------------------
-#  Real sprite art (see EnemyKinds.DATA); a single static image per kind, so
-#  the "wing flap" is faked with a transform wobble instead of a 2nd frame:
-#  a quick skew + vertical squash pulse in sync with Formation's shared
-#  0.28s flap cadence — every enemy flutters on the same beat, same as the
-#  old 2-frame placeholder did.
+#  Two flap looks, picked in setup() via EnemyKinds.pick_visual():
+#  - Gyaraga variants (stage 2+ GOEI/ZAKO) ship a real 2nd drawn frame —
+#    just swap the texture, no transform trickery needed.
+#  - The classic single-frame sprites fake it with a transform wobble: a
+#    quick skew + vertical squash pulse in sync with Formation's shared
+#    0.28s flap cadence — every enemy flutters on the same beat, same as the
+#    old 2-frame placeholder did before real art existed.
 # ---------------------------------------------------------------------------
 func _animate_flap(up: bool) -> void:
+	if _flap_frames.size() == 2:
+		_sprite.texture = load(_flap_frames[1] if up else _flap_frames[0])
+		return
 	if _flap_tween:
 		_flap_tween.kill()
-	var base_scale: float = float(EnemyKinds.DATA[kind]["scale"])
+	var base_scale: float = _sprite.scale.x
 	var skew_to := (0.16 if up else -0.16)
 	var squash_to := base_scale * (0.88 if up else 1.0)
 	_flap_tween = create_tween()
