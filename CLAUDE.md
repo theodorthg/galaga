@@ -3,24 +3,25 @@
 Ergänzt die übergeordnete `CLAUDE.md` unter
 `~/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/`.
 
-**Stand: v0.1.0.** Scaffolding + Phasen 1–4 durch. Fertig: **Formation +
-Einflug**, **Sturzflüge + Gegnerfeuer** (P1), **Leben / HUD / Game-Over** (P2),
-**Touch + Aspect-Umschaltung + Pause** (P3), **Menüs / Settings / Sound /
-Hall of Fame** (P4).
-40er-Formation, gruppenweiser Einflug entlang Kurven, prozedurale Platzhalter
-mit 2-Frame-Flap. Divers peelen einzeln raus, sweepen am Spieler vorbei (Bomben
-werfend), fliegen unten raus und kehren von oben in ihren Slot zurück.
+**Stand: v0.1.0 (2026-09-12).** Scaffolding + Phasen 1–5 durch. Fertig:
+**Formation + Einflug**, **Sturzflüge + Gegnerfeuer** (P1), **Leben / HUD /
+Game-Over** (P2), **Touch + Aspect-Umschaltung + Pause** (P3), **Menüs /
+Settings / Sound / Hall of Fame** (P4), **echte Assets + Boss-Capture** (P5).
+40er-Formation, gruppenweiser Einflug entlang Kurven, echte Sprites mit
+Skew/Squash-Flügelschlag (siehe „Erste echte Assets" unten). Divers peelen
+einzeln raus, sweepen am Spieler vorbei (Bomben werfend), fliegen unten raus
+und kehren von oben in ihren Slot zurück. Bosse können stattdessen einen
+Capture-Anflug fliegen (Traktorstrahl, Zwillingsjäger-Belohnung — siehe
+„Boss-Capture" unten).
 Start-Screen (Play / Einstellungen / Steuerung / Beenden), Pausenmenü,
 Einstellungen (Leben / Extra-Leben / Schwierigkeit → live in die nächste Runde),
 Sound-Unterseite (Regler pro Sound), bildlose Hilfe (3 Seiten), Game-Over mit
-Hall of Fame + Namenseingabe. **Sounds sind Platzhalter-WAVs** (synthetisch via
-`gen_sounds.py`) — echte Audios kommen später.
-**Pausiert (Stand 2026-09-11): Gameplay-Weiterbau (Phase 5, Boss-Capture etc.)
-ruht, bis der Nutzer echte Sounds + echte Sprites liefert** — bewusste
-Entscheidung des Nutzers, um nicht immer mehr auf Platzhaltern aufzubauen.
-Bis dahin nur noch Bugfixes/Politur. Sobald Assets da sind: Pipeline aus
-Punkt 6 unten (Sprites) bzw. `assets/sounds/`-Dateien ersetzen, dann erst
-mit der nächsten Gameplay-Phase weitermachen.
+Hall of Fame + Namenseingabe + „Beenden". **Sounds sind echte SFX-Rips**
+(siehe „Erste echte Assets" unten), nicht mehr die `gen_sounds.py`-Platzhalter.
+**Nicht mehr pausiert** — die Assets sind da, Gameplay-Weiterbau läuft normal
+weiter. Offen bleibt vor allem: zusätzliche Gegnertypen für spätere
+Stages/Bonuslevel (siehe „Offen" unten — Umfang/Look mit dem Nutzer noch
+nicht final besprochen, bewusst zurückgestellt statt ungefragt reingebaut).
 
 **Nach Nutzer-Test gefundene + gefixte Bugs (2026-09-11):**
 - **Linksklick schoss nicht** — `space_background.tscn`s vollflächiges
@@ -211,21 +212,40 @@ Steuerung Touch: **Drag irgendwo** = relatives Lenken (`ship._unhandled_input`,
   meldet `stage_populated`. **Attacks**: nach `begin_attacks()` schickt alle
   1,3–3,2 s einen zufälligen Formations-Gegner ins `dive()`, max. 3 gleichzeitig
   (`_launch_dive` zählt über `is_active_diver()`/`is_available_to_dive()`).
-  `stop_attacks()` beim Stage-Wechsel. Reicht `enemy_killed(points)` durch.
+  Ist der Gegner ein Boss und noch kein Schiff gefangen
+  (`is_carrying_captive()` über alle `"enemy"` prüfen), 22 % Chance auf
+  `capture_dive()` statt `dive()` (siehe Boss-Capture unten). `stop_attacks()`
+  beim Stage-Wechsel. Reicht `enemy_killed(points)` und `ship_rescued` durch.
 - `enemy.gd` (Area2D, kein `class_name`) — States FLYING_IN / LOCKING /
-  IN_FORMATION / **DIVING / RETURNING**. Generischer Path-Follower
+  IN_FORMATION / DIVING / RETURNING / **CAPTURE_APPROACH / CAPTURE_BEAM**
+  (Boss-Capture, siehe unten). Generischer Path-Follower
   (`_start_path(curve, speed, done_callable)`): FLY 480 / DIVE 300 / RETURN
   360 px/s, Ausrichtung nach Fahrtrichtung, dann 0,4-s-Tween in den Slot.
   Beim `dive()` gibt der Gegner seinen Slot frei (`_formation.release`), wirft
   bis zu 2 Bomben (`bomb.tscn`), kehrt nach dem Kurvenende via `return_to`
-  zurück und belegt den Slot neu. `_draw()` je Kind (nach unten gerichtet),
-  Flap aus `Formation.flap`. Kollision Layer 4 / Maske 8.
+  zurück und belegt den Slot neu. Sprite + Skew/Squash-Flap
+  (`EnemyKinds.DATA[kind]["texture"/"scale"]`, siehe „Erste echte Assets").
+  Kollision Layer 4 / Maske 8.
+- **Boss-Capture** (`enemy.gd` + `capture_beam.gd`/`.tscn` + `attack_paths.gd`s
+  `capture_approach()`): Boss hovert statt durchzufliegen (CAPTURE_APPROACH),
+  lässt `capture_beam.tscn` herab (grüner Strahl, wächst/hält/zieht sich
+  zurück, Gruppe `"enemy_shots"` — zerstört das Schiff über den schon
+  bestehenden Kollisions-Code in `ship.gd`, kein Sonderfall nötig). Trifft der
+  Strahl (`caught`-Signal), trägt der Boss eine `ship_captured.png`-Sprite als
+  Kind-Node zurück in die Formation (folgt Position/Rotation automatisch).
+  Wird genau dieser Boss später zerstört (`_explode()`), feuert er
+  `ship_rescued` — `game.gd::_on_ship_rescued()` macht daraus
+  `ship.become_twin()`: zweites Schiff+Triebwerk (Duplikat, `TWIN_OFFSET=34`),
+  doppelte Laser-Kapazität, ein Treffer beendet den Bonus wieder
+  (`_destroy() -> _revert_twin()`). Max. ein gefangenes Schiff gleichzeitig.
 - `bomb.gd` / `bomb.tscn` — Gegner-Schuss, fällt (leicht Richtung Spieler-x zum
   Abwurfzeitpunkt), Platzhalter-Raute. Layer 16 (enemy_shots) / Maske 9
   (player + player_shots — Laser können Bomben abschießen).
 - `laser.gd` — Platzhalter-Strich im `_draw()` (laser.png raus), Layer 8,
-  Hitbox 5×16.
-- `enemy_kinds.gd` (`class_name EnemyKinds`) — ZAKO/GOEI/BOSS: Radius + Punkte.
+  Hitbox 9×18 (sichtbarer Strahl bleibt 3 px schmal — großzügiger als er
+  aussieht, Nutzer fand Treffen zu schwer).
+- `enemy_kinds.gd` (`class_name EnemyKinds`) — ZAKO/GOEI/BOSS: Radius, Punkte,
+  Sprite-Textur + Skalierung (siehe „Erste echte Assets").
 
 `_capture.tscn`/`_capture.gd` (gitignored): lädt `game.tscn`, schießt Frames des
 Einflugs als PNG. `godot --path . res://_capture.tscn -- <out_dir>` (braucht
@@ -294,28 +314,28 @@ bash projects/galaga/build.sh web        # einzeln: linux | web | android
 
 ## Offen / als Nächstes
 
-**Erledigt:** Phasen 1–4 (Formation+Einflug, Sturzflüge+Gegnerfeuer, Leben/HUD/
-Game-Over, Touch+Aspect+Pause, Menüs/Settings/Sound/HoF).
+**Erledigt:** Phasen 1–5 (Formation+Einflug, Sturzflüge+Gegnerfeuer, Leben/HUD/
+Game-Over, Touch+Aspect+Pause, Menüs/Settings/Sound/HoF, echte Assets +
+Boss-Capture). Echte Sounds, echte Gegner-/Schiff-Sprites, Splash-Screen,
+Maus-1:1-Steuerung, frei skalierbares Fenster — siehe „Erste echte Assets"
+und „Boss-Capture" weiter oben für Details.
 
-1. **Echte Sounds** — aktuell synthetische Platzhalter-WAVs (`gen_sounds.py` in der Projektwurzel). Der Nutzer liefert richtige; dann die 7 Dateien in
-   `assets/sounds/` ersetzen (`music shoot hit dive player_boom extra stage`).
-   `_BASE_DB` je Sound ggf. neu kalibrieren, `calib_version` hochzählen.
-2. **Sprites vom Nutzer** — je Einheit **mind. 2 Frames**, evtl. `.gif`.
-   Pipeline: `.gif` → Aseprite-MCP → `SpriteFrames`. Ersetzt das `_draw()` in
-   `enemy.gd` (und Schiff/Laser/Bombe). Bis dahin prozedurale Platzhalter.
-3. **`splash-screen.png`** (Bindestrich, Wurzel) fehlt — liefern/generieren,
-   dann Boot-Splash + Ladescreen.
-4. **Auf echten Geräten testen** (OPPO Find X2 Pro, OnePlus 12 ≈ 2,2:1;
+1. **Zusätzliche Gegnertypen für spätere Stages/Bonuslevel** — mit dem Nutzer
+   besprochen als nächstes Thema, Umfang/Look noch offen. Kandidaten: das
+   bislang ungenutzte `enemy1.png` (noch nicht getrimmt, falsche Palette für
+   einen der drei kanonischen Typen, aber vorhanden) und/oder die
+   Fan-Art-Serie „Gyaraga"
+   (`assets/graphics/*.gif` — sasori, neo-tonbo, hyper-smmo, gorg-bos, …).
+2. **Auf echten Geräten testen** (OPPO Find X2 Pro, OnePlus 12 ≈ 2,2:1;
    Galaxy S4 = 16:9): Aspect-Umschaltung, Touch-Drag, Pause-Button-Position,
    Formation-Größe. In beiden Ratios im echten Browser screenshotten.
    Canvas-Wechsel bliebe ein Einzeiler in `project.godot`.
-5. **Hilfe bildbasiert** (optional) — derzeit 3 Textseiten in `menus.gd`
+3. **Hilfe bildbasiert** (optional) — derzeit 3 Textseiten in `menus.gd`
    (`HELP_PAGES`). tetris macht's mit SVG→PNG (`assets/help_src/` + `render.sh`).
    Reicht vorerst als Text.
-6. `assets/` aufräumen (lose Test-PNGs, Loot-System `item.gd`/`gem.tscn`/… —
+4. `assets/` aufräumen (lose Test-PNGs, Loot-System `item.gd`/`gem.tscn`/… —
    Galaga hat keins), HUD-Feinschliff, „1UP"-Flash beim Extra-Leben.
-7. Später evtl.: Boss-Capture (Traktorstrahl fängt Schiff → nach Boss-Abschuss
-   Doppel-Jäger), Challenging/Bonus-Stage, Combo-Scoring, Auto-Fire als
+5. Später evtl.: Challenging/Bonus-Stage, Combo-Scoring, Auto-Fire als
    abschaltbares Setting, Diver/Bomben gegen die 960er-Canvas festnageln statt
    `get_viewport_rect()`. Fällt uns sicher noch mehr ein.
 
