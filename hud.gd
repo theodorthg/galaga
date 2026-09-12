@@ -11,7 +11,14 @@ extends Control
 @onready var _banner: Label = $Banner
 @onready var _pause_btn: Button = $PauseButton
 
-const LIFE_ICON := Color("ffd23f")
+## Small ship icons, bottom-left — the real ship art rather than a generic
+## placeholder, per the user's request. Below MANY_THRESHOLD each spare ship
+## gets its own icon (classic arcade style); at/above it, tetris-style, one
+## icon plus "× N" instead of a row that would otherwise run off-screen.
+const SHIP_ICON := preload("res://assets/graphics/player_trim.png")
+const ICON_H := 24.0
+const ICON_GAP := 8.0
+const MANY_THRESHOLD := 5
 
 # Stage banner: full-opacity hold, then a fade tail (tetris' main.gd _flash()
 # does the same "hold then fade" instead of a hard on/off — a banner that
@@ -70,10 +77,18 @@ func hide_banner() -> void:
 	_banner.visible = false
 
 func _draw() -> void:
-	var y := size.y - 20.0
-	for i in _lives:
-		var x := 16.0 + i * 26.0
-		draw_colored_polygon(PackedVector2Array([
-			Vector2(x, y - 10.0), Vector2(x + 9.0, y + 8.0),
-			Vector2(x, y + 3.0), Vector2(x - 9.0, y + 8.0),
-		]), LIFE_ICON)
+	if _lives <= 0:
+		return
+	var y := size.y - ICON_H - 6.0
+	var icon_w := ICON_H * (SHIP_ICON.get_width() / float(SHIP_ICON.get_height()))
+	if _lives < MANY_THRESHOLD:
+		for i in _lives:
+			var x := 12.0 + i * (icon_w + ICON_GAP)
+			draw_texture_rect(SHIP_ICON, Rect2(x, y, icon_w, ICON_H), false)
+		return
+	draw_texture_rect(SHIP_ICON, Rect2(12.0, y, icon_w, ICON_H), false)
+	var font := get_theme_default_font()
+	var fsize := 20
+	var label_pos := Vector2(12.0 + icon_w + 6.0, y + ICON_H - 4.0)
+	draw_string_outline(font, label_pos, "× %d" % _lives, HORIZONTAL_ALIGNMENT_LEFT, -1, fsize, 4, Color(0, 0, 0, 0.85))
+	draw_string(font, label_pos, "× %d" % _lives, HORIZONTAL_ALIGNMENT_LEFT, -1, fsize, UiStyle.ACCENT)

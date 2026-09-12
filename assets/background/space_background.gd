@@ -1,14 +1,15 @@
 extends ColorRect
 
-@onready var _camera: Camera2D
+## The shader's two-layer star parallax was written for a scrolling/camera-
+## following game (view_offset = camera position) — galaga has a fixed
+## camera, so that offset never changed and the starfield just sat still.
+## Feeding it a steadily increasing downward offset instead gives the classic
+## "streaming past" shmup starfield without touching the shader's parallax
+## math at all.
+const SCROLL_SPEED := 22.0
 
+var _elapsed := 0.0
 
-func _ready() -> void:
-	set_process(false)
-	await get_tree().root.ready
-	_camera = get_viewport().get_camera_2d()
-	set_process(_camera != null)
-
-
-func _process(_delta: float) -> void:
-	material.set_shader_parameter("view_offset", _camera.global_position)
+func _process(delta: float) -> void:
+	_elapsed += delta
+	material.set_shader_parameter("view_offset", Vector2(0.0, _elapsed * SCROLL_SPEED))

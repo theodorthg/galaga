@@ -183,8 +183,9 @@ obwohl genau dieser Fall schon einmal gefixt worden war (`_pending_twin` in
   vorher wurde `CAPTURE_CHANCE` nur gewürfelt, wenn die normale Dive-Auswahl
   (zufällig aus allen 40 Formationsplätzen) zufällig einen Boss traf — bei nur
   4 Bossen wirkte das wie „höchstens einmal pro Stage". Jetzt läuft in
-  `stage_director.gd` ein eigener Timer (`CAPTURE_INTERVAL_MIN/MAX` = 6–11 s)
-  parallel zur normalen Dive-Lotik; bei Ablauf wird `CAPTURE_CHANCE`
+  `stage_director.gd` ein eigener Timer (`CAPTURE_INTERVAL_MIN/MAX`, seit der
+  zweiten Playtest-Runde 5–9 s) parallel zur normalen Dive-Lotik; bei Ablauf
+  wird `CAPTURE_CHANCE`
   gewürfelt und, falls ein Boss frei ist und kein Schiff schon gefangen ist,
   gezielt `capture_dive()` auf ihn ausgelöst (`_try_capture_dive()`).
 - **Sturzflugmuster variieren jetzt**: `AttackPaths.dive()` wählte bisher immer
@@ -205,6 +206,84 @@ obwohl genau dieser Fall schon einmal gefixt worden war (`_pending_twin` in
   MCP-Script (Power rampt 0,16→0,93 bei simulierter Bewegung, klingt bei
   Stillstand wieder ab).
 
+**Zweite Playtest-Runde (2026-09-12): Max-Schüsse-Setting, Bomben-Hitbox,
+Hintergrund-Bewegung, echter Splash-Screen, Boss-Capture-Häufigkeit +
+Sichtbarkeit, Leben-Anzeige.**
+- **Einstellbare Laser-Obergrenze**: `GameSettings.max_shots` (1–5, Default 2,
+  `MAX_SHOTS_MIN/MAX`), neuer Stepper „Max. Schüsse" in `menus.gd`
+  (Tastatur-Eingabe wie bei Leben/Extra-Leben). `ship.gd`s vormals konstantes
+  `MAX_LASERS_BASE` ist jetzt `_max_lasers_base`, gesetzt über `configure()` —
+  `game.gd::_reload_settings()` ruft das bei jedem Rundenstart UND bei
+  `settings_changed` erneut auf, ändert sich also auch sofort, wenn man es
+  mitten im Lauf über die Pause anpasst (nicht erst nächste Runde).
+- **Bomben-Hitbox** 6.0 → 9.0 Radius (wie beim Laser: großzügiger als sie
+  aussieht, leichter zu treffen).
+- **Hintergrund-Bewegung + Blinken**: `space_background.gd` fütterte den
+  Shader-Parameter `view_offset` bisher aus `Camera2D.global_position` — es
+  gibt in Galaga aber gar keine Kamera, `get_viewport().get_camera_2d()` war
+  immer `null`, `_process()` lief deshalb nie. Fix: `view_offset` bekommt
+  stattdessen einen stetig wachsenden künstlichen Vertikal-Versatz
+  (`SCROLL_SPEED`) — nutzt das bestehende Zweischicht-Stern-Parallax
+  (`star_field.gdshader`) für einen klassischen "Sterne ziehen vorbei"-Effekt,
+  ohne dessen Parallax-Mathe anzufassen. Zusätzlich bekommt jeder Stern ein
+  eigenes, phasenverschobenes Helligkeits-Pulsieren (`twinkle`-Faktor im
+  Shader) fürs "Blinken".
+- **Echter Splash-Screen statt `boot_splash`**: Godots nativer Boot-Splash
+  (nur ein Standbild für `minimum_display_time` Sekunden, kein Ladebalken) war
+  auf Linux/Android faktisch nicht wahrnehmbar — das Projekt lädt so schnell,
+  dass der native Splash quasi sofort wieder weg ist. Neuer Screen
+  `menus.gd::show_splash()` (eigener, nicht über `_screen()` gebauter
+  Vollbild-Screen ohne Panel-Chrome): zeigt `splash-screen.png` +
+  Fake-Ladebalken (`Tween` über `SPLASH_TIME = 3.0` s), danach `splash_done`
+  → `game.gd::_ready()` verbindet das mit `_enter_title()`
+  (`CONNECT_ONE_SHOT`). Tap/Klick/Taste überspringt die Wartezeit. Der native
+  `boot_splash` bleibt zusätzlich bestehen (deckt die eigentliche
+  Engine-Ladelücke ab, überschneidet sich nicht mit dem neuen Screen).
+  **Stolperfalle beim ersten Anlauf**: `var skip := (a or b or c)` mit
+  `InputEvent`-Feldzugriffen (`event.pressed` o. Ä., die `Variant` liefern)
+  scheiterte an Typ-Inferenz (`Cannot infer the type of "skip" variable`) —
+  Godot lud danach das ganze Menü-Skript nicht mehr, Spiel blieb komplett
+  hängen. Fix: `var skip: bool = (...)` explizit typisiert (wie tetris'
+  `ui.gd::show_splash()` es schon richtig macht).
+- **Boss-Capture: Häufigkeit + „funktioniert nicht"-Report untersucht** —
+  Live-Test über die echten Methoden (`capture_dive()`, echte
+  Strahl-Kollision, echtes `_explode()`) bestätigte: die Belohnungskette
+  selbst (Fangen → `ship_rescued` → `become_twin()`) funktioniert korrekt und
+  zuverlässig, auch unter Zeitdruck. Zwei echte Probleme dahinter gefunden:
+  1. **Bosse konkurrierten mit der normalen Dive-Lotterie** um denselben Pool
+     — ein Boss, der gerade einen stinknormalen Sturzflug macht, war nicht
+     verfügbar, wenn der Capture-Timer feuerte. Fix: `_launch_dive()`
+     schließt `EnemyKinds.BOSS` jetzt aus (Bosse fliegen nur noch
+     Capture-Versuche, nie mehr stinknormale Dives). `CAPTURE_INTERVAL`
+     zusätzlich von 6–11 s auf 5–9 s verkürzt.
+  2. **Der eigentliche Grund, warum sich die Belohnung „kaputt" anfühlte**:
+     alle Bosse einer Stage sehen identisch aus (ab Stage 2 sogar alle mit
+     demselben Gyaraga-Reskin) — welcher Boss gerade das Schiff trägt, war
+     rein optisch nicht zuverlässig erkennbar (nur ein kleines Passagier-
+     Sprite auf dem Rücken). Man hat vermutlich oft den falschen Boss
+     abgeschossen und dachte, die Mechanik sei kaputt. Fix:
+     `enemy.gd::_spawn_captive_visual()` startet jetzt einen loopenden
+     Farb-Puls (`_sprite.modulate` Weiß ↔ Gelb, 0,35 s) auf genau diesem
+     Boss, solange er das Schiff trägt — unübersehbar. Beides per
+     End-to-End-MCP-Test verifiziert (Fangen mit echter Strahl-Kollision,
+     Rückkehr in Formation, Farb-Puls sichtbar im Screenshot, `_explode()`
+     löst `become_twin()` real aus, Zwillingsjäger im Screenshot bestätigt).
+- **Leben-Anzeige überarbeitet** (siehe auch die neue globale Regel dazu in
+  der übergeordneten CLAUDE.md): `hud.gd` zeigt jetzt echte, kleine
+  Schiffs-Sprites (`player_trim.png`) statt gelber Platzhalter-Dreiecke; ab
+  `MANY_THRESHOLD = 5` ein Icon + „× N" statt einer wachsenden Reihe.
+  `game.gd`: `_lives` ist jetzt die **Reserve** (zählt das gerade fliegende
+  Schiff nicht mit) statt der Gesamtzahl — `_new_run()` setzt
+  `_lives = cfg.lives - 1`, `_on_ship_died()` prüft `_lives <= 0` **vor** dem
+  Dekrementieren (nicht danach). Extra-Leben-Bonus jetzt gedeckelt bei
+  `MAX_LIVES_RUNTIME = 99`.
+- **Nebenbei, beim Testen selbst passiert**: kurz versehentlich einen
+  `--script`-Headless-Lauf (`_selftest.gd`) bei offenem Editor ausgeführt —
+  genau der Zwei-Prozesse-Fehler aus dem `export_credentials.cfg`-Vorfall.
+  Diesmal folgenlos geblieben (Datei danach geprüft, unversehrt, Android-Export
+  hinterher erfolgreich) — Glück, kein Verdienst. `ps aux`-Check weiterhin vor
+  **jedem** Headless-Lauf Pflicht.
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,
@@ -220,7 +299,9 @@ StageDirector, Ship, HUD-CanvasLayer.
   `_snd` = `get_node_or_null("/root/Snd")` (bare `Snd` bricht `_selftest`).
   `content_scale_aspect` KEEP/KEEP_WIDTH je Touch. `process_mode = ALWAYS`.
 - `hud.gd` (`class_name Hud`) — **nur noch das In-Game-HUD**: Score (oben links),
-  Stage (unten rechts), Leben als gezeichnete Marken (unten links, `_draw`),
+  Stage (unten rechts), Leben unten links (`_draw`, echte `player_trim.png`-
+  Sprites statt Platzhalter-Dreiecke; ab `MANY_THRESHOLD = 5` ein Icon + „× N"
+  statt wachsender Reihe — `_lives` ist die Reserve, siehe `game.gd`),
   Center-Banner, Touch-Pause-Button (`set_touch`), Signal `pause_pressed`,
   `set_playing(on)` blendet das ganze HUD bei offenem Menü aus. Titel / Pause /
   Settings / Game-Over macht jetzt `menus.gd`.
@@ -232,7 +313,9 @@ StageDirector, Ship, HUD-CanvasLayer.
   Signale `start_game` / `resume_game` / `to_title` / `settings_changed`.
   „Beenden" nur wenn nicht `OS.has_feature("web")`.
 - `game_settings.gd` (`class_name GameSettings`) — `user://settings.cfg` `[s]`:
-  `lives` (2–5), `extra_life` (0/10k/20k/30k), `difficulty` (0–2).
+  `lives` (`LIVES_MIN/MAX` = 2–9), `extra_life` (0 = aus, sonst
+  `EXTRA_STEP`=1000 bis `EXTRA_MAX`=30000), `max_shots` (`MAX_SHOTS_MIN/MAX`
+  = 1–5, gleichzeitig fliegende Laser), `difficulty` (0–2).
   `dive_params(difficulty)` → `{first, min, max, max_divers}` für den Director.
 - `hall_of_fame.gd` (`class_name HallOfFame`) — `user://hall_of_fame.cfg`, Top 10
   nach Score (`qualifies` / `insert`).
@@ -278,14 +361,18 @@ Steuerung Touch: **Drag irgendwo** = relatives Lenken (`ship._unhandled_input`,
 - `stage_director.gd` (`class_name StageDirector`) — **Fly-in**: 40 Slots in
   5er-Gruppen à 8 entlang einer Kurve (Launch-Versatz 0,16 s; Gruppen 0,9 s),
   meldet `stage_populated`. **Attacks**: nach `begin_attacks()` schickt alle
-  1,3–3,2 s einen zufälligen Formations-Gegner ins `dive()`, max. 3 gleichzeitig
-  (`_launch_dive` zählt über `is_active_diver()`/`is_available_to_dive()`).
+  1,3–3,2 s einen zufälligen **Nicht-Boss**-Formations-Gegner ins `dive()`,
+  max. 3 gleichzeitig (`_launch_dive` zählt über
+  `is_active_diver()`/`is_available_to_dive()`; Bosse sind seit der zweiten
+  Playtest-Runde ausgeschlossen — sie fliegen nur noch Capture-Versuche, nie
+  stinknormale Dives, siehe unten).
   **Capture-Versuche laufen auf einem eigenen, unabhängigen Timer**
-  (`_try_capture_dive()`, alle `CAPTURE_INTERVAL_MIN`–`MAX` = 6–11 s, 33 %
+  (`_try_capture_dive()`, alle `CAPTURE_INTERVAL_MIN`–`MAX` = 5–9 s, 33 %
   Chance, nur wenn ein Boss frei ist und noch kein Schiff gefangen ist) —
   nicht mehr an die Zufallsauswahl der normalen Dive-Lotterie gekoppelt (siehe
-  „Boss-Capture-Race-Condition (Teil 2)"). `stop_attacks()` beim Stage-Wechsel.
-  Reicht `enemy_killed(points)` und `ship_rescued` durch.
+  „Boss-Capture-Race-Condition (Teil 2)" und „Zweite Playtest-Runde").
+  `stop_attacks()` beim Stage-Wechsel. Reicht `enemy_killed(points)` und
+  `ship_rescued` durch.
 - `enemy.gd` (Area2D, kein `class_name`) — States FLYING_IN / LOCKING /
   IN_FORMATION / DIVING / RETURNING / **CAPTURE_APPROACH / CAPTURE_BEAM**
   (Boss-Capture, siehe unten). Generischer Path-Follower
@@ -415,6 +502,25 @@ und „Boss-Capture" weiter oben für Details.
 5. Später evtl.: Challenging/Bonus-Stage, Combo-Scoring, Auto-Fire als
    abschaltbares Setting, Diver/Bomben gegen die 960er-Canvas festnageln statt
    `get_viewport_rect()`. Fällt uns sicher noch mehr ein.
+6. **Neuer Bonus-/Sammelobjekt-Mechanismus** (Nutzerwunsch 2026-09-12,
+   angelehnt an „Achievements"/ein Spritesheet aus einem seiner Downloads,
+   ähnlich tetris' Punkte-Boni) — noch nicht begonnen: welche konkrete Datei
+   gemeint ist, muss der Nutzer noch benennen (Downloads-Ordner hat mehrere
+   Kandidaten, u. a. `Galaga Spritesheet Anpassung*.zip` mit
+   `pickup_power`/`pickup_shield`/`pickup_life`-Frames, aber nichts, das
+   eindeutig nach „Achievements" aussieht). Geplanter Anzeigeort: Mitte unten.
+7. **Fehlende Soundeffekte für neue Mechanismen** (Nutzerwunsch 2026-09-12,
+   "merke Dir, was Du zugefügt hast") — aktuell ohne eigenen Sound:
+   - Der neue Splash-Screen (`menus.gd::show_splash()`) — kein Jingle beim
+     Erscheinen.
+   - Der Fang-Moment selbst (`capture_beam.gd`s `caught`-Signal) — es spielt
+     nur das normale `dive`-Geräusch beim Abflug und `extra` erst bei der
+     späteren Rettung; kein eigener „Schiff gefangen!"-Alarm.
+   - Der künftige Bonus-/Sammelobjekt-Mechanismus (Punkt 6) — noch nicht
+     gebaut, wird aber sicher einen Pickup-Sound brauchen.
+   Nutzer sucht ggf. passende Sounds selbst (auch unter den ursprünglich
+   kopierten OGGs, nicht nur den SFX-Rips) — bei Bedarf hier ergänzen und
+   `sound_manager.gd`s `SOUNDS`/`ORDER` erweitern.
 
 ## Aseprite MCP Pro
 

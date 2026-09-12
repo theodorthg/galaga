@@ -49,12 +49,15 @@ vec4 draw_stars(vec2 coord, vec2 offset, float base_seed) {
 		
 		position.x += sin(clamped_id * 10.0) * 0.1;
 		position.y += cos(clamped_id * 15.0) * 0.1;
-		
+
 		float scale = base_scale + (sin(clamped_id * 40.0 + TIME * 2.0) * 0.15);
 		vec2 scaled_pos = (position - 0.5) * scale + 0.5;
 		float star_id = floor(clamped_id * 3.0);
 		vec2 star_uv = (scaled_pos + vec2(star_id, 0.0)) / vec2(3.0, 1.0);
 		stars_mask = texture(star_tile_sampler, star_uv).x;
+		// Per-star blink, phase offset by cell_id so stars don't pulse in lockstep.
+		float twinkle = 0.55 + 0.45 * sin(TIME * 2.4 + cell_id * 31.0);
+		stars_mask *= twinkle;
 	}
 	return vec4(stars_color, stars_mask);
 }

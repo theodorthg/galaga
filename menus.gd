@@ -9,15 +9,26 @@ signal start_game       # title Play, game-over Play again
 signal resume_game      # pause Resume
 signal to_title         # pause Quit-to-title, game-over Title
 signal settings_changed # a gameplay setting was saved
+signal splash_done      # minimum time elapsed (or the player skipped it)
 
 const ACCENT := Color("4db2ff")
 var IS_WEB := OS.has_feature("web")  # not const: OS.has_feature isn't a constant expr
+
+## Godot's native boot_splash is just a static image for minimum_display_time
+## seconds — on Linux/Android that gap is so short (this project is tiny) it
+## barely registers, and it never had a progress bar to begin with. This is a
+## real in-game screen instead, held open for a fixed SPLASH_TIME regardless
+## of how fast everything actually loaded, with a fake progress bar so it
+## reads as "loading" rather than "frozen".
+const SPLASH_TIME := 3.0
 
 var _root: Control
 var _glass: ColorRect
 var _screens := {}
 var _return_to := "title"     # where "Fertig" in settings/sound/help goes back to
 var _cfg := {}
+var _splash_active := false
+var _splash_tween: Tween
 
 # how-to-play pages
 const HELP_PAGES := [
@@ -74,6 +85,7 @@ func _ready() -> void:
 	_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_root)
 
+	_screens["splash"] = _build_splash()
 	_screens["title"] = _build_title()
 	_screens["pause"] = _build_pause()
 	_screens["settings"] = _build_settings()
@@ -95,6 +107,38 @@ func is_open() -> bool:
 		if s.visible:
 			return true
 	return false
+
+## Shown once at startup, before the title — see SPLASH_TIME above.
+func show_splash() -> void:
+	hide_all()
+	_screens["splash"].show()
+	_splash_active = true
+	var bar := _screens["splash"].find_child("Bar", true, false) as ProgressBar
+	bar.value = 0.0
+	_splash_tween = create_tween()
+	_splash_tween.tween_property(bar, "value", 100.0, SPLASH_TIME)
+	_splash_tween.tween_callback(_finish_splash)
+
+func _finish_splash() -> void:
+	if not _splash_active:
+		return
+	_splash_active = false
+	if _splash_tween and _splash_tween.is_valid():
+		_splash_tween.kill()
+	splash_done.emit()
+
+## Tap/click/key skips the wait early — nobody wants to sit through a fixed
+## delay twice in a row after backing out to the title and pressing Play again
+## (show_splash() only ever runs once at startup, but better safe than annoying).
+func _unhandled_input(event: InputEvent) -> void:
+	if not _splash_active:
+		return
+	var skip: bool = (event is InputEventKey and event.pressed and not event.echo) \
+		or (event is InputEventMouseButton and event.pressed) \
+		or (event is InputEventScreenTouch and event.pressed)
+	if skip:
+		get_viewport().set_input_as_handled()
+		_finish_splash()
 
 func show_title() -> void:
 	_swap("title")
@@ -220,6 +264,55 @@ func _stepper(label_text: String, get_text: Callable, step: Callable, set_from_t
 	row.set_meta("get_text", get_text)
 	return row
 
+# ---------------------------------------------------------------- splash
+## Deliberately NOT built via _screen() — this should read as a full-bleed
+## title card, not a bordered menu panel floating on the frosted glass.
+func _build_splash() -> Control:
+	var c := Control.new()
+	c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	c.mouse_filter = Control.MOUSE_FILTER_STOP  # eats input so a stray tap can't leak to the game
+
+	var bg := ColorRect.new()
+	bg.color = Color(0.03, 0.035, 0.06, 1.0)
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	c.add_child(bg)
+
+	var img := TextureRect.new()
+	img.texture = load("res://splash-screen.png")
+	img.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	img.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	img.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	img.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	c.add_child(img)
+
+	var stack := VBoxContainer.new()
+	stack.alignment = BoxContainer.ALIGNMENT_END
+	stack.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_WIDE)
+	stack.offset_left = 50
+	stack.offset_right = -50
+	stack.offset_top = -90
+	stack.offset_bottom = -50
+	stack.add_theme_constant_override("separation", 8)
+	stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	c.add_child(stack)
+
+	var lbl := _title_label("Lädt …", 16, ACCENT)
+	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stack.add_child(lbl)
+
+	var bar := ProgressBar.new()
+	bar.name = "Bar"
+	bar.min_value = 0.0
+	bar.max_value = 100.0
+	bar.value = 0.0
+	bar.show_percentage = false
+	bar.custom_minimum_size = Vector2(0, 10)
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stack.add_child(bar)
+
+	return c
+
 # ---------------------------------------------------------------- title
 func _build_title() -> Control:
 	var s := _screen()
@@ -255,6 +348,7 @@ func _build_settings() -> Control:
 	box.add_child(_spacer(10))
 	box.add_child(_stepper("Leben", _fmt_lives, _step_lives, _set_lives_text))
 	box.add_child(_stepper("Extra-Leben", _fmt_extra, _step_extra, _set_extra_text))
+	box.add_child(_stepper("Max. Schüsse", _fmt_max_shots, _step_max_shots, _set_max_shots_text))
 	box.add_child(_stepper("Schwierigkeit", _fmt_diff, _step_diff))
 	box.add_child(_spacer(8))
 	box.add_child(_button("Sound", func(): _open_sound()))
@@ -296,6 +390,12 @@ func _set_extra_text(t: String) -> void:
 		return
 	var n := clampi(t.to_int(), 0, GameSettings.EXTRA_MAX)
 	_cfg.extra_life = int(roundf(float(n) / GameSettings.EXTRA_STEP)) * GameSettings.EXTRA_STEP
+
+func _fmt_max_shots() -> String: return str(_cfg.max_shots)
+func _step_max_shots(d: int) -> void:
+	_cfg.max_shots = clampi(_cfg.max_shots + d, GameSettings.MAX_SHOTS_MIN, GameSettings.MAX_SHOTS_MAX)
+func _set_max_shots_text(t: String) -> void:
+	_cfg.max_shots = clampi(t.to_int(), GameSettings.MAX_SHOTS_MIN, GameSettings.MAX_SHOTS_MAX)
 
 func _fmt_diff() -> String: return GameSettings.DIFF_NAMES[_cfg.difficulty]
 func _step_diff(d: int) -> void:

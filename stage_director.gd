@@ -21,8 +21,8 @@ const ATTACK_DEFAULT := {"first": 1.8, "min": 1.3, "max": 3.2, "max_divers": 3}
 # regular dive lottery (4 Bosses out of 40 enemies made that a rare fluke that
 # read as "at most once a stage" rather than a real, repeatable threat).
 const CAPTURE_CHANCE := 0.33      # rolled each time the interval below elapses
-const CAPTURE_INTERVAL_MIN := 6.0
-const CAPTURE_INTERVAL_MAX := 11.0
+const CAPTURE_INTERVAL_MIN := 5.0
+const CAPTURE_INTERVAL_MAX := 9.0
 
 var _formation: Formation
 var _spawn_parent: Node
@@ -122,13 +122,18 @@ func _process(delta: float) -> void:
 		_capture_t = randf_range(CAPTURE_INTERVAL_MIN, CAPTURE_INTERVAL_MAX)
 		_try_capture_dive()
 
+## Bosses are excluded here — they're dedicated to capture attempts
+## (_try_capture_dive() below). Previously they competed for the same random
+## pick as everyone else, so a Boss "used up" on a plain dive was then
+## unavailable when the capture timer fired, making genuine capture attempts
+## rarer than CAPTURE_CHANCE alone would suggest.
 func _launch_dive() -> void:
 	var ready_to_dive: Array = []
 	var divers := 0
 	for e in get_tree().get_nodes_in_group("enemy"):
 		if e.is_active_diver():
 			divers += 1
-		elif e.is_available_to_dive():
+		elif e.kind != EnemyKinds.BOSS and e.is_available_to_dive():
 			ready_to_dive.append(e)
 	if divers >= int(_atk["max_divers"]) or ready_to_dive.is_empty():
 		return

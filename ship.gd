@@ -11,7 +11,6 @@ extends Area2D
 ## Destroyed by a diving enemy or a bomb; Game handles lives / respawn.
 
 const LASER_SCENE := preload("res://laser.tscn")
-const MAX_LASERS_BASE := 2
 const RESPAWN_INVULN := 1.6
 const TWIN_OFFSET := 34.0
 const SINGLE_HALF_WIDTH := 34.0
@@ -26,7 +25,8 @@ var _mouse_aim := false
 var _mouse_down := false
 var _touch := false
 var _snd: Node
-var _max_lasers := MAX_LASERS_BASE
+var _max_lasers_base := 2  # set from GameSettings.max_shots via configure()
+var _max_lasers := _max_lasers_base
 
 var _twin := false
 var _sprite2: Sprite2D
@@ -126,6 +126,14 @@ func respawn() -> void:
 	_invuln = RESPAWN_INVULN
 	set_deferred("monitoring", true)
 
+## Applies GameSettings.max_shots — called on every new run and again whenever
+## settings change mid-game (game.gd's _reload_settings()), so raising/lowering
+## it in the pause menu takes effect immediately instead of waiting for a
+## fresh run.
+func configure(max_shots: int) -> void:
+	_max_lasers_base = max_shots
+	_max_lasers = _max_lasers_base * 2 if _twin else _max_lasers_base
+
 ## Rewarded when the Boss carrying a previously-captured ship is destroyed —
 ## a second fighter joins in, doubling fire, until the next hit.
 func become_twin() -> void:
@@ -133,7 +141,7 @@ func become_twin() -> void:
 		return
 	_twin = true
 	ship_half_width = SINGLE_HALF_WIDTH + TWIN_OFFSET
-	_max_lasers = MAX_LASERS_BASE * 2
+	_max_lasers = _max_lasers_base * 2
 	_sprite.position.x = -TWIN_OFFSET
 	_thruster.position.x = -TWIN_OFFSET
 	_sprite2 = _sprite.duplicate()
@@ -148,7 +156,7 @@ func _revert_twin() -> void:
 		return
 	_twin = false
 	ship_half_width = SINGLE_HALF_WIDTH
-	_max_lasers = MAX_LASERS_BASE
+	_max_lasers = _max_lasers_base
 	_sprite.position.x = 0.0
 	_thruster.position.x = 0.0
 	if is_instance_valid(_sprite2):

@@ -10,12 +10,15 @@ const DEF := {
 	"lives": 3,          # LIVES_MIN..LIVES_MAX
 	"extra_life": 20000, # 0 = off, sonst EXTRA_STEP..EXTRA_MAX in EXTRA_STEP-Schritten
 	"difficulty": 1,     # 0 easy, 1 normal, 2 hard
+	"max_shots": 2,      # MAX_SHOTS_MIN..MAX_SHOTS_MAX, gleichzeitig fliegende Laser
 }
 
 const LIVES_MIN := 2
 const LIVES_MAX := 9
 const EXTRA_MAX := 30000
 const EXTRA_STEP := 1000
+const MAX_SHOTS_MIN := 1
+const MAX_SHOTS_MAX := 5
 const DIFF_NAMES := ["Leicht", "Normal", "Schwer"]
 
 static func load_all() -> Dictionary:

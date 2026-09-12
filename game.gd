@@ -50,7 +50,9 @@ func _ready() -> void:
 	_menus.settings_changed.connect(_reload_settings)
 
 	_reload_settings()
-	_enter_title()
+	_menus.splash_done.connect(_enter_title, CONNECT_ONE_SHOT)
+	get_tree().paused = true
+	_menus.show_splash()
 
 # --- device layout: fixed design canvas, aspect handled at runtime ------
 func _apply_display_mode() -> void:
@@ -68,6 +70,8 @@ func apply_touch_layout() -> void:
 # --- run lifecycle ----------------------------------------------------
 func _reload_settings() -> void:
 	_cfg = GameSettings.load_all()
+	if is_instance_valid(_ship):
+		_ship.configure(int(_cfg.get("max_shots", 2)))
 
 func _enter_title() -> void:
 	_state = TITLE
@@ -84,7 +88,10 @@ func _new_run() -> void:
 	_reload_settings()
 	_score = 0
 	_stage = 1
-	_lives = int(_cfg.get("lives", 3))
+	# _lives is the RESERVE count — ships still in the wings, not counting the
+	# one that's about to fly. Standard arcade convention (Galaga, Tetris' next
+	# piece, ...): the ship on screen never counts towards its own indicator.
+	_lives = int(_cfg.get("lives", 3)) - 1
 	_extra_step = int(_cfg.get("extra_life", 0))
 	_next_extra = _extra_step
 	_pending_twin = false
@@ -137,12 +144,16 @@ func _on_stage_populated() -> void:
 		_state = FORMATION
 		_director.begin_attacks()
 
+## Arcade-standard cap regardless of genre (Tetris, Galaga, ...) — see the
+## global CLAUDE.md's life-count rule.
+const MAX_LIVES_RUNTIME := 99
+
 func _on_enemy_killed(points: int) -> void:
 	_score += points
 	_hud.set_score(_score)
-	while _extra_step > 0 and _score >= _next_extra:
+	while _extra_step > 0 and _score >= _next_extra and _lives < MAX_LIVES_RUNTIME:
 		_next_extra += _extra_step
-		_lives += 1
+		_lives = mini(_lives + 1, MAX_LIVES_RUNTIME)
 		_hud.set_lives(_lives)
 		if _snd:
 			_snd.play("extra")
@@ -166,8 +177,10 @@ func _on_ship_rescued() -> void:
 		_snd.play("extra")
 
 func _on_ship_died() -> void:
-	_lives -= 1
-	_hud.set_lives(_lives)
+	# _lives already excludes the ship that just died (it was never counted in
+	# the reserve), so game-over is "no reserve left to draw from", checked
+	# BEFORE decrementing — decrementing an already-zero reserve would send it
+	# negative and misreport as "one ship left" on the next run's display.
 	if _lives <= 0:
 		_state = GAME_OVER
 		_director.stop_attacks()
@@ -180,6 +193,8 @@ func _on_ship_died() -> void:
 		_menus.show_game_over(_score, _stage)
 		get_tree().paused = true
 		return
+	_lives -= 1
+	_hud.set_lives(_lives)
 	await get_tree().create_timer(RESPAWN_DELAY).timeout
 	if is_instance_valid(_ship) and _state != GAME_OVER and _state != TITLE:
 		_ship.respawn()

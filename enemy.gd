@@ -38,6 +38,7 @@ var _bomb_t := 0.0
 
 var _carrying_captive := false
 var _captive_visual: Sprite2D = null
+var _captive_glow_tween: Tween
 
 var _resolved := false
 
@@ -147,6 +148,14 @@ func _spawn_captive_visual() -> void:
 	_captive_visual.scale = Vector2.ONE * 0.11  # matches player Sprite2D in ship.tscn
 	_captive_visual.position = Vector2(0, 30)
 	add_child(_captive_visual)
+	# Every Boss at a given stage looks identical (from stage 2+ they all share
+	# the same reskin) — without an obvious marker, "shoot the one that's
+	# carrying your ship" is nearly impossible to act on in the middle of a
+	# fight. A looping colour pulse makes this specific Boss unmistakable.
+	_captive_glow_tween = create_tween()
+	_captive_glow_tween.set_loops()
+	_captive_glow_tween.tween_property(_sprite, "modulate", Color(1.0, 1.0, 0.35), 0.35)
+	_captive_glow_tween.tween_property(_sprite, "modulate", Color.WHITE, 0.35)
 
 func _begin_return() -> void:
 	_state = RETURNING
@@ -227,6 +236,8 @@ func _explode() -> void:
 		_snd.play("hit")
 	if _carrying_captive:
 		_carrying_captive = false
+		if _captive_glow_tween:
+			_captive_glow_tween.kill()
 		if is_instance_valid(_captive_visual):
 			_captive_visual.queue_free()
 		ship_rescued.emit()
