@@ -1,19 +1,27 @@
 extends Area2D
 
 ## A formation enemy.
-##   FLYING_IN  — rides the shared group entry curve, then tweens into its slot
-##   IN_FORMATION — tracks slot_global(idx) every frame, wings flapping
-##   DIVING     — peeled off, sweeping down at the player, dropping bombs
-##   RETURNING  — off the bottom, curving back in from the top to its slot
-##   LOCKING    — transient tween into the slot (from FLYING_IN or RETURNING)
+##   FLYING_IN        — rides the shared group entry curve, then tweens into its slot
+##   IN_FORMATION     — tracks slot_global(idx) every frame, wings flapping
+##   DIVING           — peeled off, sweeping down at the player, dropping bombs
+##   RETURNING        — off the bottom, curving back in from the top to its slot
+##   LOCKING          — transient tween into the slot (from FLYING_IN or RETURNING)
+##   CAPTURE_APPROACH — Boss only: peels out and hovers above the player instead
+##                      of sweeping through (see capture_dive())
+##   CAPTURE_BEAM     — Boss only: holds position while the tractor beam extends;
+##                      catches the ship -> carries a captive sprite home, which
+##                      a later kill of THIS boss releases (ship_rescued)
 
-enum { FLYING_IN, LOCKING, IN_FORMATION, DIVING, RETURNING }
+enum { FLYING_IN, LOCKING, IN_FORMATION, DIVING, RETURNING, CAPTURE_APPROACH, CAPTURE_BEAM }
 
 const FLY_SPEED := 480.0
 const DIVE_SPEED := 300.0
 const RETURN_SPEED := 360.0
 const LOCK_TIME := 0.4
 const BOMB_SCENE := preload("res://bomb.tscn")
+const CAPTURE_BEAM_SCENE := preload("res://capture_beam.tscn")
+const CAPTIVE_TEXTURE := preload("res://assets/graphics/ship_captured.png")
+const CAPTURE_BEAM_TOTAL := 0.95  # keep in sync with capture_beam.gd (grow+hold+shrink)
 
 var kind := EnemyKinds.ZAKO
 var _state := FLYING_IN
@@ -28,6 +36,10 @@ var _after_path := Callable()
 var _bombs_left := 0
 var _bomb_t := 0.0
 
+var _carrying_captive := false
+var _captive_visual: Sprite2D = null
+var _captured_ship_this_beam := false
+
 var _resolved := false
 
 @onready var _col: CollisionShape2D = $CollisionShape2D
@@ -37,6 +49,7 @@ var _flap_tween: Tween
 signal locked_in(enemy)
 signal killed(points)
 signal resolved
+signal ship_rescued
 
 func setup(p_kind: int, p_formation: Formation, p_slot: int, p_curve: Curve2D, start_delay: float) -> void:
 	kind = p_kind
@@ -76,7 +89,10 @@ func is_available_to_dive() -> bool:
 	return _state == IN_FORMATION
 
 func is_active_diver() -> bool:
-	return _state == DIVING or _state == RETURNING
+	return _state == DIVING or _state == RETURNING or _state == CAPTURE_APPROACH or _state == CAPTURE_BEAM
+
+func is_carrying_captive() -> bool:
+	return _carrying_captive
 
 func dive() -> void:
 	if _state != IN_FORMATION:
@@ -92,6 +108,42 @@ func dive() -> void:
 	var ppos: Vector2 = player.global_position if player else Vector2(vp.x * 0.5, vp.y * 0.82)
 	_start_path(AttackPaths.dive(global_position, ppos, vp), DIVE_SPEED, _begin_return)
 
+# Boss-only tractor-beam attempt — see the CAPTURE_* states above.
+func capture_dive() -> void:
+	if _state != IN_FORMATION or kind != EnemyKinds.BOSS:
+		return
+	_formation.release(self)
+	_state = CAPTURE_APPROACH
+	if _snd:
+		_snd.play("dive")
+	var vp := get_viewport_rect().size
+	var player := get_tree().get_first_node_in_group("player")
+	var ppos: Vector2 = player.global_position if player else Vector2(vp.x * 0.5, vp.y * 0.82)
+	_start_path(AttackPaths.capture_approach(global_position, ppos, vp), DIVE_SPEED, _begin_capture_beam)
+
+func _begin_capture_beam() -> void:
+	_state = CAPTURE_BEAM
+	rotation = 0.0
+	_captured_ship_this_beam = false
+	var beam := CAPTURE_BEAM_SCENE.instantiate()
+	get_parent().add_child(beam)
+	beam.global_position = global_position
+	beam.caught.connect(func(): _captured_ship_this_beam = true)
+	await get_tree().create_timer(CAPTURE_BEAM_TOTAL).timeout
+	if not is_instance_valid(self):
+		return
+	if _captured_ship_this_beam:
+		_carrying_captive = true
+		_spawn_captive_visual()
+	_begin_return()
+
+func _spawn_captive_visual() -> void:
+	_captive_visual = Sprite2D.new()
+	_captive_visual.texture = CAPTIVE_TEXTURE
+	_captive_visual.scale = Vector2.ONE * 0.11  # matches player Sprite2D in ship.tscn
+	_captive_visual.position = Vector2(0, 30)
+	add_child(_captive_visual)
+
 func _begin_return() -> void:
 	_state = RETURNING
 	var vp := get_viewport_rect().size
@@ -106,10 +158,11 @@ func _start_path(curve: Curve2D, speed: float, done: Callable) -> void:
 
 func _physics_process(delta: float) -> void:
 	match _state:
-		FLYING_IN, DIVING, RETURNING:
+		FLYING_IN, DIVING, RETURNING, CAPTURE_APPROACH:
 			_follow_path(delta)
 		IN_FORMATION:
 			global_position = _formation.slot_global(_slot)
+		# CAPTURE_BEAM: holds still where the approach path left it.
 	if _state == DIVING:
 		_maybe_bomb(delta)
 
@@ -168,6 +221,11 @@ func _explode() -> void:
 	killed.emit(int(EnemyKinds.DATA[kind]["points"]))
 	if _snd:
 		_snd.play("hit")
+	if _carrying_captive:
+		_carrying_captive = false
+		if is_instance_valid(_captive_visual):
+			_captive_visual.queue_free()
+		ship_rescued.emit()
 	_finish()
 	var t := create_tween()
 	t.set_parallel(true)

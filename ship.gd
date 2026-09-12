@@ -11,8 +11,10 @@ extends Area2D
 ## Destroyed by a diving enemy or a bomb; Game handles lives / respawn.
 
 const LASER_SCENE := preload("res://laser.tscn")
-const MAX_LASERS := 2
+const MAX_LASERS_BASE := 2
 const RESPAWN_INVULN := 1.6
+const TWIN_OFFSET := 34.0
+const SINGLE_HALF_WIDTH := 34.0
 
 var speed := 480.0
 var ship_half_width := 34.0
@@ -24,6 +26,14 @@ var _mouse_aim := false
 var _mouse_down := false
 var _touch := false
 var _snd: Node
+var _max_lasers := MAX_LASERS_BASE
+
+var _twin := false
+var _sprite2: Sprite2D
+var _thruster2: Node2D
+
+@onready var _sprite: Sprite2D = $Sprite2D
+@onready var _thruster: Node2D = $MainThruster
 
 signal died
 
@@ -77,12 +87,17 @@ func _unhandled_input(event: InputEvent) -> void:
 			ship_half_width, viewport_width - ship_half_width)
 
 func shoot() -> void:
-	if get_tree().get_nodes_in_group("player_lasers").size() >= MAX_LASERS:
+	if get_tree().get_nodes_in_group("player_lasers").size() >= _max_lasers:
 		return
+	_fire_laser(-TWIN_OFFSET if _twin else 0.0)
+	if _twin:
+		_fire_laser(TWIN_OFFSET)
+
+func _fire_laser(x_offset: float) -> void:
 	var laser := LASER_SCENE.instantiate()
 	laser.add_to_group("player_lasers")
 	get_parent().add_child(laser)
-	laser.global_position = global_position + Vector2(0, -22)
+	laser.global_position = global_position + Vector2(x_offset, -22)
 	if _snd:
 		_snd.play("shoot")
 
@@ -99,6 +114,7 @@ func _destroy() -> void:
 	_alive = false
 	visible = false
 	set_deferred("monitoring", false)
+	_revert_twin()  # twin bonus doesn't survive a hit, matches the arcade original
 	if _snd:
 		_snd.play("player_boom")
 	died.emit()
@@ -109,3 +125,33 @@ func respawn() -> void:
 	visible = true
 	_invuln = RESPAWN_INVULN
 	set_deferred("monitoring", true)
+
+## Rewarded when the Boss carrying a previously-captured ship is destroyed —
+## a second fighter joins in, doubling fire, until the next hit.
+func become_twin() -> void:
+	if _twin or not _alive:
+		return
+	_twin = true
+	ship_half_width = SINGLE_HALF_WIDTH + TWIN_OFFSET
+	_max_lasers = MAX_LASERS_BASE * 2
+	_sprite.position.x = -TWIN_OFFSET
+	_thruster.position.x = -TWIN_OFFSET
+	_sprite2 = _sprite.duplicate()
+	_sprite2.position.x = TWIN_OFFSET
+	add_child(_sprite2)
+	_thruster2 = _thruster.duplicate()
+	_thruster2.position.x = TWIN_OFFSET
+	add_child(_thruster2)
+
+func _revert_twin() -> void:
+	if not _twin:
+		return
+	_twin = false
+	ship_half_width = SINGLE_HALF_WIDTH
+	_max_lasers = MAX_LASERS_BASE
+	_sprite.position.x = 0.0
+	_thruster.position.x = 0.0
+	if is_instance_valid(_sprite2):
+		_sprite2.queue_free()
+	if is_instance_valid(_thruster2):
+		_thruster2.queue_free()

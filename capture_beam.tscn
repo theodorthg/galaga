@@ -1,0 +1,14 @@
+[gd_scene load_steps=3 format=3 uid="uid://ccapturebeam01galaga"]
+
+[ext_resource type="Script" path="res://capture_beam.gd" id="1_beam"]
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_beam"]
+size = Vector2(22, 1)
+
+[node name="CaptureBeam" type="Area2D"]
+collision_layer = 16
+collision_mask = 9
+script = ExtResource("1_beam")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+shape = SubResource("RectangleShape2D_beam")

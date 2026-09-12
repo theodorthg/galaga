@@ -17,6 +17,7 @@ const GROUP_GAP := 0.9
 const LAUNCH_GAP := 0.16
 
 const ATTACK_DEFAULT := {"first": 1.8, "min": 1.3, "max": 3.2, "max_divers": 3}
+const CAPTURE_CHANCE := 0.22  # of a launched Boss dive, how often it's a capture attempt
 
 var _formation: Formation
 var _spawn_parent: Node
@@ -29,6 +30,7 @@ var _run_id := 0
 
 signal stage_populated
 signal enemy_killed(points)
+signal ship_rescued
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_PAUSABLE  # freeze on pause, not inherit Game's ALWAYS
@@ -81,6 +83,7 @@ func _spawn(idx: int, curve: Curve2D, delay: float) -> void:
 	_spawn_parent.add_child(e)
 	e.resolved.connect(_on_resolved)
 	e.killed.connect(func(pts: int): enemy_killed.emit(pts))
+	e.ship_rescued.connect(func(): ship_rescued.emit())
 	_pending += 1
 	e.setup(_formation.slot_kind(idx), _formation, idx, curve, delay)
 
@@ -112,11 +115,19 @@ func _process(delta: float) -> void:
 func _launch_dive() -> void:
 	var ready_to_dive: Array = []
 	var divers := 0
+	var captive_exists := false
 	for e in get_tree().get_nodes_in_group("enemy"):
+		if e.is_carrying_captive():
+			captive_exists = true
 		if e.is_active_diver():
 			divers += 1
 		elif e.is_available_to_dive():
 			ready_to_dive.append(e)
 	if divers >= int(_atk["max_divers"]) or ready_to_dive.is_empty():
 		return
-	ready_to_dive.pick_random().dive()
+	var chosen: Node = ready_to_dive.pick_random()
+	# Only one captive ship in play at a time (matches the arcade original).
+	if not captive_exists and chosen.kind == EnemyKinds.BOSS and randf() < CAPTURE_CHANCE:
+		chosen.capture_dive()
+	else:
+		chosen.dive()

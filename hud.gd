@@ -13,7 +13,15 @@ extends Control
 
 const LIFE_ICON := Color("ffd23f")
 
+# Stage banner: full-opacity hold, then a fade tail (tetris' main.gd _flash()
+# does the same "hold then fade" instead of a hard on/off — a banner that
+# just vanishes reads as way too brief even at a longer raw duration).
+const BANNER_HOLD := 1.8
+const BANNER_FADE := 0.9
+const BANNER_TOTAL := BANNER_HOLD + BANNER_FADE
+
 var _lives := 0
+var _banner_tween: Tween
 
 signal pause_pressed
 
@@ -46,10 +54,19 @@ func set_playing(on: bool) -> void:
 	visible = on
 
 func flash_banner(text: String) -> void:
+	if _banner_tween:
+		_banner_tween.kill()
 	_banner.text = text
+	_banner.modulate.a = 1.0
 	_banner.visible = true
+	_banner_tween = create_tween()
+	_banner_tween.tween_interval(BANNER_HOLD)
+	_banner_tween.tween_property(_banner, "modulate:a", 0.0, BANNER_FADE)
+	_banner_tween.tween_callback(func(): _banner.visible = false)
 
 func hide_banner() -> void:
+	if _banner_tween:
+		_banner_tween.kill()
 	_banner.visible = false
 
 func _draw() -> void:

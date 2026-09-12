@@ -41,6 +41,7 @@ func _ready() -> void:
 	_director.setup(_formation, self)
 	_director.stage_populated.connect(_on_stage_populated)
 	_director.enemy_killed.connect(_on_enemy_killed)
+	_director.ship_rescued.connect(_on_ship_rescued)
 	_ship.died.connect(_on_ship_died)
 	_hud.pause_pressed.connect(_request_pause)
 	_menus.start_game.connect(_new_run)
@@ -123,7 +124,7 @@ func _start_ready() -> void:
 	_hud.flash_banner("STAGE %d" % _stage)
 	if _snd:
 		_snd.play("stage")
-	await get_tree().create_timer(1.8).timeout
+	await get_tree().create_timer(Hud.BANNER_TOTAL).timeout
 	if not is_instance_valid(self) or _state != READY:
 		return
 	_hud.hide_banner()
@@ -142,6 +143,15 @@ func _on_enemy_killed(points: int) -> void:
 		_next_extra += _extra_step
 		_lives += 1
 		_hud.set_lives(_lives)
+		if _snd:
+			_snd.play("extra")
+
+func _on_ship_rescued() -> void:
+	# The Boss that had been carrying a captured ship just got destroyed — the
+	# prisoner comes home. If the player's current ship is alive, it becomes a
+	# twin fighter (double firepower, one hit ends the bonus for both).
+	if is_instance_valid(_ship) and _state != GAME_OVER:
+		_ship.become_twin()
 		if _snd:
 			_snd.play("extra")
 
