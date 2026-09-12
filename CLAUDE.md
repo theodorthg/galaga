@@ -78,6 +78,66 @@ mit der nächsten Gameplay-Phase weitermachen.
   Capture: 2 Laser bleiben über 4 s gehaltener Taste/Maustaste konstant in der
   Luft (einzelner Laser lebt nur ~1,1 s, muss also laufend nachgefeuert werden).
 
+**Erste echte Assets eingebaut (2026-09-12):** Nutzer hat echte Grafiken/Sounds
+geliefert, Platzhalter ersetzt:
+- **Schiff**: `player.png` (getrimmt → `player_trim.png`) statt Platzhalter,
+  `Sprite2D.rotation=0` (Kunst zeigt schon nach oben, kein Twist mehr nötig).
+  Recherche ergab: `enemy2.png`/`enemy4.png` sind echte 1981er-Arcade-Sprites
+  (Zako/Boss, exakter Farb-/Formabgleich gegen Referenzblatt), `enemy1.png`/
+  `enemy3.png` passen zu keinem der drei kanonischen Gegner (falsche Palette/
+  Form) — vermutlich Reste des schon vorher notierten „Galaxian-Asset-Pack".
+  `enemy3.png` trotzdem für GOEI verwendet (Farbfamilie passt, Form nicht) —
+  bewusster Kompromiss, kein 1:1-Fund. Die diversen `.gif`s (goei, neo-goei,
+  sasori, neo-tonbo, hyper-smmo, gorg-bos, gyaraga-ship*) sind **Fan-Art**
+  einer DeviantArt-Serie „Gyaraga" von ss77relaunched, kein offizieller Namco-
+  Nachfolger — für spätere Level/Bonusstufen vorgemerkt, nicht integriert.
+  Capture-Beam/Ammo-Gifs bewusst nicht übernommen (Nutzer will die später
+  selbst nachbauen lassen).
+- **Captured-Schiff-Variante**: erstes Frame aus `gyaraga-ship-captured.gif`
+  extrahiert → `ship_captured.png` (die klassische rot getönte Optik) — Asset
+  liegt bereit, Capture-Mechanik selbst kommt erst mit einer späteren Phase.
+- **Blaue Antriebsflamme**: das schon vorhandene Partikel/Shader-System aus
+  `ship_visual_effects/` (Rest des Twin-Stick-Moduls) zeigt/versteckt sich
+  bereits richtig nach Bewegung — nur die Farbe (Gradient in
+  `thruster_material.tres` + `main_thruster.tscn`) war orange, jetzt blau.
+  **Echter Bug dabei gefunden** (erst durchs `godot-mcp-pro`-Live-Testen
+  aufgefallen, im Screenshot schlicht unsichtbar): `MainThruster` hing als
+  Kind am `Sprite2D`, das inzwischen `scale=0.11` hat (fürs viel größere neue
+  Schiffs-Sprite) — die ganze Flamme (Line2D-Breite, Partikelgrößen, alles für
+  `scale=1` gebaut) schrumpfte dadurch auf ~11 %, praktisch unsichtbar. Fix:
+  `MainThruster` jetzt eigenständiges Kind von `Ship` statt von `Sprite2D`,
+  Position neu für die Root-Ebene berechnet. Beide SideThruster-Instanzen
+  entfernt (Nutzer wollte nur eine Flamme unten, keine seitlichen Jets).
+- **Gegner-Sprites**: `enemy2_trim`/`enemy3_trim`/`enemy4_trim.png` ersetzen
+  `enemy.gd`s `_draw_zako/_draw_goei/_draw_boss`. Da es nur je ein Standbild
+  gibt, wird der Flügelschlag jetzt per Transform-Wobble simuliert
+  (`Node2D.skew` + `scale:y`-Pulsieren, per Tween, synchron zum
+  bestehenden `Formation.flap_toggled`-Takt von 0,28 s) statt durch ein
+  zweites gezeichnetes Frame.
+- **Sounds**: echte SFX-Rips (`m01se_*.wav`, japanische Funktionsnamen wie
+  „suikomi"/„hakidasi" für die Tractor-Beam-Mechanik, passend zu
+  `Galaga_88`-Referenzmaterial des Nutzers) ersetzen die synthetischen
+  Platzhalter aus `gen_sounds.py`. Pegel gemessen (nahe 0 dBFS, viel heißer
+  als die Platzhalter) → `_BASE_DB` je Sound neu kalibriert,
+  `CALIB_VERSION` 1→2 (verwirft alte gespeicherte %-Werte automatisch).
+  Zuordnung nach Dateiname+Pegel/Länge, ungehört — bei Bedarf einzeln
+  nachjustieren.
+- **Splash-Screen**: `splash-screen.webp` (offizielles „Arcade Game Series"-
+  Logo, aus Nutzer-Recherche) → `splash-screen.png` im Root, in
+  `project.godot` (`boot_splash/image`) verdrahtet.
+- **Laser-Trefferbox**: 5×16 → 9×18 (sichtbarer Strahl bleibt 3 px schmal) —
+  Nutzer fand Treffen zu schwer, das ist ein erster vorsichtiger Schritt,
+  kein großer Balance-Eingriff.
+- **Maussteuerung**: `move_toward()` (Tastatur-Speed-Limit 480 px/s) durch
+  direktes 1:1-Snapping (`position.x = get_global_mouse_position().x`)
+  ersetzt — die Maus kann beliebig schnell springen, das alte Verfolgen
+  wirkte dadurch wie Verzögerung/„Nachziehen", war aber kein Performance-Bug.
+- **Fenstergröße**: `window_width_override=1152`/`window_height_override=648`
+  (Altlast aus dem Twin-Stick-Querformat, nur für den Editor-Debug-Lauf
+  relevant) entfernt — Editor-Debug-Fenster nutzt jetzt die echten 540×960.
+  `window/size/resizable` **nicht** gesetzt (wie bei pacman/tetris) — frei
+  skalierbar, nur die Startgröße ist fix.
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,

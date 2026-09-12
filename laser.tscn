@@ -3,7 +3,7 @@
 [ext_resource type="Script" uid="uid://cgbaygvxqy1b0" path="res://laser.gd" id="1_fn5yt"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_wcjqx"]
-size = Vector2(5, 16)
+size = Vector2(9, 18)
 
 [node name="Laser" type="Area2D" unique_id=1781229487]
 collision_layer = 8

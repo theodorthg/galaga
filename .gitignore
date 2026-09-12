@@ -31,9 +31,6 @@ __pycache__/
 #   *.import, *.uid, export_presets.cfg, project.godot, assets/**
 
 
-# godot_mcp editor addon — not used (editor never opened for these projects)
-/addons/
-
 # editor backup files
 *~
 

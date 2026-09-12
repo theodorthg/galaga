@@ -31,6 +31,8 @@ var _bomb_t := 0.0
 var _resolved := false
 
 @onready var _col: CollisionShape2D = $CollisionShape2D
+@onready var _sprite: Sprite2D = $Sprite2D
+var _flap_tween: Tween
 
 signal locked_in(enemy)
 signal killed(points)
@@ -44,6 +46,9 @@ func setup(p_kind: int, p_formation: Formation, p_slot: int, p_curve: Curve2D, s
 	var circ := CircleShape2D.new()
 	circ.radius = float(EnemyKinds.DATA[kind]["half"])
 	_col.shape = circ
+
+	_sprite.texture = load(EnemyKinds.DATA[kind]["texture"])
+	_sprite.scale = Vector2.ONE * float(EnemyKinds.DATA[kind]["scale"])
 
 	_formation.flap_toggled.connect(_on_flap)
 	_start_path(p_curve, FLY_SPEED, _begin_lock)
@@ -177,54 +182,26 @@ func _finish() -> void:
 	_resolved = true
 	resolved.emit()
 
-func _on_flap(_state_in: bool) -> void:
-	if _state == IN_FORMATION:
-		queue_redraw()
+func _on_flap(state_in: bool) -> void:
+	if _state != IN_FORMATION and not is_active_diver():
+		return
+	_animate_flap(state_in)
 
 # ---------------------------------------------------------------------------
-#  Placeholder art — procedural, 2-frame wing flap driven by Formation.flap.
-#  Drawn nose-down (+y), matching a formation enemy facing the player.
+#  Real sprite art (see EnemyKinds.DATA); a single static image per kind, so
+#  the "wing flap" is faked with a transform wobble instead of a 2nd frame:
+#  a quick skew + vertical squash pulse in sync with Formation's shared
+#  0.28s flap cadence — every enemy flutters on the same beat, same as the
+#  old 2-frame placeholder did.
 # ---------------------------------------------------------------------------
-func _draw() -> void:
-	var up: bool = _formation != null and _formation.flap
-	match kind:
-		EnemyKinds.ZAKO:
-			_draw_zako(up)
-		EnemyKinds.GOEI:
-			_draw_goei(up)
-		EnemyKinds.BOSS:
-			_draw_boss(up)
-
-func _poly(points: Array, color: Color) -> void:
-	draw_colored_polygon(PackedVector2Array(points), color)
-
-func _draw_zako(up: bool) -> void:
-	var body := Color("4db2ff")
-	var wing := Color("ffe14d")
-	var wy := -6.0 if up else 4.0
-	_poly([Vector2(-4, -2), Vector2(-15, wy), Vector2(-13, wy + 8), Vector2(-3, 4)], wing)
-	_poly([Vector2(4, -2), Vector2(15, wy), Vector2(13, wy + 8), Vector2(3, 4)], wing)
-	_poly([Vector2(0, -13), Vector2(6, 0), Vector2(0, 11), Vector2(-6, 0)], body)
-	draw_circle(Vector2(0, -2), 2.2, Color.WHITE)
-
-func _draw_goei(up: bool) -> void:
-	var body := Color("ff5a5a")
-	var wing := Color("ffd7d7")
-	var wy := -8.0 if up else 2.0
-	_poly([Vector2(-3, -4), Vector2(-16, wy), Vector2(-15, wy + 12), Vector2(-2, 6)], wing)
-	_poly([Vector2(3, -4), Vector2(16, wy), Vector2(15, wy + 12), Vector2(2, 6)], wing)
-	_poly([Vector2(0, -15), Vector2(5, -3), Vector2(0, 2), Vector2(-5, -3)], body)
-	_poly([Vector2(0, 13), Vector2(6, 1), Vector2(0, -2), Vector2(-6, 1)], body)
-
-func _draw_boss(up: bool) -> void:
-	var top := Color("46c46e")
-	var bot := Color("3aa0ff")
-	var wy := -7.0 if up else 3.0
-	_poly([Vector2(-5, -2), Vector2(-18, wy), Vector2(-16, wy + 11), Vector2(-4, 7)], bot)
-	_poly([Vector2(5, -2), Vector2(18, wy), Vector2(16, wy + 11), Vector2(4, 7)], bot)
-	draw_line(Vector2(-5, -10), Vector2(-9, -20), top, 3.0)
-	draw_line(Vector2(5, -10), Vector2(9, -20), top, 3.0)
-	_poly([Vector2(0, -14), Vector2(11, -2), Vector2(9, 6), Vector2(-9, 6), Vector2(-11, -2)], top)
-	_poly([Vector2(-9, 6), Vector2(9, 6), Vector2(5, 14), Vector2(-5, 14)], bot)
-	draw_circle(Vector2(-3.5, 0), 1.8, Color.WHITE)
-	draw_circle(Vector2(3.5, 0), 1.8, Color.WHITE)
+func _animate_flap(up: bool) -> void:
+	if _flap_tween:
+		_flap_tween.kill()
+	var base_scale: float = float(EnemyKinds.DATA[kind]["scale"])
+	var skew_to := (0.16 if up else -0.16)
+	var squash_to := base_scale * (0.88 if up else 1.0)
+	_flap_tween = create_tween()
+	_flap_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	_flap_tween.set_parallel(true)
+	_flap_tween.tween_property(_sprite, "skew", skew_to, 0.12)
+	_flap_tween.tween_property(_sprite, "scale:y", squash_to, 0.12)

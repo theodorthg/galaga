@@ -9,20 +9,22 @@ extends Node
 ## "Snd" identifier does not resolve under `godot --script` (breaks _selftest).
 
 const CFG_PATH := "user://settings.cfg"
-const CALIB_VERSION := 1
+const CALIB_VERSION := 2  # bumped: real SFX (2026-09-11) master much hotter than
+                          # the old synthetic placeholders — old saved % would
+                          # now be far too loud, so discard and recalibrate.
 
-# clips: res://assets/sounds/<key>.wav (or .ogg). Placeholders now, real audio later.
+# clips: res://assets/sounds/<key>.wav (or .ogg). Real ripped SFX as of 2026-09-11.
 const EXTS := [".wav", ".ogg"]
 
 # key -> [display name, default %, base_db calibration]
 const SOUNDS := {
 	"shoot":       ["Schuss", 50, -7.0],
-	"hit":         ["Treffer", 70, -4.0],
-	"dive":        ["Sturzflug", 60, -5.0],
-	"player_boom": ["Schiff zerstört", 85, 0.0],
-	"extra":       ["Extra-Leben", 75, -3.0],
-	"stage":       ["Stage-Start", 70, -3.0],
-	"music":       ["Musik", 45, -9.0],
+	"hit":         ["Treffer", 70, -9.0],
+	"dive":        ["Sturzflug", 60, -10.0],
+	"player_boom": ["Schiff zerstört", 85, -3.0],
+	"extra":       ["Extra-Leben", 75, -7.0],
+	"stage":       ["Stage-Start", 70, -4.0],
+	"music":       ["Musik", 45, -17.0],
 }
 const ORDER := ["music", "shoot", "hit", "dive", "player_boom", "extra", "stage"]
 

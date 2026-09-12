@@ -55,7 +55,11 @@ func _process(delta: float) -> void:
 		_mouse_aim = false
 		position.x += dir * speed * delta
 	elif _mouse_aim:
-		position.x = move_toward(position.x, get_global_mouse_position().x, speed * delta)
+		# Direct 1:1 tracking, not move_toward — the mouse can jump arbitrarily
+		# fast, so chasing it at the keyboard's speed cap made the ship visibly
+		# lag behind on a quick swipe; snapping feels immediate like the
+		# original arcade's paddle-style control.
+		position.x = get_global_mouse_position().x
 	position.x = clampf(position.x, ship_half_width, viewport_width - ship_half_width)
 
 	if _touch or _mouse_down or Input.is_action_pressed("shoot"):

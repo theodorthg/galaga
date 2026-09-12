@@ -1,10 +1,9 @@
 [gd_scene format=3 uid="uid://dmv50krf4bo5r"]
 
 [ext_resource type="Script" uid="uid://bwkr2t4ku15qq" path="res://ship.gd" id="1_78o8j"]
-[ext_resource type="Texture2D" uid="uid://bniyrxn3r2v8h" path="res://assets/ship.png" id="3_pdppw"]
+[ext_resource type="Texture2D" path="res://assets/graphics/player_trim.png" id="3_pdppw"]
 [ext_resource type="Texture2D" uid="uid://d0bh8am2qd005" path="res://assets/gem_icon.png" id="5_h3paj"]
 [ext_resource type="PackedScene" uid="uid://dgf54k70yiiff" path="res://assets/ship_visual_effects/main_thruster/main_thruster.tscn" id="5_q7c3l"]
-[ext_resource type="PackedScene" uid="uid://bklom8bhpxg4h" path="res://assets/ship_visual_effects/side_thruster/side_thruster.tscn" id="6_1updt"]
 
 [sub_resource type="CircleShape2D" id="CircleShape2D_wcjqx"]
 radius = 42.190044
@@ -28,20 +27,13 @@ collision_mask = 20
 script = ExtResource("1_78o8j")
 
 [node name="Sprite2D" type="Sprite2D" parent="." unique_id=245057395]
-position = Vector2(1.5258789e-05, 8.9999695)
-rotation = -1.5833673
+position = Vector2(0, 9)
+scale = Vector2(0.11, 0.11)
 texture = ExtResource("3_pdppw")
 
-[node name="MainThruster" parent="Sprite2D" unique_id=1548958609 instance=ExtResource("5_q7c3l")]
-position = Vector2(-33, 0)
-
-[node name="SideThruster" parent="Sprite2D" unique_id=751778080 instance=ExtResource("6_1updt")]
-position = Vector2(-44, -21)
-rotation = 1.74987
-
-[node name="SideThruster2" parent="Sprite2D" unique_id=55010892 instance=ExtResource("6_1updt")]
-position = Vector2(-45, 19)
-rotation = 1.36715
+[node name="MainThruster" parent="." unique_id=1548958609 instance=ExtResource("5_q7c3l")]
+position = Vector2(0, 50)
+rotation = 1.5707963
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=2069234749]
 position = Vector2(0, 12)
