@@ -34,11 +34,18 @@ const ZAKO_VARIANTS := [
 	{"frames": ["res://assets/graphics/sasori_f0.png", "res://assets/graphics/sasori_f1.png"], "scale": 0.27},
 	{"frames": ["res://assets/graphics/neo_tonbo_f0.png", "res://assets/graphics/neo_tonbo_f1.png"], "scale": 0.20},
 ]
+## "gorg-bos--damaged" (Gyaraga fan-art) — the only one of the two remaining
+## unused Gyaraga gifs that turned out to actually be a coherent creature
+## sprite; "hyper-smmo.gif" is a scattered decorative icon strip (two
+## unrelated flapping gem glyphs over a static, non-animating ship outline),
+## not an enemy pose, so it stays unused like enemy1.png (wrong palette).
+const BOSS_VARIANTS := [
+	{"frames": ["res://assets/graphics/gorg_bos_f0.png", "res://assets/graphics/gorg_bos_f1.png"], "scale": 0.27},
+]
 
 ## Which texture(s) a formation slot should use, given its kind and the
-## current stage. Stage 1 (and Boss at any stage — no curated variant for it
-## yet) always gets the classic DATA look; stage 2+ cycles GOEI/ZAKO through
-## the Gyaraga variants above for stage-to-stage variety.
+## current stage. Stage 1 always gets the classic DATA look; stage 2+ cycles
+## GOEI/ZAKO/BOSS through the Gyaraga variants above for stage-to-stage variety.
 static func pick_visual(kind: int, stage: int) -> Dictionary:
 	var variants: Array = []
 	match kind:
@@ -46,6 +53,8 @@ static func pick_visual(kind: int, stage: int) -> Dictionary:
 			variants = GOEI_VARIANTS
 		ZAKO:
 			variants = ZAKO_VARIANTS
+		BOSS:
+			variants = BOSS_VARIANTS
 	if stage >= 2 and not variants.is_empty():
 		return variants[(stage - 2) % variants.size()]
 	return {"frames": [], "texture": DATA[kind]["texture"], "scale": DATA[kind]["scale"]}

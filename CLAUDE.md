@@ -15,7 +15,8 @@ Capture-Anflug fliegen (Traktorstrahl, Zwillingsjäger-Belohnung — siehe
 „Boss-Capture" unten).
 Start-Screen (Play / Einstellungen / Steuerung / Beenden), Pausenmenü,
 Einstellungen (Leben / Extra-Leben / Schwierigkeit → live in die nächste Runde),
-Sound-Unterseite (Regler pro Sound), bildlose Hilfe (3 Seiten), Game-Over mit
+Sound-Unterseite (Regler pro Sound), Hilfe (3 Seiten, Ziel-Seite seit
+2026-09-12 mit Icon-Legende statt reinem Text), Game-Over mit
 Hall of Fame + Namenseingabe + „Beenden". **Sounds sind echte SFX-Rips**
 (siehe „Erste echte Assets" unten), nicht mehr die `gen_sounds.py`-Platzhalter.
 **Nicht mehr pausiert** — die Assets sind da, Gameplay-Weiterbau läuft normal
@@ -139,6 +140,25 @@ geliefert, Platzhalter ersetzt:
   `window/size/resizable` **nicht** gesetzt (wie bei pacman/tetris) — frei
   skalierbar, nur die Startgröße ist fix.
 
+**Zusätzliche Gegnertypen + Hilfe-Politur (2026-09-12):**
+- **Boss-Variante für Stage 2+**: `gorg-bos--damaged.gif` (Gyaraga-Fan-Art,
+  echtes 2-Frame-Flap-Paar) getrimmt/zugeschnitten → `gorg_bos_f0/f1.png`,
+  als `EnemyKinds.BOSS_VARIANTS` eingehängt — schließt die bisherige Lücke
+  „kein kuratiertes Reskin für den Boss". `hyper-smmo.gif` dagegen **nicht**
+  verwendet: stellte sich beim Ansehen der Einzelframes als lose Deko-Grafik
+  heraus (zwei unzusammenhängende Flapp-Edelstein-Icons über einem statischen,
+  nicht animierten Schiffs-Umriss), keine zusammenhängende Gegner-Pose —
+  bleibt wie `enemy1.png` (falsche Palette) ungenutzt.
+- **Hilfe-Seite „Ziel & Punkte" aufgewertet**: zeigt jetzt die drei
+  Gegner-Sprites als Icons neben Name + Punktwert (statt nur einer Textzeile
+  „Bienen 50 · …") — erster Schritt Richtung „Hilfetexte bildlich statt nur
+  Worte" (globale CLAUDE.md, Menü-Optik-Vorgabe). Ergänzt außerdem zwei Zeilen
+  zur Boss-Capture-/Doppeljäger-Mechanik, die vorher nirgends erklärt war.
+  Seiten-Indikator (`●`/`○`-Text) durch kleine farbige Quadrate ersetzt
+  (`ColorRect`-Reihe, wie tetris' `_refresh_help_dots()`), sonst bleibt die
+  Hilfe textbasiert (siehe „Offen" Punkt 3 für vollständig bildbasierte
+  Seiten wie bei tetris).
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,
@@ -245,7 +265,10 @@ Steuerung Touch: **Drag irgendwo** = relatives Lenken (`ship._unhandled_input`,
   Hitbox 9×18 (sichtbarer Strahl bleibt 3 px schmal — großzügiger als er
   aussieht, Nutzer fand Treffen zu schwer).
 - `enemy_kinds.gd` (`class_name EnemyKinds`) — ZAKO/GOEI/BOSS: Radius, Punkte,
-  Sprite-Textur + Skalierung (siehe „Erste echte Assets").
+  Sprite-Textur + Skalierung (siehe „Erste echte Assets"). `pick_visual(kind,
+  stage)` liefert ab Stage 2 statt der klassischen Textur eines von
+  `GOEI_VARIANTS`/`ZAKO_VARIANTS`/`BOSS_VARIANTS` (Gyaraga-2-Frame-Paare,
+  siehe „Zusätzliche Gegnertypen + Hilfe-Politur").
 
 `_capture.tscn`/`_capture.gd` (gitignored): lädt `game.tscn`, schießt Frames des
 Einflugs als PNG. `godot --path . res://_capture.tscn -- <out_dir>` (braucht
@@ -320,19 +343,20 @@ Boss-Capture). Echte Sounds, echte Gegner-/Schiff-Sprites, Splash-Screen,
 Maus-1:1-Steuerung, frei skalierbares Fenster — siehe „Erste echte Assets"
 und „Boss-Capture" weiter oben für Details.
 
-1. **Zusätzliche Gegnertypen für spätere Stages/Bonuslevel** — mit dem Nutzer
-   besprochen als nächstes Thema, Umfang/Look noch offen. Kandidaten: das
-   bislang ungenutzte `enemy1.png` (noch nicht getrimmt, falsche Palette für
-   einen der drei kanonischen Typen, aber vorhanden) und/oder die
-   Fan-Art-Serie „Gyaraga"
-   (`assets/graphics/*.gif` — sasori, neo-tonbo, hyper-smmo, gorg-bos, …).
+1. **Zusätzliche Gegnertypen für spätere Stages/Bonuslevel** — GOEI/ZAKO
+   (Stage 2+, je 2 Gyaraga-Varianten) und jetzt auch BOSS (1 Variante,
+   `gorg-bos--damaged`) sind erledigt, siehe „Zusätzliche Gegnertypen +
+   Hilfe-Politur" weiter oben. Noch offen: `enemy1.png` (falsche Palette,
+   müsste erst neu koloriert/getrimmt werden) als vierter kanonischer Typ
+   oder Bonuslevel-exklusiver Gegner — Umfang/Look weiterhin unbesprochen.
 2. **Auf echten Geräten testen** (OPPO Find X2 Pro, OnePlus 12 ≈ 2,2:1;
    Galaxy S4 = 16:9): Aspect-Umschaltung, Touch-Drag, Pause-Button-Position,
    Formation-Größe. In beiden Ratios im echten Browser screenshotten.
    Canvas-Wechsel bliebe ein Einzeiler in `project.godot`.
-3. **Hilfe bildbasiert** (optional) — derzeit 3 Textseiten in `menus.gd`
-   (`HELP_PAGES`). tetris macht's mit SVG→PNG (`assets/help_src/` + `render.sh`).
-   Reicht vorerst als Text.
+3. **Hilfe vollständig bildbasiert** (optional) — die Ziel-Seite hat seit
+   2026-09-12 eine Icon-Legende (siehe oben), die beiden Steuerungs-Seiten
+   sind weiterhin reiner Text. tetris macht komplette Illustrationen per
+   SVG→PNG (`assets/help_src/` + `render.sh`) — reicht vorerst als Text/Icon-Mix.
 4. `assets/` aufräumen (lose Test-PNGs, Loot-System `item.gd`/`gem.tscn`/… —
    Galaga hat keins), HUD-Feinschliff, „1UP"-Flash beim Extra-Leben.
 5. Später evtl.: Challenging/Bonus-Stage, Combo-Scoring, Auto-Fire als

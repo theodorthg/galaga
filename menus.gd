@@ -39,14 +39,20 @@ const HELP_PAGES := [
 		],
 	},
 	{
-		"h": "Ziel",
+		"h": "Ziel & Punkte",
 		"l": [
 			"Räume die Formation ab, bevor sie dich erwischt.",
 			"Gegner tauchen einzeln herab und werfen Bomben —",
-			"ausweichen und zurückschießen.",
-			"Alle weg = nächste Stage.",
+			"ausweichen und zurückschießen. Alle weg = nächste Stage.",
 			"",
-			"Bienen 50  ·  Schmetterlinge 80  ·  Flaggschiffe 150",
+			"Ein Boss kann dein Schiff mit einem Traktorstrahl fangen.",
+			"Schießt du genau diesen Boss danach ab, bekommst du es",
+			"zurück — als Doppeljäger mit doppelter Feuerkraft.",
+		],
+		"icons": [
+			{"kind": EnemyKinds.ZAKO, "name": "Biene"},
+			{"kind": EnemyKinds.GOEI, "name": "Schmetterling"},
+			{"kind": EnemyKinds.BOSS, "name": "Flaggschiff"},
 		],
 	},
 ]
@@ -350,6 +356,11 @@ func _build_help() -> Control:
 	body.custom_minimum_size = Vector2(400, 210)
 	body.autowrap_mode = TextServer.AUTOWRAP_WORD  # long lines wrap instead of stretching the panel
 	box.add_child(body)
+	var icons := HBoxContainer.new()
+	icons.name = "Icons"
+	icons.alignment = BoxContainer.ALIGNMENT_CENTER
+	icons.add_theme_constant_override("separation", 22)
+	box.add_child(icons)
 	box.add_child(_spacer(8))
 	var nav := HBoxContainer.new()
 	nav.name = "Nav"
@@ -358,8 +369,10 @@ func _build_help() -> Control:
 	var prev := _button("‹", func(): _help_go(-1))
 	prev.custom_minimum_size = Vector2(56, TOUCH_H)
 	nav.add_child(prev)
-	var dots := _title_label("", 18)
+	var dots := HBoxContainer.new()
 	dots.name = "Dots"
+	dots.alignment = BoxContainer.ALIGNMENT_CENTER
+	dots.add_theme_constant_override("separation", 8)
 	dots.custom_minimum_size = Vector2(80, 0)
 	nav.add_child(dots)
 	var next := _button("›", func(): _help_go(1))
@@ -384,8 +397,42 @@ func _help_render() -> void:
 	var box := _box(_screens["help"])
 	(box.get_node("Head") as Label).text = p.h
 	(box.get_node("Body") as Label).text = "\n".join(p.l)
-	(box.get_node("Nav/Dots") as Label).text = "  ".join(
-		range(HELP_PAGES.size()).map(func(i): return "●" if i == _help_page else "○"))
+
+	var icons := box.get_node("Icons") as HBoxContainer
+	for c in icons.get_children():
+		c.queue_free()
+	var icon_entries: Array = p.get("icons", [])
+	icons.visible = not icon_entries.is_empty()
+	for entry in icon_entries:
+		icons.add_child(_icon_col(entry.kind, entry.name))
+
+	var dots := box.get_node("Nav/Dots") as HBoxContainer
+	for c in dots.get_children():
+		c.queue_free()
+	for i in HELP_PAGES.size():
+		var d := ColorRect.new()
+		d.custom_minimum_size = Vector2(10, 10)
+		d.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		d.color = ACCENT if i == _help_page else Color(1, 1, 1, 0.22)
+		dots.add_child(d)
+
+## Small "legend" column for the Ziel-page icon row: the enemy's classic
+## sprite (stage-variant-independent, so it stays recognizable no matter
+## which stage's reskin is currently in play) over its name + point value.
+func _icon_col(kind: int, label_text: String) -> VBoxContainer:
+	var col := VBoxContainer.new()
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_theme_constant_override("separation", 4)
+	var icon := TextureRect.new()
+	icon.texture = load(EnemyKinds.DATA[kind]["texture"])
+	icon.custom_minimum_size = Vector2(44, 44)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	col.add_child(icon)
+	var lbl := _title_label("%s\n%d Pkt." % [label_text, int(EnemyKinds.DATA[kind]["points"])], 15)
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col.add_child(lbl)
+	return col
 
 # ---------------------------------------------------------------- game over
 var _name_edit: LineEdit
