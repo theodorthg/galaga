@@ -50,6 +50,10 @@ var _rescues := 0
 var _rescue_points := 0
 var _last_kill_points := 0
 var _achievements_collected := 0
+# Per-kind kill breakdown for the run-summary screen (menus.gd::show_run_summary()
+# / _fill_summary()) — reset once per run in _new_run(), keyed by EnemyKinds enum.
+var _kill_counts := {}
+var _kill_points := {}
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -91,6 +95,41 @@ func _reload_settings() -> void:
 	_cfg = GameSettings.load_all()
 	if is_instance_valid(_ship):
 		_ship.configure(int(_cfg.get("max_shots", 2)))
+	# Difficulty only ever fed StageDirector's dive timing (see game_settings.gd's
+	# dive_params: first-dive delay, min/max seconds between dives, max
+	# concurrent divers) — nothing else keys off it. configure() just merges
+	# these into _atk without touching in-flight timers, so re-applying it here
+	# is safe mid-stage and takes effect on the very next dive roll.
+	_director.configure(GameSettings.dive_params(int(_cfg.get("difficulty", 1))))
+	_apply_extra_life_setting(int(_cfg.get("extra_life", 0)))
+	_apply_boss_interval_setting(int(_cfg.get("boss_interval", 0)))
+	_win_score = int(_cfg.get("win_score", 0))
+	# Makes "Sieg bei X Punkten" reactive: lowering it below (or to) the score
+	# already reached while a run is in progress ends the run right away,
+	# instead of only taking effect on the next game. Guarded by _state ==
+	# FORMATION inside _check_win() itself, so this is a no-op both before the
+	# very first run (_state == TITLE) and while _new_run() is still assembling
+	# a fresh run (called again below, _score not yet reset to 0 at that point).
+	if _state == FORMATION:
+		_check_win()
+
+## Recomputes the next extra-life threshold from the CURRENT score whenever the
+## step size itself changes (settings can be edited mid-run via pause, see
+## _reload_settings() above) — keeps the fixed original step's absolute
+## thresholds (which no longer mean anything once the step changes) from either
+## firing immediately in a burst or never firing again.
+func _apply_extra_life_setting(new_step: int) -> void:
+	if new_step == _extra_step:
+		return
+	_extra_step = new_step
+	_next_extra = (new_step * (floori(float(_score) / new_step) + 1)) if new_step > 0 else 0
+
+## Same idea as _apply_extra_life_setting() above, for "Boss alle X Punkte".
+func _apply_boss_interval_setting(new_interval: int) -> void:
+	if new_interval == _boss_interval:
+		return
+	_boss_interval = new_interval
+	_next_boss_score = (new_interval * (floori(float(_score) / new_interval) + 1)) if new_interval > 0 else 0
 
 func _enter_title() -> void:
 	_state = TITLE
@@ -125,6 +164,8 @@ func _new_run() -> void:
 	_rescue_points = 0
 	_last_kill_points = 0
 	_achievements_collected = 0
+	_kill_counts = {EnemyKinds.ZAKO: 0, EnemyKinds.GOEI: 0, EnemyKinds.BOSS: 0}
+	_kill_points = {EnemyKinds.ZAKO: 0, EnemyKinds.GOEI: 0, EnemyKinds.BOSS: 0}
 	_ship.deactivate_hyper_ammo()  # a fresh game never starts with a leftover buff
 	_director.configure(GameSettings.dive_params(int(_cfg.get("difficulty", 1))))
 
@@ -204,12 +245,14 @@ func _on_stage_populated() -> void:
 ## global CLAUDE.md's life-count rule.
 const MAX_LIVES_RUNTIME := 99
 
-func _on_enemy_killed(points: int) -> void:
+func _on_enemy_killed(points: int, kind: int) -> void:
 	# Hyper-Ammo (see ship.gd::activate_hyper_ammo) doubles points per kill too,
 	# not just the shot count — user request, on top of the existing beam buff.
 	if _ship._hyper_ammo:
 		points *= 2
 	_last_kill_points = points
+	_kill_counts[kind] = int(_kill_counts.get(kind, 0)) + 1
+	_kill_points[kind] = int(_kill_points.get(kind, 0)) + points
 	_score += points
 	_hud.set_score(_score)
 	while _extra_step > 0 and _score >= _next_extra and _lives < MAX_LIVES_RUNTIME:
@@ -246,7 +289,7 @@ func _check_win() -> void:
 	if _snd:
 		_snd.stop("music")
 	_hud.set_playing(false)
-	_menus.show_run_summary(_score, _stage, true, _rescues, _rescue_points, _achievements_collected, _hud._bonus_laps)
+	_menus.show_run_summary(_score, _stage, true, _rescues, _rescue_points, _achievements_collected, _hud._bonus_laps, _kill_counts, _kill_points)
 	get_tree().paused = true
 
 var _pending_twin := false
@@ -284,7 +327,7 @@ func _on_ship_died() -> void:
 		if not is_instance_valid(self) or _state != GAME_OVER:
 			return
 		_hud.set_playing(false)
-		_menus.show_run_summary(_score, _stage, false, _rescues, _rescue_points, _achievements_collected, _hud._bonus_laps)
+		_menus.show_run_summary(_score, _stage, false, _rescues, _rescue_points, _achievements_collected, _hud._bonus_laps, _kill_counts, _kill_points)
 		get_tree().paused = true
 		return
 	_lives -= 1
@@ -318,7 +361,18 @@ func _process(delta: float) -> void:
 	# diving, returning) and only loses a member once it's actually destroyed.
 	if _state != FORMATION or _paused:
 		return
-	if get_tree().get_nodes_in_group("enemy").is_empty():
+	# Stage clear also waits for any bonus_item still on screen (user request:
+	# an achievement shouldn't be able to linger into — or get orphaned by —
+	# the next stage's fly-in) — it either gets collected or falls off-screen
+	# and frees itself (bonus_item.gd), either way leaving the group.
+	if get_tree().get_nodes_in_group("enemy").is_empty() \
+		and get_tree().get_nodes_in_group("bonus_item").is_empty():
+		# Bombs already in flight from this stage are independent of the enemy
+		# that threw them (see bomb.gd) and would otherwise keep falling —
+		# and keep being able to hit the ship — into the next stage's "STAGE n"
+		# banner, which reads as unfair once the stage is actually cleared.
+		for n in get_tree().get_nodes_in_group("enemy_shots"):
+			n.queue_free()
 		_stage += 1
 		_ship.deactivate_hyper_ammo()  # Hyper-Ammo only lasts "for the rest of this stage"
 		_start_ready()

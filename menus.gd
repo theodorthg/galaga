@@ -160,9 +160,9 @@ func show_game_over(score: int, stage: int, won := false) -> void:
 ## Fame rank if they'd qualify. Only after "Weiter" does the player reach the
 ## actual name-entry screen. `won` distinguishes the "Sieg bei X Punkten"
 ## ending from a regular game over, same as show_game_over().
-func show_run_summary(score: int, stage: int, won: bool, rescues: int, rescue_points: int, achievements: int, laps: int) -> void:
+func show_run_summary(score: int, stage: int, won: bool, rescues: int, rescue_points: int, achievements: int, laps: int, kill_counts: Dictionary, kill_points: Dictionary) -> void:
 	_pending = {"score": score, "stage": stage, "won": won}
-	_fill_summary(score, won, rescues, rescue_points, achievements, laps)
+	_fill_summary(score, won, rescues, rescue_points, achievements, laps, kill_counts, kill_points)
 	_swap("summary")
 
 # ---------------------------------------------------------------- helpers
@@ -233,8 +233,10 @@ func _button(text: String, cb: Callable) -> Button:
 ## on top of the </> steppers, not instead of them. Omit it (e.g. for
 ## Schwierigkeit, a named choice rather than a number) to keep a plain label.
 ## Appends 4 flat children (name, <, value, >) to `grid` — see _build_settings()
-## for why a shared GridContainer replaced one HBoxContainer per row.
-func _add_stepper(grid: GridContainer, label_text: String, get_text: Callable, step: Callable, set_from_text := Callable()) -> void:
+## for why a shared GridContainer replaced one HBoxContainer per row. Returns
+## the {"left", "val", "right"} controls so a caller (see _lives_stepper /
+## _update_lives_lock() below) can lock a specific row after the fact.
+func _add_stepper(grid: GridContainer, label_text: String, get_text: Callable, step: Callable, set_from_text := Callable()) -> Dictionary:
 	var name_l := _title_label(label_text, 20)
 	name_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	name_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -273,6 +275,7 @@ func _add_stepper(grid: GridContainer, label_text: String, get_text: Callable, s
 	var right := _button(">", func(): step.call(1); _refresh_settings())
 	right.custom_minimum_size = Vector2(56, TOUCH_H)
 	grid.add_child(right)
+	return {"left": left, "val": val, "right": right}
 
 # ---------------------------------------------------------------- splash
 ## Deliberately NOT built via _screen() — this should read as a full-bleed
@@ -367,7 +370,7 @@ func _build_settings() -> Control:
 	grid.add_theme_constant_override("h_separation", 8)
 	grid.add_theme_constant_override("v_separation", 12)
 	box.add_child(grid)
-	_add_stepper(grid, "Leben", _fmt_lives, _step_lives, _set_lives_text)
+	_lives_stepper = _add_stepper(grid, "Leben", _fmt_lives, _step_lives, _set_lives_text)
 	_add_stepper(grid, "Extra-Leben", _fmt_extra, _step_extra, _set_extra_text)
 	_add_stepper(grid, "Boss alle X Punkte", _fmt_boss_interval, _step_boss_interval, _set_boss_interval_text)
 	_add_stepper(grid, "Sieg bei X Punkten", _fmt_win_score, _step_win_score, _set_win_score_text)
@@ -383,6 +386,8 @@ func _open_settings(from: String) -> void:
 	_refresh_settings()
 	_swap("settings")
 
+var _lives_stepper := {}
+
 func _refresh_settings() -> void:
 	var grid := _box(_screens["settings"]).get_node("Grid")
 	for val in grid.get_children():
@@ -391,10 +396,35 @@ func _refresh_settings() -> void:
 		if val is LineEdit and val.has_focus():
 			continue  # don't clobber text the user is mid-typing
 		val.text = str(val.get_meta("get_text").call())
+	_update_lives_lock()
+
+## "Leben" (initial life count) must not be changeable mid-run (user request) —
+## unlike every other setting here, it's only ever read once, in game.gd's
+## _new_run(), so editing it mid-game would silently do nothing anyway; better
+## to make that visible than to let the player think they changed something.
+## _return_to == "pause" is exactly "opened from the in-game pause menu", i.e.
+## a run is in progress; "title" means no run is active yet.
+func _update_lives_lock() -> void:
+	if _lives_stepper.is_empty():
+		return
+	var locked := _return_to == "pause"
+	_lives_stepper.left.disabled = locked
+	_lives_stepper.right.disabled = locked
+	var val = _lives_stepper.val
+	if val is LineEdit:
+		val.editable = not locked
+		val.focus_mode = Control.FOCUS_NONE if locked else Control.FOCUS_ALL
+	val.modulate = Color(1, 1, 1, 0.4) if locked else Color(1, 1, 1, 1)
 
 func _close_sub() -> void:
 	GameSettings.save(_cfg)
 	settings_changed.emit()
+	# A live "Sieg bei X Punkten" check inside that signal (game.gd's
+	# _reload_settings() -> _check_win()) may have just ended the run and
+	# swapped straight to the summary screen — don't stomp it by swapping back
+	# to the pause menu we came from.
+	if _screens["summary"].visible or _screens["gameover"].visible:
+		return
 	_swap(_return_to)
 
 func _fmt_lives() -> String: return str(_cfg.lives)
@@ -651,6 +681,16 @@ func _build_summary() -> Control:
 	var title := _title_label("", 36)
 	title.name = "Title"
 	box.add_child(title)
+	box.add_child(_spacer(8))
+	# Per-kind kill breakdown (count + points earned), one column per enemy
+	# tier — always all three, even at 0, so the layout doesn't jump around.
+	var kills := HBoxContainer.new()
+	kills.name = "Kills"
+	kills.alignment = BoxContainer.ALIGNMENT_CENTER
+	kills.add_theme_constant_override("separation", 20)
+	for kind in [EnemyKinds.ZAKO, EnemyKinds.GOEI, EnemyKinds.BOSS]:
+		kills.add_child(_kill_stat_col(kind))
+	box.add_child(kills)
 	box.add_child(_spacer(10))
 	var rescues_l := _title_label("", 18)
 	rescues_l.name = "Rescues"
@@ -669,9 +709,34 @@ func _build_summary() -> Control:
 	box.add_child(_button("Weiter", func(): show_game_over(_pending.score, _pending.stage, _pending.won)))
 	return s
 
-func _fill_summary(score: int, won: bool, rescues: int, rescue_points: int, achievements: int, laps: int) -> void:
+## One column of the Kills row (see _build_summary above): the classic sprite
+## (stage-variant-independent, same idea as the help page's _icon_col) over a
+## "N× / P Pkt." label that _fill_summary fills in per run.
+func _kill_stat_col(kind: int) -> VBoxContainer:
+	var col := VBoxContainer.new()
+	col.name = "Kind%d" % kind
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_theme_constant_override("separation", 2)
+	var icon := TextureRect.new()
+	icon.texture = load(EnemyKinds.DATA[kind]["texture"])
+	icon.custom_minimum_size = Vector2(36, 36)
+	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	col.add_child(icon)
+	var lbl := _title_label("", 15)
+	lbl.name = "Label"
+	col.add_child(lbl)
+	return col
+
+func _fill_summary(score: int, won: bool, rescues: int, rescue_points: int, achievements: int, laps: int, kill_counts: Dictionary, kill_points: Dictionary) -> void:
 	var box := _box(_screens["summary"])
 	(box.get_node("Title") as Label).text = "SIEG!" if won else "GAME OVER"
+	var kills_row := box.get_node("Kills") as HBoxContainer
+	for kind in [EnemyKinds.ZAKO, EnemyKinds.GOEI, EnemyKinds.BOSS]:
+		var col := kills_row.get_node("Kind%d" % kind)
+		var n := int(kill_counts.get(kind, 0))
+		var p := int(kill_points.get(kind, 0))
+		(col.get_node("Label") as Label).text = "%d×\n%d Pkt." % [n, p]
 	(box.get_node("Rescues") as Label).text = "Gerettete Schiffe: %d  (%d Punkte)" % [rescues, rescue_points]
 	(box.get_node("Achv") as Label).text = "Achievements: %d  (Runden: %d)" % [achievements, laps]
 	(box.get_node("Score") as Label).text = "Gesamtpunktzahl: %06d" % score

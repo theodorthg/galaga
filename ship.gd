@@ -24,6 +24,18 @@ const HYPER_OFFSET := 10.0
 ## the resting position up by that length + a small safety margin keeps the
 ## flame clear of it regardless of how main_thruster.tscn's max_length is tuned.
 const THRUSTER_CLEARANCE_MARGIN := 5.0
+## Resting y is measured from the REAL viewport bottom, not a canvas-fixed
+## value — on a touch device (CONTENT_SCALE_ASPECT_KEEP_WIDTH) get_viewport_
+## rect().size.y reports MORE than the 960 design height (the extra room is
+## deliberately free space for fingers below the fixed-canvas HUD/gameplay —
+## see the global CLAUDE.md's touch note), so a ship pinned to a canvas-fixed
+## y sat far above where bonus_item.gd/bomb.gd (which fall against this same
+## real height) actually reach: achievements fell "past" the ship, uncatchable
+## (user report), and the ship read as oddly high up with a lot of dead space
+## below it. On desktop (CONTENT_SCALE_ASPECT_KEEP) get_viewport_rect().size.y
+## is always exactly the design 960, so this reproduces the old fixed position
+## (960 - 76 = 884, game.tscn's original override) there unchanged.
+const HUD_BOTTOM_CLEARANCE := 76.0
 ## Vertical offset from the ship's own origin to its actual laser muzzle (see
 ## _fire_laser() below). enemy.gd reads this too, so its "invulnerable until
 ## above the gun" check (BOTTOM_UP fly-in) measures from the real muzzle
@@ -44,7 +56,13 @@ var _alive := true
 var _invuln := 0.0
 var _mouse_aim := false
 var _mouse_down := false
-var _touch := false
+## Actual finger-on-screen state — distinct from "this device supports touch
+## at all". Auto-fire must track only this, not device capability (see
+## _process()'s fire condition and _unhandled_input() below): a touch-capable
+## device that's currently being driven by mouse/keyboard (Linux/Windows
+## touchscreen laptops, the user's own example) must not keep firing just
+## because a finger isn't actually down.
+var _touch_down := false
 var _snd: Node
 var _max_lasers_base := 2  # set from GameSettings.max_shots via configure()
 var _max_lasers := _max_lasers_base
@@ -64,15 +82,26 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_PAUSABLE  # freeze on pause, not inherit Game's ALWAYS
 	add_to_group("player")
 	add_to_group("touch_layout_listeners")
-	_touch = OS.has_feature("mobile") or DisplayServer.is_touchscreen_available()
 	_snd = get_node_or_null("/root/Snd")
 	area_entered.connect(_on_area_entered)
 	viewport_width = get_viewport_rect().size.x
-	position.y -= _thruster.max_length + THRUSTER_CLEARANCE_MARGIN
+	_update_home_y()
 
-# group "touch_layout_listeners": first real touch event flips us to touch mode
+## See HUD_BOTTOM_CLEARANCE above for why this reads the real viewport height
+## instead of using a value baked into the scene.
+func _update_home_y() -> void:
+	var vp_h := get_viewport_rect().size.y
+	position.y = vp_h - HUD_BOTTOM_CLEARANCE - _thruster.max_length - THRUSTER_CLEARANCE_MARGIN
+
+# group "touch_layout_listeners": first real touch event flips content_scale_
+# aspect to KEEP_WIDTH (game.gd) — re-home once that's taken effect. Deferred
+# since this call and game.gd's own group-call sibling can fire in either
+# order within the same call_group(); by the next frame the aspect switch (and
+# therefore get_viewport_rect()) is definitely settled. Only y moves here —
+# x stays wherever the player currently is, so this doesn't yank the ship back
+# to center mid-fight on the rare "browser reported touch late" case.
 func apply_touch_layout() -> void:
-	_touch = true
+	_update_home_y.call_deferred()
 
 func _process(delta: float) -> void:
 	if _invuln > 0.0:
@@ -99,16 +128,23 @@ func _process(delta: float) -> void:
 		position.x = get_global_mouse_position().x
 	position.x = clampf(position.x, ship_half_width, viewport_width - ship_half_width)
 
-	if _touch or _mouse_down or Input.is_action_pressed("shoot"):
+	if _touch_down or _mouse_down or Input.is_action_pressed("shoot"):
 		shoot()
 
 func _unhandled_input(event: InputEvent) -> void:
+	# Press/release state is tracked regardless of _alive: gating this behind
+	# the alive check let a finger/mouse-button already held at the moment of
+	# death leave _touch_down/_mouse_down stuck true (the release event during
+	# the reconstruct animation was swallowed), which would auto-fire the
+	# instant the new ship became alive again with no fresh press at all.
+	if event is InputEventScreenTouch:
+		_touch_down = event.pressed
+	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		_mouse_down = event.pressed
 	if not _alive:
 		return
 	if event is InputEventMouseMotion:
 		_mouse_aim = true
-	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		_mouse_down = event.pressed
 	elif event is InputEventScreenDrag:
 		position.x = clampf(position.x + event.relative.x,
 			ship_half_width, viewport_width - ship_half_width)

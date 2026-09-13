@@ -768,6 +768,163 @@ Punkte-Popup bei Boss-Rettungskill.**
   Test-Einträgen ("bb", "X", "MITTELLANG", …) verunreinigte
   `user://hall_of_fame.cfg` wurde zurückgesetzt.
 
+**Achte Playtest-Runde (2026-09-13): Bomben verschwinden bei Stage-Clear,
+Stage wartet zusätzlich auf Achievements, Kill-Aufschlüsselung in der
+Run-Summary, Einstellungen wirklich live (inkl. Leben-Sperre + Sieg-Score-
+Reaktivität), Schiffsposition gegen die echte Bildschirmhöhe statt fixe
+Canvas-y, HUD-Achievement-Reihe kollisionssicher, Lap-Anzeige/-Zähler-Timing,
+Touch-Feuern nur bei aufliegendem Finger.**
+- **Bomben-Inkonsistenz nach Stage-Clear behoben**: Bomben sind eigenständige
+  Objekte (`bomb.gd`), unabhängig vom werfenden Gegner — sie bleiben nach
+  dessen Abschuss regulär gefährlich (kein Sonderfall nötig, das war schon so).
+  Der eine echte Fall, in dem das falsch wirkte: nach dem letzten Gegner einer
+  Stage blieben bereits geworfene Bomben einfach in der Luft und konnten noch
+  während des „STAGE n"-Banners der nächsten Stage treffen — obwohl der Level
+  bereits gecleared war. Fix: `game.gd::_process()` räumt beim Stage-Clear
+  jetzt explizit die ganze `enemy_shots`-Gruppe leer, bevor `_stage` erhöht
+  wird. Per direktem `_process()`-Aufruf verifiziert (Bombe vorhanden + letzter
+  Gegner weg → Bombe verschwindet, Stage erhöht sich erst danach).
+- **Stage-Clear wartet zusätzlich auf Achievements** (Nutzer-Zusatz mitten im
+  Auftrag): ein noch auf dem Schirm befindliches `bonus_item` verzögert jetzt
+  den Stage-Wechsel, bis es entweder eingesammelt wurde oder selbst unten
+  herausgefallen ist (`bonus_item.gd` gibt sich dabei ohnehin frei) —
+  `get_tree().get_nodes_in_group("bonus_item").is_empty()` als zusätzliche
+  Bedingung neben der Gegner-Prüfung. Per direktem `_process()`-Aufruf mit
+  einem künstlich plazierten `bonus_item` verifiziert: Stage bleibt bei
+  vorhandenem Item stehen, wechselt sofort im Folgeaufruf nach dessen
+  Entfernen.
+- **Kill-Aufschlüsselung in der Run-Summary**: `enemy.gd`s `killed`-Signal
+  trägt jetzt `(points, kind)` statt nur `points` (durchgereicht über
+  `stage_director.gd`s `enemy_killed(points, kind)`), `game.gd` führt
+  `_kill_counts`/`_kill_points` pro `EnemyKinds`-Wert (einmal pro Run
+  zurückgesetzt) und übergibt beides an `menus.gd::show_run_summary(...)`.
+  Der Summary-Screen zeigt jetzt eine Reihe mit den drei klassischen
+  Gegner-Sprites (Biene/Schmetterling/Boss, stage-varianten-unabhängig wie
+  schon die Hilfe-Seiten-Icons) + „N× / P Pkt." darunter — immer alle drei,
+  auch bei 0, damit das Layout nicht je nach Run springt. Per Live-Test
+  verifiziert (`_on_enemy_killed(50, ZAKO)` u. Ä. direkt aufgerufen, Summary
+  zeigte korrekt „2× / 100 Pkt." usw.).
+- **Einstellungen wirken jetzt wirklich sofort mid-Run** — vorher setzte nur
+  „Max. Schüsse" (`ship.configure()`) live um, alles andere (Extra-Leben,
+  Boss-Intervall, Sieg-Score, Schwierigkeit) wurde in `_reload_settings()`
+  zwar neu geladen, aber erst in `_new_run()` tatsächlich in die laufenden
+  `_next_extra`/`_next_boss_score`/`_win_score`/`_director`-Werte übernommen —
+  eine Änderung mitten im Spiel griff also frühestens in der nächsten Runde.
+  Fix: `_reload_settings()` (läuft bei jedem `settings_changed`, also auch aus
+  dem Pausenmenü) ruft jetzt zusätzlich `_director.configure(GameSettings.
+  dive_params(...))` (Schwierigkeit — steuert laut `game_settings.gd`
+  ausschließlich das Sturzflug-Timing des `StageDirector`: Verzögerung bis zum
+  ersten Dive, Sekunden zwischen Dives, max. gleichzeitige Diver — sonst
+  nichts) sowie zwei neue Helfer `_apply_extra_life_setting()`/
+  `_apply_boss_interval_setting()`, die bei einer Änderung des jeweiligen
+  Schritts die nächste Schwelle relativ zum AKTUELLEN Punktestand neu
+  berechnen (`floori(float(_score)/step)+1) * step` — verwirft die alte,
+  jetzt bedeutungslose fixe Schwelle, statt sie entweder sofort im Block
+  auszulösen oder nie wieder zu erreichen). „Sieg bei X Punkten" reagiert am
+  sichtbarsten: `_win_score` wird sofort übernommen und `_check_win()` direkt
+  danach erneut geprüft — senkt man es unter (oder auf) die aktuelle
+  Punktzahl während einer laufenden Runde, endet das Spiel augenblicklich mit
+  dem Sieg-Bildschirm, auch direkt aus dem Pausenmenü heraus. Dabei einen
+  Race-Bug gefunden und gefixt: `menus.gd::_close_sub()` swappte nach dem
+  `settings_changed`-Signal bedingungslos zurück auf `_return_to` (i. d. R.
+  „pause") — lief der Sieg-Check im selben Aufruf synchron durch und zeigte
+  bereits den Summary-Screen, wurde der sofort wieder vom Pausenmenü
+  überschrieben. Fix: `_close_sub()` prüft danach, ob „summary"/„gameover"
+  inzwischen sichtbar ist, und lässt den Swap in dem Fall aus. Alle Pfade per
+  Live-Test verifiziert (`_reload_settings()` direkt mit geänderten
+  `GameSettings`-Werten aufgerufen; `_close_sub()` mit `_cfg.win_score` unter
+  dem laufenden Score aufgerufen → Summary-Screen erscheint, Pause-Screen
+  bleibt versteckt).
+- **„Leben" ist während einer laufenden Runde gesperrt** (Nutzer-Vorgabe: wird
+  ohnehin nur einmalig in `_new_run()` gelesen, eine Änderung mitten im Spiel
+  hätte also sowieso nichts bewirkt — das jetzt auch sichtbar machen statt
+  einen wirkungslosen Regler anzubieten). `menus.gd::_add_stepper()` gibt jetzt
+  seine `{left, val, right}`-Controls zurück; `_update_lives_lock()` (läuft in
+  `_refresh_settings()`) deaktiviert `<`/`>` und macht das Eingabefeld
+  nicht-editierbar + halbtransparent, sobald die Einstellungen aus dem
+  Pausenmenü geöffnet wurden (`_return_to == "pause"`) — von Titel aus
+  weiterhin normal bedienbar. Per Live-Test verifiziert (`left.disabled`/
+  `right.disabled`/`val.editable` korrekt `true`/`true`/`false` mitten im Lauf,
+  alle `false`/`false`/`true` vom Titel aus).
+- **Schiffsposition folgt jetzt der echten Bildschirmhöhe statt einer
+  Canvas-fixen y** — Ursache eines Nutzer-Reports „Achievements landen
+  plötzlich unter dem Schiff, kaum einsammelbar, und das Schiff sitzt gefühlt
+  zu weit oben": auf Touch-Geräten (`CONTENT_SCALE_ASPECT_KEEP_WIDTH`) meldet
+  `get_viewport_rect().size.y` MEHR als die 960 Design-Höhe (der Rest ist laut
+  globaler CLAUDE.md absichtlich freier Fingerraum unterhalb des fixen
+  Spielfelds) — `bonus_item.gd`/`bomb.gd` fallen aber genau gegen diese
+  ECHTE (größere) Höhe, während das Schiff bislang auf einer aus `game.tscn`
+  fix übernommenen y-Position (960-76=884, minus Flammen-Clearance) verharrte.
+  Auf einem deutlich höheren Gerät (z. B. 2,2:1 wie OPPO Find X2 Pro/OnePlus
+  12) klafft dadurch eine Lücke von mehreren hundert Pixeln zwischen der
+  fixen Schiffsposition und dem tatsächlichen unteren Rand, in die
+  Achievements/Bomben ungehindert weiterfallen, ohne je das Schiff zu
+  erreichen. Fix: `ship.gd::_update_home_y()` berechnet die Ruheposition jetzt
+  als `get_viewport_rect().size.y - HUD_BOTTOM_CLEARANCE(76) - thruster.
+  max_length - THRUSTER_CLEARANCE_MARGIN` — auf Desktop (`KEEP`, immer exakt
+  960) reproduziert das die alte Position 1:1 (verifiziert: y=779 unverändert),
+  auf einem simulierten großen Touch-Viewport (1188) rutscht das Schiff
+  entsprechend weit nach unten (y=1007 statt der alten fixen 884). Läuft auch
+  beim retroaktiven Touch-Flip (`apply_touch_layout()`, `call_deferred` damit
+  die Aspect-Umschaltung sicher zuerst greift) — dabei bewusst nur y neu
+  gesetzt, x bleibt an der aktuellen Spielerposition, damit ein spät
+  erkannter Touch das Schiff nicht mitten im Gefecht auf die Mitte
+  zurückspringen lässt.
+- **HUD-Achievement-Reihe kollisionssicher gemacht statt nur nach rechts
+  verschoben**: eine reine feste Verschiebung um 28px (wie ursprünglich
+  angefragt) reichte nicht aus — bei 2-stelliger Lebensanzahl UND mehreren
+  besonders breiten Achievement-Icons gleichzeitig (Live-Test mit
+  `×99`-Anzeige + den 7 breitesten von 12 möglichen Icons) blieb die Reihe
+  trotz Verschiebung mit der Lebensanzeige links UND geriet gleichzeitig zu
+  nah an den Lap-Marker rechts — der verfügbare Platz zwischen beiden reicht
+  in diesem Extremfall schlicht nicht für die volle Icon-Größe. Fix:
+  `hud.gd::_draw_bonus_icons()` zentriert die Reihe weiterhin bevorzugt mit
+  dem 28px-Rechts-Versatz, klemmt das Ergebnis aber hart auf
+  `[ROW_LEFT_MIN_X(90), usable_w - Reihenbreite]` — und skaliert Icons + Lücken
+  gleichmäßig herunter, falls selbst das nicht reicht, statt eine Kollision
+  zuzulassen. Live gefunden UND live nachgewiesen behoben (erst mit
+  sichtbarem Überlapp zwischen „× 12" und dem ersten Icon, nach dem Fix
+  sauberer Abstand auf beiden Seiten, auch im 7-Icon-Extremfall mit leicht
+  verkleinerten Icons statt Kollision).
+- **Lap-Anzeige/-Zähler-Timing korrigiert**: das 7. (bis dahin einzigartige)
+  Achievement-Icon wurde bislang im selben Frame wieder gelöscht, in dem es
+  hinzugefügt wurde (`add_bonus_icon()` leerte die Reihe synchron beim
+  Erreichen von `BONUS_MAX_SHOWN`) — man sah es also nie. Fix:
+  `hud.gd::add_bonus_icon()` setzt bei voller Reihe nur noch `_lap_pending`
+  und lässt die vollen 7 Icons `LAP_HOLD_TIME` (0,7 s) lang stehen, bevor
+  `_finish_lap()` den Rundenzähler hochzählt und die Reihe leert (Pickups
+  während dieses Hold-Fensters zählen in `game.gd` weiterhin Punkte, werden
+  aber nicht mehr zusätzlich in die schon volle Reihe gehängt — ein echter,
+  live gefundener Folgefehler des ersten Fixes: ohne diese Sperre wuchs die
+  Reihe während des Hold-Fensters über 7 Icons hinaus und kollidierte selbst
+  mit dem eigenen Lap-Marker). Der Marker selbst wird jetzt IMMER gezeichnet
+  (auch bei 0 Runden, startet bei „× 0") statt erst ab der ersten
+  abgeschlossenen Reihe zu erscheinen. Farbe von Gold auf Türkis geändert
+  (`BONUS_LAP_COLOR`, passend zum normalen Laser-Akzent). Per
+  `monitor_properties`-Zeitreihe verifiziert: sofort nach dem 7. Icon
+  `_bonus_laps=0`/alle 7 sichtbar, nach Ablauf des Hold-Fensters (bei
+  entpausiertem Baum — ein pausierter Baum hält den Timer korrekt an, statt
+  ihn weiterlaufen zu lassen) `_bonus_laps=1`/Reihe leer.
+- **Touch-Feuern nur bei tatsächlich aufliegendem Finger**: `ship.gd` feuerte
+  bisher auf jedem als „Touch-fähig" erkannten Gerät DAUERHAFT
+  (`if _touch or ...`, `_touch` war nur die einmalig erkannte Geräte-Fähigkeit,
+  nicht der aktuelle Berührungszustand) — auf Geräten mit sowohl Touchscreen
+  als auch Maus/Tastatur (Nutzer-Beispiel: Linux/Windows-Touch-Laptops) schoss
+  das Schiff dadurch permanent, auch ohne aufliegenden Finger. Fix: neues
+  `_touch_down`, gesetzt/gelöscht durch echte `InputEventScreenTouch`
+  press/release-Events, ersetzt `_touch` in der Feuer-Bedingung (die
+  Geräte-Fähigkeits-Var `_touch` selbst wurde dadurch überflüssig und
+  entfernt). Dabei einen verwandten, latenten Bug in derselben Codezeile
+  mitgefixt: Press/Release-Tracking lief bisher HINTER der `_alive`-Prüfung —
+  starb das Schiff mit gehaltenem Finger/gehaltener Maustaste, ging das
+  Release-Event während der Rekonstruktions-Animation verloren und
+  `_touch_down`/`_mouse_down` blieben auf „gedrückt" hängen, was das neue
+  Schiff sofort ohne frischen Tastendruck feuern ließ. Fix: Press/Release-
+  Tracking läuft jetzt VOR dem `_alive`-Gate, nur die Steuerungs-Logik
+  (Maus-Aim, Touch-Drag) bleibt dahinter. Per direktem
+  `_unhandled_input()`-Aufruf mit synthetischen Touch-Events verifiziert
+  (inkl. des Stirbt-mit-gehaltenem-Finger-Randfalls).
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,
@@ -798,7 +955,20 @@ StageDirector, Ship, HUD-CanvasLayer.
   `show_run_summary(score, stage, won=true, ...)`, sobald `GameSettings.win_score`
   erreicht ist (0 = aus). `achievement_00`-Pickup → `ship.activate_hyper_ammo()`
   (siehe „Vierte Playtest-Runde") — verdoppelt seit der siebten Playtest-Runde
-  auch die Punktzahl pro Kill, nicht nur die Schusszahl.
+  auch die Punktzahl pro Kill, nicht nur die Schusszahl. `_kill_counts`/
+  `_kill_points` (seit der achten Playtest-Runde, Dictionary je
+  `EnemyKinds`-Wert) führen mit, wie viele von welchem Gegnertyp abgeschossen
+  wurden + wie viele Punkte das brachte — für die Kill-Aufschlüsselung im
+  Run-Summary-Screen, siehe dort. `_reload_settings()` wendet seit der achten
+  Playtest-Runde ALLE Einstellungen sofort mid-Run an, nicht mehr nur
+  `max_shots` (`_apply_extra_life_setting()`/`_apply_boss_interval_setting()`
+  rechnen die nächste Schwelle relativ zum aktuellen Score neu, `_win_score`
+  löst bei Bedarf sofort `_check_win()` aus, `_director.configure(...)`
+  übernimmt eine geänderte Schwierigkeit ohne Rundenneustart). Stage-Clear
+  (`_process()`) wartet seit der achten Playtest-Runde zusätzlich, bis kein
+  `bonus_item` mehr im Feld ist, und räumt beim tatsächlichen Wechsel die
+  `enemy_shots`-Gruppe (Bomben) leer — sonst konnten längst geworfene Bomben
+  noch nach Levelende treffen, siehe dort.
 - `hud.gd` (`class_name Hud`) — **nur noch das In-Game-HUD**: Score (oben links),
   Stage (unten rechts, Cyan), Leben unten links (`_draw`, echte `player_trim.png`-
   Sprites statt Platzhalter-Dreiecke; ab `MANY_THRESHOLD = 3` (seit der siebten
@@ -812,11 +982,21 @@ StageDirector, Ship, HUD-CanvasLayer.
   `set_playing(on)` blendet das ganze HUD bei offenem Menü aus. Titel / Pause /
   Settings / Game-Over macht jetzt `menus.gd`. Bonus-Icon-Reihe unten mittig
   (`BONUS_MAX_SHOWN = 7`, `add_bonus_icon()` liefert `true` zurück, sobald eine
-  Reihe voll ist; `_bonus_laps` + `_draw_lap_marker()` zeigen dann einen
-  goldenen „× N"-Rundenzähler daneben, siehe „Dritte Playtest-Runde").
-  `_bonus_icon_indices` (parallel zu `_bonus_icons`, seit 2026-09-13) +
-  `current_lap_indices()` lassen `bonus_item.gd` Duplikate innerhalb einer
-  Reihe ausschließen (siehe „Sechste Playtest-Runde").
+  Reihe voll ist; das 7. Icon bleibt seit der achten Playtest-Runde
+  `LAP_HOLD_TIME` (0,7 s) sichtbar stehen, bevor `_finish_lap()` `_bonus_laps`
+  hochzählt und die Reihe leert — vorher verschwand es im selben Frame, in dem
+  es hinzukam. Ein während des Hold-Fensters eintreffendes Icon wird von
+  `add_bonus_icon()` abgewiesen (zählt in `game.gd` trotzdem Punkte), sonst
+  wüchse die Reihe über 7 hinaus. `_draw_lap_marker()` zeigt den türkisen
+  (vorher goldenen) „× N"-Rundenzähler jetzt IMMER, auch bei 0 Runden, an
+  seiner festen Position — siehe „Dritte Playtest-Runde" für die Position
+  selbst). Die Icon-Reihe selbst ist seit der achten Playtest-Runde
+  kollisionssicher gegen die Lebensanzeige links UND den Lap-Marker rechts
+  geklemmt (`ROW_LEFT_MIN_X`/`BONUS_ROW_SHIFT_RIGHT`) und skaliert sich bei
+  Bedarf (viele + breite Icons gleichzeitig) automatisch etwas kleiner, statt
+  zu überlappen. `_bonus_icon_indices` (parallel zu `_bonus_icons`, seit
+  2026-09-13) + `current_lap_indices()` lassen `bonus_item.gd` Duplikate
+  innerhalb einer Reihe ausschließen (siehe „Sechste Playtest-Runde").
 - `menus.gd` (`class_name Menus`, eigener `CanvasLayer` in `game.tscn`,
   `process_mode = ALWAYS`) — alle Menü-Screens im Code wie tetris' `ui.gd`:
   Titel, Pause, Einstellungen (`_add_stepper()` hängt Name/</Wert/>-Zellen
@@ -824,13 +1004,22 @@ StageDirector, Ship, HUD-CanvasLayer.
   einen eigenen `HBoxContainer` zu bauen — sonst richten sich `</>` nicht
   spaltenweise aus, siehe „Sechste Playtest-Runde"; Stepper: Leben /
   Extra-Leben / Boss alle X Punkte / Sieg bei X Punkten / Max. Schüsse /
-  Schwierigkeit), Sound-Unterseite (HSlider pro Sound,
+  Schwierigkeit). Der Leben-Stepper ist seit der achten Playtest-Runde
+  gesperrt (deaktivierte `<`/`>`, nicht-editierbares Feld, halbtransparent),
+  sobald die Einstellungen aus dem Pausenmenü heraus geöffnet wurden
+  (`_lives_stepper`, `_update_lives_lock()`) — die Einstellung wird ohnehin
+  nur einmalig in `_new_run()` gelesen. Sound-Unterseite (HSlider pro Sound,
   Loslassen = Vorhören), Hilfe (3 Textseiten mit ‹/›), seit der siebten
   Playtest-Runde ein Run-Summary-Screen (`"summary"`, `show_run_summary()`,
-  siehe dort) VOR dem Game-Over-Screen, dann Game-Over + Hall-of-Fame-Liste +
-  Namenseingabe bei Qualifikation. Die HoF-Liste (`_hof_box`) ist seit der
-  siebten Playtest-Runde ein `GridContainer` (Platz/Name/Score-Spalten,
-  rechts-/links-/rechtsbündig) statt einer `VBoxContainer` mit
+  seit der achten Playtest-Runde mit zusätzlicher Kill-Aufschlüsselung nach
+  Gegnertyp — Sprite + „N× / P Pkt." je Typ, siehe dort) VOR dem
+  Game-Over-Screen, dann Game-Over + Hall-of-Fame-Liste + Namenseingabe bei
+  Qualifikation. `_close_sub()` prüft seit der achten Playtest-Runde vor dem
+  Rück-Swap zu `_return_to`, ob inzwischen „summary"/„gameover" sichtbar ist
+  (ein live geänderter Sieg-Score kann das synchron im selben Aufruf
+  auslösen) und lässt den Swap in dem Fall aus. Die HoF-Liste (`_hof_box`)
+  ist seit der siebten Playtest-Runde ein `GridContainer` (Platz/Name/Score-
+  Spalten, rechts-/links-/rechtsbündig) statt einer `VBoxContainer` mit
   leerzeichen-aufgefüllten Text-Zeilen — Letzteres richtete sich in einer
   proportionalen Schrift nicht wirklich aus. Signale `start_game` /
   `resume_game` / `to_title` / `settings_changed`. „Beenden" nur wenn nicht
@@ -868,15 +1057,25 @@ und `ship.gd` sind in Gruppe `touch_layout_listeners` mit `apply_touch_layout()`
 `game._input` löst beim ersten echten `InputEventScreenTouch/Drag` einen
 `call_group(...)` aus (manche Mobil-Browser melden Touch verspätet).
 
-Gameplay-Positionen (Formation `home.y`, Schiff-y, HUD) sind **fix gegen die
+Gameplay-Positionen (Formation `home.y`, HUD) sind **fix gegen die
 960er-Canvas**, nicht gegen `get_viewport_rect()` — die Überhöhe bleibt so
-freier Raum unten. (Ausnahme: `attack_paths`/`bomb` nehmen noch die echte
-Viewport-Höhe; Divers/Bomben laufen auf hohen Phones etwas weiter runter, bevor
-sie despawnen — unkritisch, ggf. später gegen 960 festnageln.)
+freier Raum unten. `attack_paths`/`bomb` nehmen dagegen die echte
+Viewport-Höhe (Divers/Bomben laufen auf hohen Phones weiter runter, bevor sie
+despawnen). **Schiff-y ist seit der achten Playtest-Runde KEINE Ausnahme mehr,
+sondern folgt jetzt bewusst derselben echten Viewport-Höhe wie `attack_paths`/
+`bomb`** (`ship.gd::_update_home_y()`, `HUD_BOTTOM_CLEARANCE`): vorher saß das
+Schiff auf hohen Touch-Geräten (KEEP_WIDTH, `get_viewport_rect().size.y` >
+960) weit oberhalb dessen, wo `bonus_item`/`bomb` tatsächlich ankommen — die
+960-fixe Position blieb ganz oben in der um die Fingerzone erweiterten Fläche
+hängen, Achievements fielen unerreichbar daran vorbei. Auf Desktop (`KEEP`,
+`get_viewport_rect().size.y` immer exakt 960) ändert sich dadurch nichts.
 
 Steuerung Touch: **Drag irgendwo** = relatives Lenken (`ship._unhandled_input`,
-`event.relative.x`), **Auto-Fire** solange lebendig. Pause: Button oder
-`pause`-Action; bei Pause zusätzlich Tap = Resume.
+`event.relative.x`), **Auto-Fire, solange der Finger tatsächlich aufliegt**
+(`_touch_down`, seit der achten Playtest-Runde — vorher schoss das Schiff auf
+jedem als touch-fähig ERKANNTEN Gerät dauerhaft, auch ohne aufliegenden
+Finger, was auf Geräten mit Touch UND Maus/Tastatur störte). Pause: Button
+oder `pause`-Action; bei Pause zusätzlich Tap = Resume.
 - `formation.gd` (`class_name Formation`) — 40 Slots (`ROWS`: 4 Boss / 8+8 Goei /
   10+10 Zako), Slot-Geometrie, „Breathing"-Sway des ganzen Blocks, Flap-Timer
   (`flap_toggled`), Belegungs-Tracking (`assign`/`release`/`live_count`).
@@ -912,8 +1111,9 @@ Steuerung Touch: **Drag irgendwo** = relatives Lenken (`ship._unhandled_input`,
   `FORCED_RETRY_INTERVAL` (2 s) erneut versucht, bis ein Boss frei ist —
   übersteht damit Stage-Wechsel und Schiffsverlust (siehe „Vierte
   Playtest-Runde").
-  `stop_attacks()` beim Stage-Wechsel. Reicht `enemy_killed(points)` und
-  `ship_rescued` durch.
+  `stop_attacks()` beim Stage-Wechsel. Reicht `enemy_killed(points, kind)`
+  (Gegnertyp seit der achten Playtest-Runde mit im Signal, für die
+  Kill-Aufschlüsselung im Run-Summary-Screen) und `ship_rescued` durch.
 - `enemy.gd` (Area2D, kein `class_name`) — States FLYING_IN / LOCKING /
   IN_FORMATION / DIVING / RETURNING / **CAPTURE_APPROACH / CAPTURE_BEAM**
   (Boss-Capture, siehe unten). Generischer Path-Follower
@@ -961,7 +1161,12 @@ Steuerung Touch: **Drag irgendwo** = relatives Lenken (`ship._unhandled_input`,
   Kill selbst).
 - `bomb.gd` / `bomb.tscn` — Gegner-Schuss, fällt (leicht Richtung Spieler-x zum
   Abwurfzeitpunkt), Platzhalter-Raute. Layer 16 (enemy_shots) / Maske 9
-  (player + player_shots — Laser können Bomben abschießen).
+  (player + player_shots — Laser können Bomben abschießen). Unabhängig vom
+  werfenden Gegner — bleibt nach dessen Abschuss regulär gefährlich (kein
+  eigener Code dafür nötig). Die eine Ausnahme: `game.gd::_process()` räumt
+  seit der achten Playtest-Runde beim tatsächlichen Stage-Clear die ganze
+  `enemy_shots`-Gruppe leer, damit längst geworfene Bomben nicht noch nach
+  Levelende treffen können.
 - `laser.gd` (`class_name Laser`) — Platzhalter-Strich im `_draw()`
   (laser.png raus), Layer 8, Hitbox 9×18 (sichtbarer Strahl bleibt 3 px
   schmal — großzügiger als er aussieht, Nutzer fand Treffen zu schwer;

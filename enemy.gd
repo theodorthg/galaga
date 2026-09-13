@@ -55,7 +55,7 @@ var _flap_tween: Tween
 var _flap_frames: Array = []  # 2 texture paths for a real flap (EnemyKinds variants); empty -> wobble
 
 signal locked_in(enemy)
-signal killed(points)
+signal killed(points, kind)
 signal resolved
 signal ship_rescued(at_position: Vector2)
 
@@ -307,7 +307,7 @@ func _explode() -> void:
 	_state = LOCKING  # inert
 	if _formation:
 		_formation.release(self)
-	killed.emit(int(EnemyKinds.DATA[kind]["points"]))
+	killed.emit(int(EnemyKinds.DATA[kind]["points"]), kind)
 	if _snd:
 		_snd.play("hit")
 	if _carrying_captive:
