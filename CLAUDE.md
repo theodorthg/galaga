@@ -557,7 +557,95 @@ eine Gegnerhöhe vergrößert, Achievement-Spawnrate überprüft (kein Bug).**
   Hintergrund exakt gleich oft gespawnt/gesammelt wird. Nicht ungefragt
   geändert (war explizite Vorgabe), aber hier vermerkt, falls das Design
   nochmal in Frage gestellt wird — z. B. mit einem kurzen "Lap!"-Aufblitzen
-  beim Reset, damit es als Belohnung statt als Verschwinden liest.
+  beim Reset, damit es als Belohnung statt als Verschwinden liest. **Update
+  2026-09-13 (Sechste Playtest-Runde): Die Analyse hier war unvollständig —
+  es gab doch einen echten Bug, siehe unten.**
+
+**Sechste Playtest-Runde (2026-09-13): echter Bonus-Timer-Bug gefunden,
+eindeutige Achievement-Icons pro Reihe, "+Punkte"-Popup + "Lap!"-Banner,
+Einflug-Marge korrigiert (Kanonenmündung statt Schiffsrumpf), Settings-Grid
+für echte Spalten-Ausrichtung, Boss/Passagier-Überlappung behoben.**
+- **Doch ein echter Bug bei „zu wenige Achievements"**: die Analyse aus der
+  fünften Runde (reine Wahrnehmungsfrage durch den Reihen-Reset) war
+  unvollständig. Der eigentliche Übeltäter: `game.gd::_on_stage_populated()`
+  hat `_bonus_t` bei **jedem** Stage-Wechsel auf einen frischen Zufallswert
+  gesetzt — unabhängig davon, wie viel von der vorherigen Runde schon
+  abgelaufen war. Ein geübter Spieler, der eine Stage in deutlich unter
+  14 Sekunden leerräumt, lässt den Timer dadurch NIE ablaufen: er wird vor
+  Erreichen der Null immer wieder zurückgesetzt. Bei einem 60000-Punkte-Lauf
+  über viele Stages hinweg erklärt das zwanglos „nur ein einziges Achievement
+  gesehen". Fix: `_bonus_t` wird nur noch **einmal** pro Run gesetzt (in
+  `_new_run()`), `_on_stage_populated()` fasst ihn nicht mehr an — er zählt
+  jetzt durchgehend über Stage-Grenzen hinweg (pausiert nur während
+  READY/ENTERING, wo `_process()` ohnehin früh zurückkehrt). Zusätzlich
+  `BONUS_INTERVAL_MIN/MAX` von 14–24 s auf 9–16 s verkürzt, als zusätzlicher
+  Puffer. Per Live-Test verifiziert: `_bonus_t` lief nach einem erzwungenen
+  sofortigen Stage-Clear (statt zurückgesetzt) einfach weiter herunter und
+  spawnte pünktlich, sobald er in der neuen Stage bei Null ankam.
+- **Nur eindeutige Achievement-Icons pro Reihe**: `bonus_item.gd` bekommt jetzt
+  vor dem Spawn (`game.gd::_spawn_bonus_item()`, gesetzt **vor** `add_child()`
+  — gleiche Reihenfolge-Regel wie beim x-Positions-Bug der dritten Runde) die
+  Liste der in der aktuellen (noch nicht vollen) HUD-Reihe bereits gezeigten
+  Indizes (`hud.gd::current_lap_indices()`) und schließt sie beim
+  Zufalls-Icon aus (`exclude_indices`). `hud.gd` führt dafür jetzt
+  `_bonus_icon_indices` parallel zu `_bonus_icons`. Per Live-Test mit 7
+  aufeinanderfolgenden Pickups verifiziert: alle 7 Icons unterschiedlich,
+  danach korrekter Reihen-Reset.
+- **"+Punkte"-Popup + "Lap!"-Banner**: neue `score_popup.gd` (schlichtes
+  `Node2D` mit eigenem `_draw()`, kein `.tscn` nötig) zeigt kurz "+500" (oder
+  "+3000" inkl. Rundenbonus) genau an der Stelle, wo ein Bonus-Item
+  eingesammelt wurde, treibt dabei leicht nach oben und blendet aus
+  (`game.gd::_spawn_score_popup()`). Gilt **nur** für Bonus-Items, nicht für
+  Gegner-Kills (kein entsprechender Code in `enemy.gd`). Zusätzlich löst ein
+  volles Lap (`hud.add_bonus_icon()` liefert `true`) jetzt `hud.flash_banner
+  ("LAP!")` aus — denselben Center-Banner wie „BEREIT"/„STAGE n" — damit der
+  Reihen-Reset als Belohnungsmoment statt als Verschwinden liest. Per
+  Live-Test verifiziert: Popup-Text, Position und Banner-Text/-Sichtbarkeit
+  exakt wie erwartet.
+- **Einflug-Marge maß vom falschen Bezugspunkt**: die in der vierten Runde
+  eingeführte "erst über der Kanone abschießbar"-Regel verglich gegen
+  `player.global_position.y` — das ist der Schiffs-**Rumpf**, nicht die
+  tatsächliche Laser-Mündung, die `ship.gd::_fire_laser()` schon immer 22 px
+  höher ansetzt. Dadurch konnte ein Gegner, der sich exakt auf Mündungshöhe
+  befand (statt Rumpfhöhe), fälschlich schon als „getroffen, nicht an der
+  Mündung" gelten. Fix: neue benannte Konstante
+  `ship.gd::GUN_MUZZLE_OFFSET_Y = -22.0` (ersetzt die vorher inline
+  hartkodierte `-22` in `_fire_laser()`), `enemy.gd::_is_invulnerable()`
+  rechnet jetzt `gun_y = player.global_position.y + GUN_MUZZLE_OFFSET_Y` und
+  vergleicht die Gegnerhöhen-Marge dagegen statt gegen den rohen Rumpf-y-Wert.
+  Per Live-Test mit dem alten UND dem neuen Schwellenwert verifiziert: die
+  neue Zone ist um die vollen 22 px großzügiger als vorher.
+- **Settings-Menü: Stepper-Buttons jetzt spaltenweise ausgerichtet**: die
+  vorherige Ein-`HBoxContainer`-pro-Zeile-Bauweise (`_stepper()`) ließ jede
+  Zeile ihre eigene Beschriftungsbreite bestimmen — „Boss alle X Punkte" /
+  „Sieg bei X Punkten" überschritten die fest verdrahtete 150px-Minimalbreite
+  der kürzeren Zeilen („Leben" etc.), wodurch deren `</>`-Buttons spürbar
+  weiter rechts standen als bei den anderen Zeilen. Fix: `_stepper()` →
+  `_add_stepper(grid, ...)`, alle Stepper-Zeilen sind jetzt flache Kinder
+  **eines** gemeinsamen `GridContainer` (4 Spalten: Name/</Wert/>) in
+  `_build_settings()` statt eigener Boxen — ein `GridContainer` sizt jede
+  Spalte automatisch auf die breiteste Zelle über ALLE Zeilen hinweg, macht
+  die Ausrichtung also automatisch und robust gegen künftig noch längere
+  Label-Texte. `_refresh_settings()` iteriert jetzt direkt über die
+  Grid-Kinder (Meta `get_text` sitzt auf dem Wert-Control selbst statt auf
+  einem Zeilen-Wrapper). Per Screenshot verifiziert: alle `<`/`>` exakt
+  spaltenweise übereinander, unabhängig von der Label-Länge.
+- **Boss/gefangenes-Schiff-Überlappung behoben**: das Passagier-Sprite
+  (`ship_captured.png`, `enemy.gd::_spawn_captive_visual()`) hing bei voller
+  Größe (Skalierung 0.11, wie das Spieler-Schiff) und 30px Versatz so weit
+  unter dem Boss, dass es in die Formationsreihe direkt darunter hineinragte,
+  sobald diese noch besetzt war. Zwei kombinierte Fixes (beide vom Nutzer
+  vorgeschlagen): (1) Passagier kleiner (`CAPTIVE_SCALE = 0.085`) und näher
+  am Boss (`CAPTIVE_OFFSET_Y = 22.0`, vorher 30), (2) `formation.gd`s
+  Boss-Zeile (Zeile 0) bekommt ein neues `BOSS_ROW_Y_NUDGE = -10.0`, das NUR
+  auf Boss-Slots angewendet wird — `ROW_SPACING` selbst bleibt unverändert,
+  alle anderen Zeilen sind also unberührt, nur der Abstand zwischen Boss- und
+  der Zeile darunter wächst um 10px. `_selftest.gd`s
+  "every slot sits inside the upper half"-Check musste entsprechend auf
+  `s.y < Formation.BOSS_ROW_Y_NUDGE` (statt `< 0.0`) angepasst werden, da die
+  Boss-Zeile jetzt absichtlich leicht negativ liegt. Per Live-Screenshot
+  verifiziert: sichtbarer Abstand zwischen Passagier-Sprite und der
+  Goei-Zeile darunter, keine Überlappung mehr.
 
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
@@ -573,7 +661,10 @@ StageDirector, Ship, HUD-CanvasLayer.
   globale Leben-Anzeige-Regel) → bei Rest: Reconstruct-Animation statt reinem
   Timer-Wait, dann `respawn()`; bei 0 → GAME_OVER (1 s Delay, dann
   `menus.show_game_over`, Tree pausiert). Während `FORMATION` außerdem alle
-  `BONUS_INTERVAL_MIN/MAX` ein `bonus_item` (`_spawn_bonus_item()`). Pause
+  `BONUS_INTERVAL_MIN/MAX` (9–16 s) ein `bonus_item` (`_spawn_bonus_item()`) —
+  `_bonus_t` wird seit 2026-09-13 nur einmal pro Run gesetzt (`_new_run()`),
+  NICHT mehr bei jedem Stage-Wechsel zurückgesetzt (das war der eigentliche
+  Bug hinter "zu wenige Achievements", siehe „Sechste Playtest-Runde"). Pause
   (`pause`-Action / HUD-Button)
   → Tree pausiert + `menus.show_pause()`. `_enter_title()` bei „Zum Titel".
   `_snd` = `get_node_or_null("/root/Snd")` (bare `Snd` bricht `_selftest`).
@@ -598,10 +689,17 @@ StageDirector, Ship, HUD-CanvasLayer.
   (`BONUS_MAX_SHOWN = 7`, `add_bonus_icon()` liefert `true` zurück, sobald eine
   Reihe voll ist; `_bonus_laps` + `_draw_lap_marker()` zeigen dann einen
   goldenen „× N"-Rundenzähler daneben, siehe „Dritte Playtest-Runde").
+  `_bonus_icon_indices` (parallel zu `_bonus_icons`, seit 2026-09-13) +
+  `current_lap_indices()` lassen `bonus_item.gd` Duplikate innerhalb einer
+  Reihe ausschließen (siehe „Sechste Playtest-Runde").
 - `menus.gd` (`class_name Menus`, eigener `CanvasLayer` in `game.tscn`,
   `process_mode = ALWAYS`) — alle Menü-Screens im Code wie tetris' `ui.gd`:
-  Titel, Pause, Einstellungen (Stepper Leben / Extra-Leben / Boss alle X
-  Punkte / Max. Schüsse / Schwierigkeit), Sound-Unterseite (HSlider pro Sound,
+  Titel, Pause, Einstellungen (`_add_stepper()` hängt Name/</Wert/>-Zellen
+  seit 2026-09-13 flach in ein gemeinsames `GridContainer` statt je Zeile
+  einen eigenen `HBoxContainer` zu bauen — sonst richten sich `</>` nicht
+  spaltenweise aus, siehe „Sechste Playtest-Runde"; Stepper: Leben /
+  Extra-Leben / Boss alle X Punkte / Sieg bei X Punkten / Max. Schüsse /
+  Schwierigkeit), Sound-Unterseite (HSlider pro Sound,
   Loslassen = Vorhören), Hilfe (3 Textseiten mit ‹/›), Game-Over +
   Hall-of-Fame-Liste + Namenseingabe bei Qualifikation. Signale `start_game` /
   `resume_game` / `to_title` / `settings_changed`. „Beenden" nur wenn nicht
@@ -649,6 +747,9 @@ Steuerung Touch: **Drag irgendwo** = relatives Lenken (`ship._unhandled_input`,
 - `formation.gd` (`class_name Formation`) — 40 Slots (`ROWS`: 4 Boss / 8+8 Goei /
   10+10 Zako), Slot-Geometrie, „Breathing"-Sway des ganzen Blocks, Flap-Timer
   (`flap_toggled`), Belegungs-Tracking (`assign`/`release`/`live_count`).
+  `BOSS_ROW_Y_NUDGE = -10.0` (seit 2026-09-13) hebt nur die Boss-Zeile leicht
+  an — Platz für den gefangenen-Schiff-Passagier, ohne `ROW_SPACING` für die
+  übrigen Zeilen anzufassen (siehe „Sechste Playtest-Runde").
 - `entry_paths.gd` (`class_name EntryPaths`) — 3 Einflug-Muster (`BOTTOM_UP`,
   `TOP_LEFT`, `TOP_RIGHT`) als viewport-skalierte `Curve2D`, Catmull-Rom-Tangenten.
 - `attack_paths.gd` (`class_name AttackPaths`) — `dive(slot, player, vp)` würfelt
@@ -692,9 +793,14 @@ Steuerung Touch: **Drag irgendwo** = relatives Lenken (`ship._unhandled_input`,
   Kollision Layer 4 / Maske 8. `_is_invulnerable()` blockt `_explode()`
   (Laser wird trotzdem konsumiert) während `CAPTURE_APPROACH`, `CAPTURE_BEAM`
   und `RETURNING`-mit-`_carrying_captive` (siehe „Dritte Playtest-Runde"),
-  und seit 2026-09-13 zusätzlich während `FLYING_IN`, solange die
-  y-Position noch unter der des Schiffs liegt (der `BOTTOM_UP`-Einflug startet
-  unterhalb des Bildschirms — siehe „Vierte Playtest-Runde").
+  und während `FLYING_IN`, solange die y-Position noch unter der tatsächlichen
+  Kanonenmündung liegt (der `BOTTOM_UP`-Einflug startet unterhalb des
+  Bildschirms — siehe „Vierte Playtest-Runde"; misst seit 2026-09-13 korrekt
+  gegen `ship.gd::GUN_MUZZLE_OFFSET_Y` statt gegen den Schiffsrumpf, siehe
+  „Sechste Playtest-Runde"). `CAPTIVE_SCALE`/`CAPTIVE_OFFSET_Y` (seit
+  2026-09-13, siehe „Sechste Playtest-Runde") verkleinern/verschieben das
+  Passagier-Sprite in `_spawn_captive_visual()`, um Überlappung mit der
+  Formationsreihe darunter zu vermeiden.
 - **Boss-Capture** (`enemy.gd` + `capture_beam.gd`/`.tscn` + `attack_paths.gd`s
   `capture_approach()`): Boss hovert statt durchzufliegen (CAPTURE_APPROACH),
   lässt `capture_beam.tscn` herab (grüner Strahl, wächst/hält/zieht sich
@@ -726,10 +832,17 @@ Steuerung Touch: **Drag irgendwo** = relatives Lenken (`ship._unhandled_input`,
   von außen als Spawn-x übergeben — siehe „Dritte Playtest-Runde" für den
   Reihenfolge-Bug, der es vorher an den linken Rand klebte), Layer 2
   (collectibles) / Maske 9 (player + player_shots), zufälliges Icon aus 12 von
-  16 `achievement_00..15.png` (5/6/7 und seit 2026-09-13 auch 1
-  ausgeschlossen), 500 Punkte, per Berührung oder Laser einsammelbar,
-  `collected(points, icon, icon_index)`-Signal (der Index seit 2026-09-13
-  zusätzlich, damit `game.gd` Index 0 als Hyper-Ammo-Auslöser erkennen kann).
+  16 `achievement_00..15.png` (5/6/7 und 1 ausgeschlossen), 500 Punkte, per
+  Berührung oder Laser einsammelbar, `collected(points, icon, icon_index,
+  at_position)`-Signal (Index für Hyper-Ammo-Erkennung, Position für
+  `score_popup.gd`). `exclude_indices` (seit 2026-09-13, vor `add_child()`
+  von `game.gd` gesetzt) verhindert doppelte Icons innerhalb einer HUD-Reihe
+  — siehe „Sechste Playtest-Runde".
+- `score_popup.gd` (neu, 2026-09-13) — schlichtes `Node2D` mit eigenem
+  `_draw()` (kein `.tscn`, per `preload(...).new()` instanziiert), zeigt kurz
+  "+N" an einer Weltposition, treibt nach oben, blendet aus,
+  `queue_free()`. Nur für Bonus-Item-Pickups (`game.gd::
+  _spawn_score_popup()`), nicht für Gegner-Kills.
 - `ship_reconstruct.gd` / `ship_reconstruct.tscn` — einmalige „Schiff
   materialisiert sich"-Animation (`AnimatedSprite2D`, 28 Frames aus
   `ship-(re)construction.gif`), `build_done`-Signal, self-`queue_free()`.

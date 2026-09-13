@@ -42,6 +42,7 @@ const BANNER_TOTAL := BANNER_HOLD + BANNER_FADE
 var _lives := 0
 var _banner_tween: Tween
 var _bonus_icons: Array[Texture2D] = []
+var _bonus_icon_indices: Array[int] = []
 var _bonus_laps := 0
 
 signal pause_pressed
@@ -70,17 +71,26 @@ func set_lives(n: int) -> void:
 
 ## Returns true if this icon completed a full row (lap) — the caller
 ## (game.gd) awards BONUS_LAP_POINTS when that happens.
-func add_bonus_icon(tex: Texture2D) -> bool:
+func add_bonus_icon(tex: Texture2D, idx: int) -> bool:
 	_bonus_icons.append(tex)
+	_bonus_icon_indices.append(idx)
 	var lap_done := _bonus_icons.size() >= BONUS_MAX_SHOWN
 	if lap_done:
 		_bonus_laps += 1
 		_bonus_icons.clear()
+		_bonus_icon_indices.clear()
 	queue_redraw()
 	return lap_done
 
+## Which icon indices are already shown in the CURRENT (unfinished) row — a
+## new bonus_item (see bonus_item.gd) excludes these so the same achievement
+## never appears twice before the row resets.
+func current_lap_indices() -> Array[int]:
+	return _bonus_icon_indices.duplicate()
+
 func clear_bonus_icons() -> void:
 	_bonus_icons.clear()
+	_bonus_icon_indices.clear()
 	_bonus_laps = 0
 	queue_redraw()
 

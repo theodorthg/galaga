@@ -142,11 +142,20 @@ func _begin_capture_beam() -> void:
 		return
 	_begin_return()
 
+## Smaller than the player's own Sprite2D scale (0.11) and closer to the Boss
+## than a straight 1:1 match would put it — at full ship size + the original
+## 30px offset, it hung low enough to visually overlap the formation row
+## right below the Boss row (see formation.gd's BOSS_ROW_Y_NUDGE for the other
+## half of that fix). Reads fine as "small captured passenger", not "same
+## size as its carrier".
+const CAPTIVE_SCALE := 0.085
+const CAPTIVE_OFFSET_Y := 22.0
+
 func _spawn_captive_visual() -> void:
 	_captive_visual = Sprite2D.new()
 	_captive_visual.texture = CAPTIVE_TEXTURE
-	_captive_visual.scale = Vector2.ONE * 0.11  # matches player Sprite2D in ship.tscn
-	_captive_visual.position = Vector2(0, 30)
+	_captive_visual.scale = Vector2.ONE * CAPTIVE_SCALE
+	_captive_visual.position = Vector2(0, CAPTIVE_OFFSET_Y)
 	add_child(_captive_visual)
 	# Every Boss at a given stage looks identical (from stage 2+ they all share
 	# the same reskin) — without an obvious marker, "shoot the one that's
@@ -228,11 +237,13 @@ func _begin_lock() -> void:
 ##    the screen and flies them up past the player before they loop into
 ##    formation — while still level with or below the ship's own gun,
 ##    "shooting" them makes no physical sense (the beam fires upward from the
-##    ship). The margin is a full enemy height (diameter), not just the exact
-##    gun y, so the enemy has visibly cleared the muzzle before it counts as
-##    "above" it — being exactly at gun height still reads as "shot out of the
-##    barrel", not a real hit. Only applies during FLYING_IN; TOP_LEFT/
-##    TOP_RIGHT entries never start below the ship, so this is a no-op for them.
+##    ship). The margin is a full enemy height (diameter) above the actual
+##    MUZZLE point (ship.gd::GUN_MUZZLE_OFFSET_Y, 22px above the ship's own
+##    body origin — comparing against the body origin instead measured the
+##    margin from the wrong point and still let enemies get shot right next
+##    to the muzzle), so the enemy has visibly cleared the barrel before it
+##    counts as "above" it. Only applies during FLYING_IN; TOP_LEFT/TOP_RIGHT
+##    entries never start below the ship, so this is a no-op for them.
 func _is_invulnerable() -> bool:
 	if _state == CAPTURE_APPROACH or _state == CAPTURE_BEAM \
 		or (_state == RETURNING and _carrying_captive):
@@ -241,7 +252,8 @@ func _is_invulnerable() -> bool:
 		var player := get_tree().get_first_node_in_group("player")
 		if player:
 			var enemy_height: float = float(EnemyKinds.DATA[kind]["half"]) * 2.0
-			if global_position.y > player.global_position.y - enemy_height:
+			var gun_y: float = player.global_position.y + player.GUN_MUZZLE_OFFSET_Y
+			if global_position.y > gun_y - enemy_height:
 				return true
 	return false
 

@@ -14,8 +14,15 @@ enum { TITLE, READY, ENTERING, FORMATION, GAME_OVER }
 const GAME_OVER_DELAY := 1.0
 const RECONSTRUCT_SCENE := preload("res://ship_reconstruct.tscn")
 const BONUS_ITEM_SCENE := preload("res://bonus_item.tscn")
-const BONUS_INTERVAL_MIN := 14.0
-const BONUS_INTERVAL_MAX := 24.0
+const SCORE_POPUP_SCRIPT := preload("res://score_popup.gd")
+# Tightened from 14-24s (2026-09-13 report: "one achievement in a 60000-point
+# run") — most of that scarcity was actually _on_stage_populated() resetting
+# this timer on every single stage clear (see below), throwing away whatever
+# had already counted down; a good player who clears stages in well under
+# 14s could go an entire run without the timer ever reaching zero. Shortening
+# the range on top of the reset-bug fix gives a bit more headroom either way.
+const BONUS_INTERVAL_MIN := 9.0
+const BONUS_INTERVAL_MAX := 16.0
 
 @onready var _formation: Formation = $Formation
 @onready var _director: StageDirector = $StageDirector
@@ -103,6 +110,10 @@ func _new_run() -> void:
 	_boss_interval = int(_cfg.get("boss_interval", 0))
 	_next_boss_score = _boss_interval
 	_win_score = int(_cfg.get("win_score", 0))
+	# Set ONCE per run, not re-rolled on every stage clear (see
+	# _on_stage_populated() for why that used to throw away a mostly-elapsed
+	# countdown every time a stage ended quickly).
+	_bonus_t = randf_range(BONUS_INTERVAL_MIN, BONUS_INTERVAL_MAX)
 	_pending_twin = false
 	_ship.deactivate_hyper_ammo()  # a fresh game never starts with a leftover buff
 	_director.configure(GameSettings.dive_params(int(_cfg.get("difficulty", 1))))
@@ -173,7 +184,10 @@ func _on_stage_populated() -> void:
 	if _state == ENTERING:
 		_state = FORMATION
 		_director.begin_attacks()
-		_bonus_t = randf_range(BONUS_INTERVAL_MIN, BONUS_INTERVAL_MAX)
+		# _bonus_t deliberately NOT reset here — it counts down continuously
+		# across the whole run (see _new_run()), so a stage cleared in a few
+		# seconds doesn't erase progress a skilled player already built up
+		# toward the next bonus spawn.
 
 ## Arcade-standard cap regardless of genre (Tetris, Galaga, ...) — see the
 ## global CLAUDE.md's life-count rule.
@@ -301,6 +315,10 @@ func _process(delta: float) -> void:
 func _spawn_bonus_item() -> void:
 	var b := BONUS_ITEM_SCENE.instantiate()
 	b.position.y = -30.0
+	# Must be set before add_child() — bonus_item.gd's _ready() (which picks
+	# the icon) fires synchronously during add_child(), same ordering gotcha
+	# as the x-position bug from the "Dritte Playtest-Runde".
+	b.exclude_indices = _hud.current_lap_indices()
 	add_child(b)
 	b.collected.connect(_on_bonus_collected)
 
@@ -308,11 +326,15 @@ func _spawn_bonus_item() -> void:
 ## BONUS_MAX_SHOWN / add_bonus_icon) — on top of the per-item POINTS.
 const BONUS_LAP_POINTS := 2500
 
-func _on_bonus_collected(points: int, icon: Texture2D, icon_index: int) -> void:
+func _on_bonus_collected(points: int, icon: Texture2D, icon_index: int, at_position: Vector2) -> void:
+	var total := points
 	_score += points
-	if _hud.add_bonus_icon(icon):
+	if _hud.add_bonus_icon(icon, icon_index):
+		total += BONUS_LAP_POINTS
 		_score += BONUS_LAP_POINTS
+		_hud.flash_banner("LAP!")
 	_hud.set_score(_score)
+	_spawn_score_popup(at_position, "+%d" % total)
 	_check_boss_threshold()
 	_check_win()
 	# achievement_00 specifically ("the flagship one") grants Hyper-Ammo — two
@@ -321,6 +343,14 @@ func _on_bonus_collected(points: int, icon: Texture2D, icon_index: int) -> void:
 		_ship.activate_hyper_ammo()
 	if _snd:
 		_snd.play("extra")
+
+## Small "+points" floating text at the exact catch point — bonus_item pickups
+## only, deliberately not used for enemy kills.
+func _spawn_score_popup(at: Vector2, text: String) -> void:
+	var p := SCORE_POPUP_SCRIPT.new()
+	p.text = text
+	add_child(p)
+	p.global_position = at
 
 # --- helpers -----------------------------------------------------
 func _clear_board() -> void:

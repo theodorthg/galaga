@@ -24,6 +24,11 @@ const HYPER_OFFSET := 10.0
 ## the resting position up by that length + a small safety margin keeps the
 ## flame clear of it regardless of how main_thruster.tscn's max_length is tuned.
 const THRUSTER_CLEARANCE_MARGIN := 5.0
+## Vertical offset from the ship's own origin to its actual laser muzzle (see
+## _fire_laser() below). enemy.gd reads this too, so its "invulnerable until
+## above the gun" check (BOTTOM_UP fly-in) measures from the real muzzle
+## point instead of the ship's body origin, which sits 22px lower.
+const GUN_MUZZLE_OFFSET_Y := -22.0
 
 var speed := 480.0
 var ship_half_width := 34.0
@@ -113,7 +118,7 @@ func _fire_laser(x_offset: float) -> void:
 	laser.add_to_group("player_lasers")
 	laser.accent_color = Laser.ACCENT_HYPER if _hyper_ammo else Laser.ACCENT_NORMAL
 	get_parent().add_child(laser)
-	laser.global_position = global_position + Vector2(x_offset, -22)
+	laser.global_position = global_position + Vector2(x_offset, GUN_MUZZLE_OFFSET_Y)
 	if _snd:
 		_snd.play("shoot")
 

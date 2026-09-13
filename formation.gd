@@ -11,6 +11,12 @@ const ROW_SPACING := 52.0
 const SWAY_AMP := 24.0
 const SWAY_SPEED := 0.7          # rad/s
 const FLAP_INTERVAL := 0.28      # 2-frame wing-flap cadence for every enemy
+## A Boss carrying a captured ship (enemy.gd's _spawn_captive_visual) draws
+## that passenger sprite hanging below it — nudging the Boss row up a few
+## pixels (only the Boss row; ROW_SPACING itself is untouched, so every other
+## row's spacing is unaffected) buys just enough extra headroom that it no
+## longer visually overlaps the row underneath.
+const BOSS_ROW_Y_NUDGE := -10.0
 
 # row layout, top -> bottom: [kind, count]  (4 + 8 + 8 + 10 + 10 = 40)
 const ROWS := [
@@ -44,9 +50,12 @@ func _build_slots() -> void:
 	var r := 0
 	for row in ROWS:
 		var count: int = row[1]
+		var y := float(r) * ROW_SPACING
+		if row[0] == EnemyKinds.BOSS:
+			y += BOSS_ROW_Y_NUDGE
 		for i in count:
 			var x := (i - (count - 1) / 2.0) * COL_SPACING
-			_slots_local.append(Vector2(x, r * ROW_SPACING))
+			_slots_local.append(Vector2(x, y))
 			_slot_kind.append(row[0])
 		r += 1
 

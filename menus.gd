@@ -220,18 +220,17 @@ func _button(text: String, cb: Callable) -> Button:
 ## user can type an exact number into (Enter or tapping away commits it) —
 ## on top of the </> steppers, not instead of them. Omit it (e.g. for
 ## Schwierigkeit, a named choice rather than a number) to keep a plain label.
-func _stepper(label_text: String, get_text: Callable, step: Callable, set_from_text := Callable()) -> HBoxContainer:
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 8)
-	row.custom_minimum_size = Vector2(340, TOUCH_H)
-
+## Appends 4 flat children (name, <, value, >) to `grid` — see _build_settings()
+## for why a shared GridContainer replaced one HBoxContainer per row.
+func _add_stepper(grid: GridContainer, label_text: String, get_text: Callable, step: Callable, set_from_text := Callable()) -> void:
 	var name_l := _title_label(label_text, 20)
-	name_l.custom_minimum_size = Vector2(150, 0)
 	name_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	name_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	grid.add_child(name_l)
 
 	var left := _button("<", func(): step.call(-1); _refresh_settings())
 	left.custom_minimum_size = Vector2(56, TOUCH_H)
+	grid.add_child(left)
 
 	var val: Control
 	if set_from_text.is_valid():
@@ -255,17 +254,13 @@ func _stepper(label_text: String, get_text: Callable, step: Callable, set_from_t
 		val = edit
 	else:
 		val = _title_label("", 20, ACCENT)
-	val.name = "Val"
 	val.custom_minimum_size = Vector2(110, TOUCH_H if set_from_text.is_valid() else 0.0)
+	val.set_meta("get_text", get_text)
+	grid.add_child(val)
+
 	var right := _button(">", func(): step.call(1); _refresh_settings())
 	right.custom_minimum_size = Vector2(56, TOUCH_H)
-
-	row.add_child(name_l)
-	row.add_child(left)
-	row.add_child(val)
-	row.add_child(right)
-	row.set_meta("get_text", get_text)
-	return row
+	grid.add_child(right)
 
 # ---------------------------------------------------------------- splash
 ## Deliberately NOT built via _screen() — this should read as a full-bleed
@@ -349,12 +344,23 @@ func _build_settings() -> Control:
 	var box := _box(s)
 	box.add_child(_title_label("Einstellungen", 30))
 	box.add_child(_spacer(10))
-	box.add_child(_stepper("Leben", _fmt_lives, _step_lives, _set_lives_text))
-	box.add_child(_stepper("Extra-Leben", _fmt_extra, _step_extra, _set_extra_text))
-	box.add_child(_stepper("Boss alle X Punkte", _fmt_boss_interval, _step_boss_interval, _set_boss_interval_text))
-	box.add_child(_stepper("Sieg bei X Punkten", _fmt_win_score, _step_win_score, _set_win_score_text))
-	box.add_child(_stepper("Max. Schüsse", _fmt_max_shots, _step_max_shots, _set_max_shots_text))
-	box.add_child(_stepper("Schwierigkeit", _fmt_diff, _step_diff))
+	# GridContainer, not one HBoxContainer per row: a GridContainer sizes each
+	# COLUMN to its widest cell across every row, so </> always line up in the
+	# same x position no matter how long an individual row's label is ("Boss
+	# alle X Punkte" / "Sieg bei X Punkten" overflowed the old fixed-width
+	# label column and threw off just those two rows' buttons).
+	var grid := GridContainer.new()
+	grid.name = "Grid"
+	grid.columns = 4
+	grid.add_theme_constant_override("h_separation", 8)
+	grid.add_theme_constant_override("v_separation", 12)
+	box.add_child(grid)
+	_add_stepper(grid, "Leben", _fmt_lives, _step_lives, _set_lives_text)
+	_add_stepper(grid, "Extra-Leben", _fmt_extra, _step_extra, _set_extra_text)
+	_add_stepper(grid, "Boss alle X Punkte", _fmt_boss_interval, _step_boss_interval, _set_boss_interval_text)
+	_add_stepper(grid, "Sieg bei X Punkten", _fmt_win_score, _step_win_score, _set_win_score_text)
+	_add_stepper(grid, "Max. Schüsse", _fmt_max_shots, _step_max_shots, _set_max_shots_text)
+	_add_stepper(grid, "Schwierigkeit", _fmt_diff, _step_diff)
 	box.add_child(_spacer(8))
 	box.add_child(_button("Sound", func(): _open_sound()))
 	box.add_child(_button("Fertig", func(): _close_sub()))
@@ -366,12 +372,13 @@ func _open_settings(from: String) -> void:
 	_swap("settings")
 
 func _refresh_settings() -> void:
-	for row in _box(_screens["settings"]).get_children():
-		if row.has_meta("get_text"):
-			var val: Control = row.get_node("Val")
-			if val is LineEdit and val.has_focus():
-				continue  # don't clobber text the user is mid-typing
-			val.text = str(row.get_meta("get_text").call())
+	var grid := _box(_screens["settings"]).get_node("Grid")
+	for val in grid.get_children():
+		if not val.has_meta("get_text"):
+			continue
+		if val is LineEdit and val.has_focus():
+			continue  # don't clobber text the user is mid-typing
+		val.text = str(val.get_meta("get_text").call())
 
 func _close_sub() -> void:
 	GameSettings.save(_cfg)

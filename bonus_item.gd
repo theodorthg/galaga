@@ -24,8 +24,17 @@ const SIDE_MARGIN := 40.0
 const ICON_INDICES := [0, 2, 3, 4, 8, 9, 10, 11, 12, 13, 14, 15]
 
 ## icon_index is passed along so game.gd can special-case achievement_00 (see
-## ship.gd::activate_hyper_ammo) — every other index is just points.
-signal collected(points, icon, icon_index)
+## ship.gd::activate_hyper_ammo) — every other index is just points. Position
+## is passed too so game.gd can show a small "+points" popup at the exact
+## spot the item was caught.
+signal collected(points, icon, icon_index, at_position)
+
+## Icon indices already showing in the HUD's current (unfinished) row — set by
+## game.gd BEFORE add_child() (see the ordering note in _spawn_bonus_item()),
+## so the same achievement never appears twice in one row. Always leaves
+## plenty of choices: the row caps at hud.gd's BONUS_MAX_SHOWN (7), well under
+## ICON_INDICES' 12 entries.
+var exclude_indices: Array[int] = []
 
 var _t := 0.0
 var _base_x := 0.0
@@ -50,7 +59,10 @@ func _ready() -> void:
 	_phase = randf_range(0.0, TAU)
 	_sway_speed = randf_range(SWAY_SPEED_MIN, SWAY_SPEED_MAX)
 	position.x = _base_x + sin(_phase) * _amplitude
-	_icon_idx = ICON_INDICES.pick_random()
+	var available := ICON_INDICES.filter(func(i): return i not in exclude_indices)
+	if available.is_empty():
+		available = ICON_INDICES  # shouldn't happen (7-slot row vs 12-icon pool), but never crash
+	_icon_idx = available.pick_random()
 	_icon_tex = load("res://assets/graphics/achievement_%02d.png" % _icon_idx)
 	_sprite.texture = _icon_tex
 	_sprite.scale = Vector2.ONE * (DISPLAY_H / float(_icon_tex.get_height()))
@@ -73,5 +85,5 @@ func _on_area_entered(area: Area2D) -> void:
 		_collect()
 
 func _collect() -> void:
-	collected.emit(POINTS, _icon_tex, _icon_idx)
+	collected.emit(POINTS, _icon_tex, _icon_idx, global_position)
 	queue_free()

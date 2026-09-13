@@ -52,7 +52,10 @@ func _init() -> void:
 	var inside := true
 	for i in f.slot_count():
 		var s := f.slot_local(i)
-		if absf(s.x) > canvas.x * 0.5 or s.y < 0.0 or s.y > canvas.y * 0.5:
+		# Lower bound is BOSS_ROW_Y_NUDGE, not 0 — the Boss row is deliberately
+		# nudged a few px above row 0's nominal y (see formation.gd) to keep a
+		# captured-ship passenger sprite clear of the row underneath it.
+		if absf(s.x) > canvas.x * 0.5 or s.y < Formation.BOSS_ROW_Y_NUDGE or s.y > canvas.y * 0.5:
 			inside = false
 	fails += _expect(inside, "every slot sits inside the upper half of the canvas")
 	f.free()
