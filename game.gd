@@ -34,6 +34,8 @@ var _touch := false
 var _paused := false
 var _snd: Node
 var _bonus_t := 0.0
+var _boss_interval := 0
+var _next_boss_score := 0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -98,6 +100,8 @@ func _new_run() -> void:
 	_lives = int(_cfg.get("lives", 3)) - 1
 	_extra_step = int(_cfg.get("extra_life", 0))
 	_next_extra = _extra_step
+	_boss_interval = int(_cfg.get("boss_interval", 0))
+	_next_boss_score = _boss_interval
 	_pending_twin = false
 	_director.configure(GameSettings.dive_params(int(_cfg.get("difficulty", 1))))
 
@@ -182,6 +186,18 @@ func _on_enemy_killed(points: int) -> void:
 		_hud.set_lives(_lives)
 		if _snd:
 			_snd.play("extra")
+	_check_boss_threshold()
+
+## "Boss alle X Punkte" (GameSettings.boss_interval) — a guaranteed capture
+## attempt on top of StageDirector's own random per-interval chance, so the
+## mechanic isn't left purely to luck. `while` (not `if`) covers a big single
+## score jump (e.g. the bonus-lap bonus) crossing more than one threshold at once.
+func _check_boss_threshold() -> void:
+	if _boss_interval <= 0:
+		return
+	while _score >= _next_boss_score:
+		_next_boss_score += _boss_interval
+		_director.force_boss_capture()
 
 var _pending_twin := false
 
@@ -259,19 +275,24 @@ func _process(delta: float) -> void:
 		_spawn_bonus_item()
 
 ## Occasional bonus pickup — one of the achivements.jpg ship-gallery icons,
-## worth a flat bonus whether flown through or shot (see bonus_item.gd).
+## worth a flat bonus whether flown through or shot; it works out its own
+## full-width sway pattern (see bonus_item.gd), we just drop it in from the top.
 func _spawn_bonus_item() -> void:
 	var b := BONUS_ITEM_SCENE.instantiate()
-	var vp := get_viewport_rect().size
-	var margin := 70.0
+	b.position.y = -30.0
 	add_child(b)
-	b.position = Vector2(randf_range(margin, vp.x - margin), -30.0)
 	b.collected.connect(_on_bonus_collected)
+
+## Extra bonus for clearing a full row of collected icons (see hud.gd's
+## BONUS_MAX_SHOWN / add_bonus_icon) — on top of the per-item POINTS.
+const BONUS_LAP_POINTS := 2500
 
 func _on_bonus_collected(points: int, icon: Texture2D) -> void:
 	_score += points
+	if _hud.add_bonus_icon(icon):
+		_score += BONUS_LAP_POINTS
 	_hud.set_score(_score)
-	_hud.add_bonus_icon(icon)
+	_check_boss_threshold()
 	if _snd:
 		_snd.play("extra")
 

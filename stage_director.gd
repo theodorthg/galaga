@@ -145,6 +145,15 @@ func _launch_dive() -> void:
 func _try_capture_dive() -> void:
 	if randf() >= CAPTURE_CHANCE:
 		return
+	_attempt_capture_dive()
+
+## Called from game.gd whenever the score crosses a "boss every N points"
+## threshold (GameSettings.boss_interval) — a guaranteed attempt on top of the
+## per-interval random chance above, so a Boss capture isn't left purely to luck.
+func force_boss_capture() -> void:
+	_attempt_capture_dive()
+
+func _attempt_capture_dive() -> void:
 	var divers := 0
 	var bosses: Array = []
 	for e in get_tree().get_nodes_in_group("enemy"):

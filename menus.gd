@@ -348,6 +348,7 @@ func _build_settings() -> Control:
 	box.add_child(_spacer(10))
 	box.add_child(_stepper("Leben", _fmt_lives, _step_lives, _set_lives_text))
 	box.add_child(_stepper("Extra-Leben", _fmt_extra, _step_extra, _set_extra_text))
+	box.add_child(_stepper("Boss alle X Punkte", _fmt_boss_interval, _step_boss_interval, _set_boss_interval_text))
 	box.add_child(_stepper("Max. Schüsse", _fmt_max_shots, _step_max_shots, _set_max_shots_text))
 	box.add_child(_stepper("Schwierigkeit", _fmt_diff, _step_diff))
 	box.add_child(_spacer(8))
@@ -390,6 +391,18 @@ func _set_extra_text(t: String) -> void:
 		return
 	var n := clampi(t.to_int(), 0, GameSettings.EXTRA_MAX)
 	_cfg.extra_life = int(roundf(float(n) / GameSettings.EXTRA_STEP)) * GameSettings.EXTRA_STEP
+
+func _fmt_boss_interval() -> String:
+	return "aus" if _cfg.boss_interval == 0 else str(_cfg.boss_interval)
+func _step_boss_interval(d: int) -> void:
+	_cfg.boss_interval = clampi(_cfg.boss_interval + d * GameSettings.BOSS_INTERVAL_STEP, 0, GameSettings.BOSS_INTERVAL_MAX)
+func _set_boss_interval_text(t: String) -> void:
+	var s := t.strip_edges().to_lower()
+	if s == "" or s == "aus":
+		_cfg.boss_interval = 0
+		return
+	var n := clampi(t.to_int(), 0, GameSettings.BOSS_INTERVAL_MAX)
+	_cfg.boss_interval = int(roundf(float(n) / GameSettings.BOSS_INTERVAL_STEP)) * GameSettings.BOSS_INTERVAL_STEP
 
 func _fmt_max_shots() -> String: return str(_cfg.max_shots)
 func _step_max_shots(d: int) -> void:

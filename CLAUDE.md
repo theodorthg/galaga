@@ -347,7 +347,83 @@ Sichtbarkeit, Leben-Anzeige.**
   Farbkonzept der Menüs braucht noch Arbeit (unspezifisch, kein Detail
   genannt); der Laser (aktuell reines Weiß, `laser.gd::_draw()`) soll
   „irgendwas Blaues" enthalten. Beides vorgemerkt für einen dedizierten
-  Optik-Durchgang, siehe „Offen" Punkt 8.
+  Optik-Durchgang, siehe „Offen" Punkt 8. **Ein Teilaspekt ist seit 2026-09-13
+  erledigt** — die grüne Überschriften-Outline, siehe unten.
+
+**Dritte Playtest-Runde (2026-09-13): Bonus-Item-Sweep-Bug, Achievement-Liste
+gekürzt + Runden-Zähler, garantierter Boss per Punkte-Schwelle, Boss während
+Capture unverwundbar, Überschriften-Outline auf Cyan.**
+- **Echter Bug gefunden: Bonus-Items klebten am linken Rand fest und liefen
+  teils aus dem Bildschirm** — Ursache war `game.gd::_spawn_bonus_item()`:
+  `add_child(b)` lief VOR `b.position = ...`, `_ready()` feuert aber
+  synchron schon während `add_child()` — `bonus_item.gd` las `_base_x =
+  position.x` also immer als `(0, 0)`, die anschließend gesetzte
+  Zufalls-x-Position wurde von der nächsten `_process()`-Zeile sofort wieder
+  überschrieben. Kein Zufalls-/Balance-Problem, ein reiner Reihenfolge-Bug.
+  Fix + Redesign zugleich: `bonus_item.gd` berechnet seine x-Bewegung jetzt
+  selbst aus der eigenen Viewport-Breite (`_base_x = vp.x/2`,
+  `_amplitude = vp.x/2 - SIDE_MARGIN`, zufällige Phase + Sway-Geschwindigkeit
+  pro Item) statt eines kleinen Wobbles um eine von außen übergebene
+  Spawn-x — schwingt dadurch wirklich über die **gesamte** Bildschirmbreite
+  (mit Rand-Marge, damit es nie clippt), `game.gd` setzt nur noch die
+  Spawn-Höhe. Per direktem `_process()`-Loop im MCP-Script verifiziert:
+  x-Bereich über 200 simulierte Frames lief von 40 bis 500 (Design-Canvas
+  540 breit, Marge 40) — deckt praktisch die volle Breite ab, nie negativ.
+- **Achievement-Icon-Liste weiter eingeschränkt**: Index 1 (`achievement_01.png`)
+  raus — sieht im Spiel zu leicht mit dem eigentlichen Spieler-Schiff-Sprite
+  verwechselbar aus (Verwirrungsgefahr mitten im Gefecht). Zusammen mit den
+  schon vorher ausgeschlossenen 5/6/7 (Hintergrundreste) bleiben 12 von 16
+  Indizes im Pool (`bonus_item.gd::ICON_INDICES`).
+- **Bonus-Icon-Reihe: Maximalbreite + Runden-Zähler statt endlosem
+  Nachschieben**: `hud.gd`s `BONUS_MAX_SHOWN` 8→7 (mehr passt nicht
+  überschneidungsfrei nebeneinander). Erreicht die Reihe 7 Icons, gibt es
+  jetzt statt reinem Herausschieben des ältesten Icons einen Bonus
+  (`game.gd::BONUS_LAP_POINTS = 2500`), die Reihe wird geleert und ein
+  kleiner goldener „Runden"-Marker mit `× N` erscheint rechts daneben
+  (`hud.gd::_draw_lap_marker`, `_bonus_laps`) — zählt, wie oft eine volle
+  7er-Reihe schon abgeräumt wurde, bleibt über den Marker sichtbar, auch
+  wenn die aktuelle Reihe wieder leer ist. `add_bonus_icon()` gibt jetzt
+  `true` zurück, wenn genau dieser Pickup die Reihe voll gemacht hat —
+  `game.gd::_on_bonus_collected()` vergibt den Bonus dann. Per
+  End-to-End-Script verifiziert (8 simulierte Pickups: Reihe füllt sich
+  1→6, beim 7. Icon Reset auf 0 + Bonus + `_bonus_laps` 0→1).
+- **Garantierter Boss-Capture-Versuch alle N Punkte** (zusätzlich zur
+  bestehenden Zufallschance pro Intervall in `stage_director.gd`): neue
+  Einstellung „Boss alle X Punkte" (`GameSettings.boss_interval`, Default
+  5000, 0 = aus, Schritt `BOSS_INTERVAL_STEP` = 1000 bis
+  `BOSS_INTERVAL_MAX` = 20000) — Stepper in `menus.gd` neben Extra-Leben
+  (gleiches „aus"/Zahl-Textfeld-Muster). `game.gd` merkt sich
+  `_next_boss_score` (gesetzt in `_new_run()`), `_check_boss_threshold()`
+  läuft nach jeder Punktegutschrift (Gegner-Kill UND Bonus-Item-Pickup) und
+  ruft bei Schwellenüberschreitung `StageDirector.force_boss_capture()` —
+  dieselbe Auswahllogik wie die zufällige `_try_capture_dive()`, nur ohne
+  den `CAPTURE_CHANCE`-Würfel (beide rufen jetzt den gemeinsamen
+  `_attempt_capture_dive()`). Per Score-Manipulation im MCP-Script
+  verifiziert: Schwelle bei 5000 überschritten → ein Boss wechselte
+  augenblicklich in `CAPTURE_APPROACH`.
+- **Boss während Capture + Rückflug unverwundbar**: bisher konnte ein
+  bereits abgefeuerter Schuss den Boss noch während des Traktorstrahls oder
+  kurz nach dem Fang treffen — man hat den Fang dann teils gar nicht
+  mitbekommen. `enemy.gd::_is_invulnerable()` (neu) blockt Laser-Treffer
+  während `CAPTURE_APPROACH`, `CAPTURE_BEAM`, sowie `RETURNING`
+  **solange er das Schiff trägt** (`_carrying_captive`) — der Laser wird
+  trotzdem konsumiert (kein Durchschuss), nur `_explode()` wird
+  übersprungen. Verwundbar wieder, sobald er in Formation eingerastet ist
+  (`IN_FORMATION`) — die Boss-Reihe ist laut `formation.gd::ROWS` ohnehin
+  schon die oberste Reihe (Index 0), „nach oben zurückkehren" ist hier
+  also identisch mit „zurück in den eigenen Slot". Per drei gezielten
+  Zustands-/Treffer-Kombinationen im MCP-Script verifiziert (Treffer
+  während `CAPTURE_APPROACH`, während `CAPTURE_BEAM`+tragend, während
+  `RETURNING`+tragend → jeweils wirkungslos; Treffer in `IN_FORMATION` →
+  `_explode()` greift normal).
+- **Überschriften-Outline Grün → Cyan**: `ui_style.gd::impact_label()`s
+  Outline-Default war `Color("0f9668")` (Grünton, passte zu keinem anderen
+  UI-Element) — jetzt `ACCENT` (`4db2ff`), dasselbe Cyan wie Button-Ränder,
+  Einstellungs-Zahlen und Hilfe-Seiten-Punkte. Betrifft automatisch jede
+  Menü-Überschrift (`menus.gd::_title_label` ab Schriftgröße 24) UND das
+  In-Game-„STAGE n"-Banner (`hud.gd`, nutzt dieselbe Funktion) — bewusst
+  nicht getrennt, für ein einheitliches Bild. Per Screenshot verifiziert
+  (Titel-Screen „GALAGA").
 
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
@@ -374,18 +450,26 @@ StageDirector, Ship, HUD-CanvasLayer.
   statt wachsender Reihe — `_lives` ist die Reserve, siehe `game.gd`),
   Center-Banner, Touch-Pause-Button (`set_touch`), Signal `pause_pressed`,
   `set_playing(on)` blendet das ganze HUD bei offenem Menü aus. Titel / Pause /
-  Settings / Game-Over macht jetzt `menus.gd`.
+  Settings / Game-Over macht jetzt `menus.gd`. Bonus-Icon-Reihe unten mittig
+  (`BONUS_MAX_SHOWN = 7`, `add_bonus_icon()` liefert `true` zurück, sobald eine
+  Reihe voll ist; `_bonus_laps` + `_draw_lap_marker()` zeigen dann einen
+  goldenen „× N"-Rundenzähler daneben, siehe „Dritte Playtest-Runde").
 - `menus.gd` (`class_name Menus`, eigener `CanvasLayer` in `game.tscn`,
   `process_mode = ALWAYS`) — alle Menü-Screens im Code wie tetris' `ui.gd`:
-  Titel, Pause, Einstellungen (Stepper Leben / Extra-Leben / Schwierigkeit),
-  Sound-Unterseite (HSlider pro Sound, Loslassen = Vorhören), Hilfe (3 Textseiten
-  mit ‹/›), Game-Over + Hall-of-Fame-Liste + Namenseingabe bei Qualifikation.
-  Signale `start_game` / `resume_game` / `to_title` / `settings_changed`.
-  „Beenden" nur wenn nicht `OS.has_feature("web")`.
+  Titel, Pause, Einstellungen (Stepper Leben / Extra-Leben / Boss alle X
+  Punkte / Max. Schüsse / Schwierigkeit), Sound-Unterseite (HSlider pro Sound,
+  Loslassen = Vorhören), Hilfe (3 Textseiten mit ‹/›), Game-Over +
+  Hall-of-Fame-Liste + Namenseingabe bei Qualifikation. Signale `start_game` /
+  `resume_game` / `to_title` / `settings_changed`. „Beenden" nur wenn nicht
+  `OS.has_feature("web")`. Überschriften-Outline ist `UiStyle.ACCENT` (Cyan,
+  seit 2026-09-13 — vorher ein unpassendes Grün).
 - `game_settings.gd` (`class_name GameSettings`) — `user://settings.cfg` `[s]`:
   `lives` (`LIVES_MIN/MAX` = 2–9), `extra_life` (0 = aus, sonst
   `EXTRA_STEP`=1000 bis `EXTRA_MAX`=30000), `max_shots` (`MAX_SHOTS_MIN/MAX`
-  = 1–5, gleichzeitig fliegende Laser), `difficulty` (0–2).
+  = 1–5, gleichzeitig fliegende Laser), `boss_interval` (0 = aus, sonst
+  `BOSS_INTERVAL_STEP`=1000 bis `BOSS_INTERVAL_MAX`=20000 — garantierter
+  Boss-Capture-Versuch alle N Punkte, siehe „Dritte Playtest-Runde"),
+  `difficulty` (0–2).
   `dive_params(difficulty)` → `{first, min, max, max_divers}` für den Director.
 - `hall_of_fame.gd` (`class_name HallOfFame`) — `user://hall_of_fame.cfg`, Top 10
   nach Score (`qualifies` / `insert`).
@@ -440,7 +524,12 @@ Steuerung Touch: **Drag irgendwo** = relatives Lenken (`ship._unhandled_input`,
   (`_try_capture_dive()`, alle `CAPTURE_INTERVAL_MIN`–`MAX` = 5–9 s, 33 %
   Chance, nur wenn ein Boss frei ist und noch kein Schiff gefangen ist) —
   nicht mehr an die Zufallsauswahl der normalen Dive-Lotterie gekoppelt (siehe
-  „Boss-Capture-Race-Condition (Teil 2)" und „Zweite Playtest-Runde").
+  „Boss-Capture-Race-Condition (Teil 2)" und „Zweite Playtest-Runde"). Beide
+  Wege (Zufallschance UND der garantierte Punkte-Schwellenwert aus
+  `game.gd::_check_boss_threshold()`) laufen seit 2026-09-13 über dieselbe
+  `_attempt_capture_dive()` — `_try_capture_dive()` würfelt zuerst
+  `CAPTURE_CHANCE`, `force_boss_capture()` (von `game.gd` aufgerufen) ruft sie
+  direkt ohne Würfeln auf.
   `stop_attacks()` beim Stage-Wechsel. Reicht `enemy_killed(points)` und
   `ship_rescued` durch.
 - `enemy.gd` (Area2D, kein `class_name`) — States FLYING_IN / LOCKING /
@@ -452,7 +541,10 @@ Steuerung Touch: **Drag irgendwo** = relatives Lenken (`ship._unhandled_input`,
   bis zu 2 Bomben (`bomb.tscn`), kehrt nach dem Kurvenende via `return_to`
   zurück und belegt den Slot neu. Sprite + Skew/Squash-Flap
   (`EnemyKinds.DATA[kind]["texture"/"scale"]`, siehe „Erste echte Assets").
-  Kollision Layer 4 / Maske 8.
+  Kollision Layer 4 / Maske 8. `_is_invulnerable()` (seit 2026-09-13) blockt
+  `_explode()` (Laser wird trotzdem konsumiert) während `CAPTURE_APPROACH`,
+  `CAPTURE_BEAM` und `RETURNING`-mit-`_carrying_captive` — siehe „Dritte
+  Playtest-Runde".
 - **Boss-Capture** (`enemy.gd` + `capture_beam.gd`/`.tscn` + `attack_paths.gd`s
   `capture_approach()`): Boss hovert statt durchzufliegen (CAPTURE_APPROACH),
   lässt `capture_beam.tscn` herab (grüner Strahl, wächst/hält/zieht sich
@@ -475,11 +567,15 @@ Steuerung Touch: **Drag irgendwo** = relatives Lenken (`ship._unhandled_input`,
   Hitbox 9×18 (sichtbarer Strahl bleibt 3 px schmal — großzügiger als er
   aussieht, Nutzer fand Treffen zu schwer). Farbe rein weiß — soll laut
   Nutzer noch „irgendwas Blaues" bekommen, siehe „Offen" Punkt 8.
-- `bonus_item.gd` / `bonus_item.tscn` — Bonus-Sammelobjekt, fällt langsam mit
-  Schlingern vom oberen Rand, Layer 2 (collectibles) / Maske 9 (player +
-  player_shots), zufälliges Icon aus `achievement_00..15.png` (siehe „Ship-
-  Reconstruct-Intro/Respawn, Bonus-Sammelobjekte..."), 500 Punkte, per
-  Berührung oder Laser einsammelbar, `collected(points, icon)`-Signal.
+- `bonus_item.gd` / `bonus_item.tscn` — Bonus-Sammelobjekt, fällt langsam,
+  schwingt seit 2026-09-13 selbstständig über die **gesamte** Bildschirmbreite
+  (`_base_x`/`_amplitude` aus der eigenen Viewport-Breite berechnet, nicht mehr
+  von außen als Spawn-x übergeben — siehe „Dritte Playtest-Runde" für den
+  Reihenfolge-Bug, der es vorher an den linken Rand klebte), Layer 2
+  (collectibles) / Maske 9 (player + player_shots), zufälliges Icon aus 12 von
+  16 `achievement_00..15.png` (5/6/7 und seit 2026-09-13 auch 1
+  ausgeschlossen), 500 Punkte, per Berührung oder Laser einsammelbar,
+  `collected(points, icon)`-Signal.
 - `ship_reconstruct.gd` / `ship_reconstruct.tscn` — einmalige „Schiff
   materialisiert sich"-Animation (`AnimatedSprite2D`, 28 Frames aus
   `ship-(re)construction.gif`), `build_done`-Signal, self-`queue_free()`.
@@ -600,14 +696,19 @@ und „Boss-Capture" weiter oben für Details.
    Nutzer sucht ggf. passende Sounds selbst (auch unter den ursprünglich
    kopierten OGGs, nicht nur den SFX-Rips) — bei Bedarf hier ergänzen und
    `sound_manager.gd`s `SOUNDS`/`ORDER` erweitern.
-8. **Menü-Farbkonzept + Laser-Farbe** (Nutzer-Feedback 2026-09-12, noch nicht
-   umgesetzt) — Menüs brauchen laut Nutzer noch Arbeit am Farbkonzept (kein
-   Detail genannt, erst mal nur vorgemerkt); der Laser (`laser.gd::_draw()`,
-   aktuell reines Weiß/`cfefff`) soll „irgendwas Blaues" enthalten statt nur
-   Weiß zu sein.
+8. **Menü-Farbkonzept + Laser-Farbe** (Nutzer-Feedback 2026-09-12) — **Teil
+   erledigt 2026-09-13**: die grüne Überschriften-Outline ist jetzt Cyan
+   (`UiStyle.impact_label()`, siehe „Dritte Playtest-Runde"). Weiterhin offen:
+   der Rest des Menü-Farbkonzepts (kein Detail genannt, erst mal nur
+   vorgemerkt) und der Laser (`laser.gd::_draw()`, aktuell reines Weiß/
+   `cfefff`) soll „irgendwas Blaues" enthalten statt nur Weiß zu sein.
 9. **`ship-warp-drive.gif` / `hyper-ammo.gif` / `cyclone-ammo.gif`** —
    vorhanden (siehe „Ship-Reconstruct-Intro/Respawn..." weiter oben für Maße),
    Einsatzzweck noch offen, Nutzer will sich das später überlegen.
+10. **Hilfe-Seiten um mehr Grafik erweitern** (Nutzerwunsch 2026-09-13) —
+    nächste Runde nach Prüfung des aktuellen Stands durch den Nutzer. Die
+    Ziel-Seite hat seit 2026-09-12 schon eine Icon-Legende (Punkt 3 oben), die
+    beiden Steuerungs-Seiten sind weiterhin reiner Text.
 
 ## Aseprite MCP Pro
 

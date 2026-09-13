@@ -219,9 +219,21 @@ func _begin_lock() -> void:
 	locked_in.emit(self)
 	_finish()
 
+## Shootable Boss coverup: while it's hovering to beam up the ship, or already
+## carrying one back up to its formation slot (top row — see Formation's ROWS
+## layout), a hit is absorbed with no effect. Without this, the Boss could die
+## mid-capture off a shot already in flight and the player would never even
+## see that the tractor beam had caught them. Vulnerable again the instant it
+## settles back into formation (_begin_lock() -> IN_FORMATION).
+func _is_invulnerable() -> bool:
+	return _state == CAPTURE_APPROACH or _state == CAPTURE_BEAM \
+		or (_state == RETURNING and _carrying_captive)
+
 func _on_area_entered(area: Area2D) -> void:
 	if area.is_in_group("player_lasers"):
 		area.queue_free()
+		if _is_invulnerable():
+			return
 		_explode()
 
 func _explode() -> void:
