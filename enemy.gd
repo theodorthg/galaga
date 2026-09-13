@@ -226,18 +226,23 @@ func _begin_lock() -> void:
 ##    Vulnerable again once it settles back into formation (IN_FORMATION).
 ##  - The BOTTOM_UP fly-in entry (entry_paths.gd) spawns enemies from BELOW
 ##    the screen and flies them up past the player before they loop into
-##    formation — while still below the ship's own gun height, "shooting"
-##    them makes no physical sense (the beam fires upward from the ship).
-##    Only applies during FLYING_IN; TOP_LEFT/TOP_RIGHT entries never start
-##    below the ship, so this is a no-op for them.
+##    formation — while still level with or below the ship's own gun,
+##    "shooting" them makes no physical sense (the beam fires upward from the
+##    ship). The margin is a full enemy height (diameter), not just the exact
+##    gun y, so the enemy has visibly cleared the muzzle before it counts as
+##    "above" it — being exactly at gun height still reads as "shot out of the
+##    barrel", not a real hit. Only applies during FLYING_IN; TOP_LEFT/
+##    TOP_RIGHT entries never start below the ship, so this is a no-op for them.
 func _is_invulnerable() -> bool:
 	if _state == CAPTURE_APPROACH or _state == CAPTURE_BEAM \
 		or (_state == RETURNING and _carrying_captive):
 		return true
 	if _state == FLYING_IN:
 		var player := get_tree().get_first_node_in_group("player")
-		if player and global_position.y > player.global_position.y:
-			return true
+		if player:
+			var enemy_height: float = float(EnemyKinds.DATA[kind]["half"]) * 2.0
+			if global_position.y > player.global_position.y - enemy_height:
+				return true
 	return false
 
 func _on_area_entered(area: Area2D) -> void:

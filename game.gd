@@ -66,7 +66,6 @@ func _apply_display_mode() -> void:
 	get_window().content_scale_aspect = (
 		Window.CONTENT_SCALE_ASPECT_KEEP_WIDTH if _touch
 		else Window.CONTENT_SCALE_ASPECT_KEEP)
-	_hud.set_touch(_touch)
 
 func apply_touch_layout() -> void:
 	if _touch:

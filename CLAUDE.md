@@ -502,6 +502,63 @@ Sieg-Bedingung.**
   die Schwelle geschoben → Zustand wechselt zu GAME_OVER, Screenshot zeigt
   „SIEG!" korrekt mit Score/Stage und Namenseingabe).
 
+**Fünfte Playtest-Runde (2026-09-13): Überschriften weiß statt gelb,
+Pause-Button jetzt Milchglas + immer sichtbar/mausklickbar, Einflug-Marge um
+eine Gegnerhöhe vergrößert, Achievement-Spawnrate überprüft (kein Bug).**
+- **Überschriften Weiß statt Gelb**: `ui_style.gd::impact_label()`s
+  Default-Füllfarbe war `Color("ffe066")` (Gelb) — jetzt `Color.WHITE`, Outline
+  bleibt Cyan (`ACCENT`, seit „Dritte Playtest-Runde"). Betrifft wie beim
+  Outline-Fix automatisch jede Menü-Überschrift UND das In-Game-„STAGE
+  n"-Banner (gleiche Funktion, bewusst nicht getrennt).
+- **Pause-Button: Milchglas + immer da, nicht nur Touch** — die globale
+  CLAUDE.md fordert seit Punkt 15 („Menü-Optik") explizit Milchglas-Optik für
+  den Pause-Button, das war für Galaga nie umgesetzt; zusätzlich war der
+  Button überhaupt nur sichtbar, wenn `_touch` erkannt wurde
+  (`hud.gd::set_touch()`) — auf Desktop/Maus unsichtbar und unklickbar, obwohl
+  die Klick-Verdrahtung (`pressed`-Signal) längst da war. Fix: `set_touch()`
+  entfernt (war die einzige Verwendung), `PauseButton.visible` ist jetzt
+  immer `true` (`game.tscn`). Neue `hud.gd::_add_pause_glass()`: derselbe
+  Trick wie `UiStyle.make_glass_backdrop()` in den Menüs (`BackBufferCopy` +
+  geshaderte `ColorRect`), nur auf die Button-Fläche statt den ganzen Screen
+  zugeschnitten (Rect exakt aus `_pause_btn`s eigenen Offsets übernommen,
+  nicht separat hartkodiert) und dauerhaft sichtbar statt nur bei offenem
+  Menü. Zeichenreihenfolge ist wichtig und per `move_child()` erzwungen:
+  BackBufferCopy VOR dem Button (sonst würde es den Button mit ins
+  Unschärfe-Sample einfangen), ColorRect NACH dem BackBufferCopy aber VOR dem
+  Button (sonst würde die Unschärfe über Button-Text/-Stil zeichnen). Der
+  bestehende `UiStyle.style_button()`-Akzent-Tint bleibt zusätzlich obendrauf
+  (gleiches „Glas + Tönung"-Prinzip wie bei den Menü-Panels). Per Live-Test
+  verifiziert: Button oben rechts sichtbar mit sichtbar geblurrtem Hintergrund,
+  per `click_button_by_text` (simuliert echten Mausklick) öffnet er zuverlässig
+  das Pausenmenü.
+- **Einflug-von-unten-Marge um eine Gegnerhöhe vergrößert**: die am
+  2026-09-13 (vierte Runde) eingeführte Regel „erst über der Kanonenhöhe
+  abschießbar" verglich exakt gegen `player.global_position.y` — traf einen
+  Gegner exakt auf Kanonenhöhe, sah das wie „aus dem Lauf geschossen" aus,
+  nicht wie ein echter Treffer. `enemy.gd::_is_invulnerable()` vergleicht
+  jetzt gegen `player.global_position.y - enemy_height` (`enemy_height` =
+  `EnemyKinds.DATA[kind]["half"] * 2`, je nach Gegnertyp 26–36 px) — der
+  Gegner muss also eine volle eigene Körperhöhe über der Kanonenspitze sein,
+  bevor er verwundbar wird. Per Live-Test mit drei Positionen (auf Kanonenhöhe,
+  knapp innerhalb der neuen Marge, knapp darüber) verifiziert.
+- **„Viel weniger Achievements" — überprüft, kein Bug gefunden**:
+  Nutzer-Sorge, die neue 7er-Reihen-Grenze/der Rundenzähler
+  („Dritte Playtest-Runde") könnte versehentlich auch die Spawnrate der
+  Bonus-Items selbst gedrückt haben. `game.gd`s Spawn-Timer
+  (`BONUS_INTERVAL_MIN/MAX` = 14–24 s) wurde in keiner der letzten beiden
+  Runden angefasst; per Live-Messung (`Time.get_ticks_msec()` vor/nach einem
+  beobachteten Spawn) bestätigt: Intervall lief exakt im erwarteten Rahmen,
+  ein Bonus-Item spawnte pünktlich. Die wahrscheinlichste Erklärung für den
+  Eindruck „weniger": das ist das VOM NUTZER SELBST gewünschte Verhalten aus
+  der dritten Runde — die Icon-Reihe zeigte vorher (Cap 8, `pop_front()`)
+  nach den ersten 8 Pickups dauerhaft eine volle Reihe; jetzt leert sie sich
+  bei jeder vollen 7er-Reihe komplett und baut sich von 0 neu auf, was sich
+  optisch nach "plötzlich kommt nichts mehr" anfühlen kann, obwohl im
+  Hintergrund exakt gleich oft gespawnt/gesammelt wird. Nicht ungefragt
+  geändert (war explizite Vorgabe), aber hier vermerkt, falls das Design
+  nochmal in Frage gestellt wird — z. B. mit einem kurzen "Lap!"-Aufblitzen
+  beim Reset, damit es als Belohnung statt als Verschwinden liest.
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,
@@ -532,7 +589,10 @@ StageDirector, Ship, HUD-CanvasLayer.
   Stage (unten rechts), Leben unten links (`_draw`, echte `player_trim.png`-
   Sprites statt Platzhalter-Dreiecke; ab `MANY_THRESHOLD = 5` ein Icon + „× N"
   statt wachsender Reihe — `_lives` ist die Reserve, siehe `game.gd`),
-  Center-Banner, Touch-Pause-Button (`set_touch`), Signal `pause_pressed`,
+  Center-Banner, Pause-Button oben rechts (seit 2026-09-13 immer sichtbar/
+  mausklickbar statt nur auf Touch-Geräten, mit eigenem Milchglas-Hintergrund
+  via `_add_pause_glass()` — siehe „Fünfte Playtest-Runde"), Signal
+  `pause_pressed`,
   `set_playing(on)` blendet das ganze HUD bei offenem Menü aus. Titel / Pause /
   Settings / Game-Over macht jetzt `menus.gd`. Bonus-Icon-Reihe unten mittig
   (`BONUS_MAX_SHOWN = 7`, `add_bonus_icon()` liefert `true` zurück, sobald eine
@@ -790,13 +850,12 @@ und „Boss-Capture" weiter oben für Details.
    Nutzer sucht ggf. passende Sounds selbst (auch unter den ursprünglich
    kopierten OGGs, nicht nur den SFX-Rips) — bei Bedarf hier ergänzen und
    `sound_manager.gd`s `SOUNDS`/`ORDER` erweitern.
-8. **Menü-Farbkonzept + Laser-Farbe** (Nutzer-Feedback 2026-09-12) — **beide
-   Teilpunkte jetzt erledigt**: die grüne Überschriften-Outline ist Cyan
-   (2026-09-13, „Dritte Playtest-Runde"), der Laser flasht seit 2026-09-13
-   Weiß/Türkis statt statisch reinweiß zu sein (siehe „Vierte
-   Playtest-Runde"). Weiterhin unspezifisch offen: der Rest des
-   Menü-Farbkonzepts abseits der Outline-Farbe (der Nutzer nannte nie ein
-   konkretes Detail dazu).
+8. **Menü-Farbkonzept + Laser-Farbe** (Nutzer-Feedback 2026-09-12) —
+   Outline-Farbe (Grün→Cyan) und Überschriften-Füllfarbe (Gelb→Weiß) erledigt
+   (siehe „Dritte" bzw. „Fünfte Playtest-Runde"), Laser flasht seit
+   „Vierte Playtest-Runde" Weiß/Türkis statt statisch reinweiß. Kein
+   konkretes weiteres Detail vom Nutzer genannt — als vorerst abgeschlossen
+   zu betrachten, bis neues Feedback kommt.
 9. **`ship-warp-drive.gif` / `hyper-ammo.gif` / `cyclone-ammo.gif`** —
    vorhanden (siehe „Ship-Reconstruct-Intro/Respawn..." weiter oben für Maße),
    Einsatzzweck noch offen, Nutzer will sich das später überlegen. **Wichtig:

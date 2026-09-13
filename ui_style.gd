@@ -48,12 +48,13 @@ static func heading(text: String, size: int, color := Color.WHITE) -> Label:
 	return l
 
 ## "Marquee" treatment for big impact moments (GAME OVER, the STAGE banner,
-## every menu heading via _title_label) — a warm fill + a colored (not just
-## black) outline, plus a soft drop shadow for an embossed/"plastic" pop
+## every menu heading via _title_label) — a white fill with a colored (not
+## just black) outline, plus a soft drop shadow for an embossed/"plastic" pop
 ## instead of flat colored text on the panel. Outline uses the same cyan ACCENT
 ## as buttons/settings numbers/help dots — was a green that clashed with the
-## rest of the palette, per user feedback.
-static func impact_label(l: Label, fill := Color("ffe066"), outline := ACCENT) -> void:
+## rest of the palette, per user feedback; the fill itself was yellow before
+## that, also user feedback (2026-09-13) to switch to plain white.
+static func impact_label(l: Label, fill := Color.WHITE, outline := ACCENT) -> void:
 	l.add_theme_color_override("font_color", fill)
 	l.add_theme_color_override("font_outline_color", outline)
 	l.add_theme_constant_override("outline_size", 9)

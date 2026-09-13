@@ -2,14 +2,16 @@ class_name Hud
 extends Control
 
 ## In-play HUD only: score (top-left), stage (bottom-right), remaining lives as
-## little ship marks (bottom-left, drawn), the centre "STAGE n" banner, and — on
-## touch devices — a pause button in the top band.
+## little ship marks (bottom-left, drawn), the centre "STAGE n" banner, and a
+## top-right pause button (frosted glass, always visible — clickable with the
+## mouse on desktop, not just a touch-only affordance).
 ## Title / pause / settings / game-over screens live in menus.gd.
 
 @onready var _score: Label = $Score
 @onready var _stage: Label = $Stage
 @onready var _banner: Label = $Banner
 @onready var _pause_btn: Button = $PauseButton
+var _pause_glass: ColorRect
 
 ## Small ship icons, bottom-left — the real ship art rather than a generic
 ## placeholder, per the user's request. Below MANY_THRESHOLD each spare ship
@@ -48,8 +50,9 @@ func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	resized.connect(queue_redraw)
 	_pause_btn.pressed.connect(func(): pause_pressed.emit())
-	_pause_btn.visible = false
+	_pause_btn.visible = true
 	UiStyle.style_button(_pause_btn)
+	_add_pause_glass()
 	UiStyle.impact_label(_banner)
 	_stage.add_theme_color_override("font_color", UiStyle.ACCENT)
 	_stage.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
@@ -81,8 +84,28 @@ func clear_bonus_icons() -> void:
 	_bonus_laps = 0
 	queue_redraw()
 
-func set_touch(on: bool) -> void:
-	_pause_btn.visible = on
+## Frosted-glass chip sized to the pause button's own rect — same trick as
+## menus.gd's full-screen backdrop (UiStyle.make_glass_backdrop()), just
+## scaled to one small control instead of the whole panel, and always on
+## (not toggled) since the pause button itself is always visible now.
+func _add_pause_glass() -> void:
+	var g := UiStyle.make_glass_backdrop()
+	# Draw order matters twice over here: the BackBufferCopy must capture the
+	# frame BEFORE the button draws (else it'd blur-capture its own button),
+	# and the glass ColorRect must draw AFTER the backbuffer but BEFORE the
+	# button (else the blur would paint over the button's label/style).
+	var btn_idx := _pause_btn.get_index()
+	add_child(g.backbuffer)
+	move_child(g.backbuffer, btn_idx)
+	add_child(g.glass)
+	move_child(g.glass, btn_idx + 1)
+	_pause_glass = g.glass
+	_pause_glass.visible = true
+	_pause_glass.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	_pause_glass.offset_left = _pause_btn.offset_left
+	_pause_glass.offset_top = _pause_btn.offset_top
+	_pause_glass.offset_right = _pause_btn.offset_right
+	_pause_glass.offset_bottom = _pause_btn.offset_bottom
 
 # hide the whole HUD while a full-screen menu is up
 func set_playing(on: bool) -> void:
