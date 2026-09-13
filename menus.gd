@@ -162,10 +162,15 @@ func show_run_summary(score: int, stage: int, won: bool, rescues: int, rescue_po
 	_fill_summary(score, won, rescues, rescue_points, achievements, laps, kill_stats)
 	_swap("summary")
 
-## Reachable from the title screen (user request) — a read-only look at the
-## board, no name entry involved (that only ever happens right after a run,
-## via show_game_over()'s "gameover" screen).
-func show_highscores() -> void:
+## Reachable from the title screen AND, since the twelfth playtest round, the
+## in-game pause menu (user request) — a read-only look at the board, no name
+## entry involved (that only ever happens right after a run, via
+## show_game_over()'s "gameover" screen). `from` reuses the same _return_to
+## mechanism as settings/help so "Fertig" goes back to wherever this was
+## opened from — opening it from Pause and always landing on the title screen
+## afterwards would silently strand the paused run.
+func show_highscores(from := "title") -> void:
+	_return_to = from
 	_render_hof_into(_highscores_box, HallOfFame.load_list(), -1)
 	_swap("highscores")
 
@@ -338,7 +343,7 @@ func _build_title() -> Control:
 	box.add_child(_spacer(18))
 	box.add_child(_button("Spielen", func(): start_game.emit()))
 	box.add_child(_button("Einstellungen", func(): _open_settings("title")))
-	box.add_child(_button("Highscores", func(): show_highscores()))
+	box.add_child(_button("Highscores", func(): show_highscores("title")))
 	box.add_child(_button("Hilfe", func(): _open_help("title")))
 	if not IS_WEB:
 		box.add_child(_button("Beenden", func(): get_tree().quit()))
@@ -352,6 +357,7 @@ func _build_pause() -> Control:
 	box.add_child(_spacer(14))
 	box.add_child(_button("Weiter", func(): resume_game.emit()))
 	box.add_child(_button("Einstellungen", func(): _open_settings("pause")))
+	box.add_child(_button("Highscores", func(): show_highscores("pause")))
 	box.add_child(_button("Hilfe", func(): _open_help("pause")))
 	box.add_child(_button("Start-Menü", func(): to_title.emit()))
 	if not IS_WEB:
@@ -895,7 +901,7 @@ func _build_highscores() -> Control:
 	_highscores_box.add_theme_constant_override("v_separation", 2)
 	box.add_child(_highscores_box)
 	box.add_child(_spacer(10))
-	box.add_child(_button("Fertig", func(): _swap("title")))
+	box.add_child(_button("Fertig", func(): _swap(_return_to)))
 	return s
 
 # ---------------------------------------------------------------- misc

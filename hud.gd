@@ -24,9 +24,13 @@ const MANY_THRESHOLD := 3
 
 ## Bottom-centre row of collected bonus_item icons (see bonus_item.gd). A full
 ## row of BONUS_MAX_SHOWN is the most that fits without crowding — reaching it
-## grants a lap bonus (game.gd's BONUS_LAP_POINTS) right away, then after a
-## short hold (LAP_HOLD_TIME, so the completed row is actually seen) bumps the
-## turquoise lap counter and clears the row so collecting can start again.
+## grants a lap bonus (game.gd's BONUS_LAP_POINTS) and bumps the turquoise lap
+## counter right away, but the row itself keeps showing all 7 icons — it only
+## clears once the NEXT achievement (any icon) is actually collected, which
+## then starts the new row with just that one icon (user request: a fixed
+## hold felt too short/arbitrary — showing the completed row for as long as
+## nothing else happens, then having the very next pickup both clear it and
+## kick off the new row, reads as a cleaner reward moment).
 const BONUS_ICON_H := 22.0
 const BONUS_ICON_GAP := 6.0
 const BONUS_MAX_SHOWN := 7
@@ -35,12 +39,6 @@ const BONUS_MAX_SHOWN := 7
 # the more saturated Laser.ACCENT_NORMAL this used at first) rather than the
 # gold it used to be, so the two neighbouring HUD elements read as one family.
 const BONUS_LAP_COLOR := UiStyle.ACCENT
-## How long a just-completed 7-icon row stays fully visible before it clears
-## and the lap counter ticks up (user report: the 7th, previously-unseen icon
-## used to get wiped in the very same frame it was added — add_bonus_icon()
-## below returned "lap done" and the row was cleared synchronously, so the
-## HUD never actually drew that 7th icon even once).
-const LAP_HOLD_TIME := 0.7
 ## Lap marker now sits at a FIXED spot near the right edge (user request: was
 ## drawn immediately after the icon row, which made it drift left/right with
 ## the row's own width) — anchored off the Stage label's own left edge
@@ -110,50 +108,42 @@ func set_lives(n: int) -> void:
 	_lives = maxi(n, 0)
 	queue_redraw()
 
-## Returns true if this icon completed a full row (lap) — the caller (game.gd)
+## Returns true if THIS icon completed a full row (lap) — the caller (game.gd)
 ## awards BONUS_LAP_POINTS and flashes the "LAP!" banner right away when that
-## happens. The row itself, though, stays fully visible (all 7 icons drawn)
-## for LAP_HOLD_TIME before it actually clears and the lap counter ticks up —
-## see _finish_lap() below.
+## happens, and _bonus_laps is already bumped by the time this returns. The
+## row itself stays fully visible (all 7 icons) after that; it doesn't clear
+## here. Instead, a pickup arriving while _lap_pending is true (i.e. the very
+## next call after a lap completed) wipes the old row first and starts the
+## new one with just this icon — see the _lap_pending branch below.
 func add_bonus_icon(tex: Texture2D, idx: int) -> bool:
 	if _lap_pending:
-		# The row is already full and holding for display (see _finish_lap()) —
-		# a pickup landing during that ~0.7s window still scores in game.gd (it
-		# adds its own points before calling this), it just doesn't get a slot
-		# in the row: appending here would let the row grow past BONUS_MAX_SHOWN
-		# until the hold ends (caught live: 6 extra test pickups during one
-		# hold window pushed the drawn row to 8 icons, spilling into the lap
-		# marker's reserved space).
-		return false
+		_bonus_icons.clear()
+		_bonus_icon_indices.clear()
+		_lap_pending = false
 	_bonus_icons.append(tex)
 	_bonus_icon_indices.append(idx)
 	queue_redraw()
 	var lap_done := _bonus_icons.size() >= BONUS_MAX_SHOWN
 	if lap_done:
 		_lap_pending = true
-		get_tree().create_timer(LAP_HOLD_TIME, false).timeout.connect(_finish_lap)
+		_bonus_laps += 1
 	return lap_done
-
-func _finish_lap() -> void:
-	if not _lap_pending:
-		return  # a run reset (clear_bonus_icons()) already cancelled this
-	_lap_pending = false
-	_bonus_laps += 1
-	_bonus_icons.clear()
-	_bonus_icon_indices.clear()
-	queue_redraw()
 
 ## Which icon indices are already shown in the CURRENT (unfinished) row — a
 ## new bonus_item (see bonus_item.gd) excludes these so the same achievement
-## never appears twice before the row resets.
+## never appears twice before the row resets. While _lap_pending is true the
+## shown row is actually a completed, about-to-be-wiped one (see
+## add_bonus_icon() above) — nothing to protect against duplicating there.
 func current_lap_indices() -> Array[int]:
+	if _lap_pending:
+		return []
 	return _bonus_icon_indices.duplicate()
 
 func clear_bonus_icons() -> void:
 	_bonus_icons.clear()
 	_bonus_icon_indices.clear()
 	_bonus_laps = 0
-	_lap_pending = false  # cancels any in-flight _finish_lap() from the last run
+	_lap_pending = false  # a run reset shouldn't wipe the NEXT run's first icon
 	queue_redraw()
 
 ## Frosted-glass chip sized to the pause button's own rect — same trick as

@@ -1131,6 +1131,40 @@ Bug bei der Schiffsposition auf hohen Touch-Geräten gefunden + behoben.**
   Fix ausgeführt → Position sprang zuverlässig auf den aus der aktuellen
   Viewport-Höhe berechneten korrekten Wert zurück).
 
+**Zwölfte Playtest-Runde (2026-09-13): Bonus-Icon-Reihe hält event-basiert
+statt fester Zeit, Highscores auch aus dem Pausenmenü erreichbar.**
+- **Bonus-Icon-Reihe: "Halten bis zum nächsten Pickup" statt fixer
+  `LAP_HOLD_TIME`** (Nutzerwunsch — eine feste Sekundenzahl wirkte beliebig).
+  `hud.gd::add_bonus_icon()` erhöht `_bonus_laps` jetzt SOFORT beim 7. Icon
+  (der Lap-Zähler zeigt also augenblicklich „x+1", nicht erst nach einer
+  Wartezeit) und setzt `_lap_pending = true`, räumt die Reihe aber NICHT
+  selbst ab — sie bleibt mit allen 7 Icons stehen, solange nichts weiter
+  passiert. Erst der NÄCHSTE Aufruf von `add_bonus_icon()` (irgendein
+  künftiges Achievement) leert die alte Reihe und wird selbst zum einzigen
+  Icon der neuen Reihe. Der bisherige `LAP_HOLD_TIME`-Timer (0,7 s) und
+  `_finish_lap()` sind komplett entfallen — kein Timer mehr im Spiel,
+  rein ereignisgesteuert. `current_lap_indices()` liefert während
+  `_lap_pending` eine leere Liste (die alte, volle Reihe wird ohnehin gleich
+  komplett ersetzt, „schon gesehene Icons ausschließen" ergibt für sie keinen
+  Sinn mehr). Per Live-Test verifiziert: nach dem 7. Pickup `_bonus_laps=1`
+  UND alle 7 Icons weiterhin sichtbar (`_lap_pending=true`); ein 8. simulierter
+  Pickup danach leerte die Reihe auf genau 1 Icon, ohne `_bonus_laps` erneut
+  zu erhöhen (`lap_done=false`).
+- **Highscores jetzt auch aus dem Pausenmenü erreichbar** (Nutzerwunsch —
+  bisher nur vom Titelbildschirm aus, siehe neunte Playtest-Runde). Neuer
+  Button „Highscores" in `menus.gd::_build_pause()`, zwischen „Einstellungen"
+  und „Hilfe". `show_highscores()` nimmt jetzt einen `from`-Parameter
+  (Default `"title"`) und setzt `_return_to` genau wie `_open_settings()`/
+  `_open_help()` — sonst hätte „Fertig" auf der Highscore-Seite eine aus der
+  Pause heraus geöffnete Ansicht immer zum Titelbildschirm geschickt und die
+  pausierte Runde dabei stillschweigend verloren. `_build_highscores()`s
+  „Fertig" ruft entsprechend `_swap(_return_to)` statt fest `_swap("title")`.
+  Per Live-Test verifiziert (direkter Aufruf von `_swap(_return_to)` nach
+  `show_highscores("pause")`, da `click_button_by_text` bei zwei gleich
+  benannten „Fertig"-Buttons im Baum — bekannte Einschränkung, siehe
+  übergeordnete CLAUDE.md — den falschen traf): `_return_to` korrekt
+  `"pause"`, Bildschirm nach dem Swap tatsächlich wieder „PAUSE".
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,
@@ -1203,12 +1237,12 @@ StageDirector, Ship, HUD-CanvasLayer.
   `set_playing(on)` blendet das ganze HUD bei offenem Menü aus. Titel / Pause /
   Settings / Game-Over macht jetzt `menus.gd`. Bonus-Icon-Reihe unten mittig
   (`BONUS_MAX_SHOWN = 7`, `add_bonus_icon()` liefert `true` zurück, sobald eine
-  Reihe voll ist; das 7. Icon bleibt seit der achten Playtest-Runde
-  `LAP_HOLD_TIME` (0,7 s) sichtbar stehen, bevor `_finish_lap()` `_bonus_laps`
-  hochzählt und die Reihe leert — vorher verschwand es im selben Frame, in dem
-  es hinzukam. Ein während des Hold-Fensters eintreffendes Icon wird von
-  `add_bonus_icon()` abgewiesen (zählt in `game.gd` trotzdem Punkte), sonst
-  wüchse die Reihe über 7 hinaus. `_draw_lap_marker()` zeigt den türkisen
+  Reihe voll ist — `_bonus_laps` wird dabei SOFORT hochgezählt, seit der
+  zwölften Playtest-Runde ohne Timer: die volle 7er-Reihe bleibt danach
+  einfach stehen (`_lap_pending`), bis irgendein KÜNFTIGES Achievement
+  eintrifft — genau dieses leert dann die alte Reihe und wird selbst zum
+  einzigen Icon der neuen (vorher: fester `LAP_HOLD_TIME`-Timer von 0,7 s,
+  siehe „Achte"/„Zwölfte Playtest-Runde"). `_draw_lap_marker()` zeigt den türkisen
   (vorher goldenen) „× N"-Rundenzähler jetzt IMMER, auch bei 0 Runden, an
   seiner festen Position — siehe „Dritte Playtest-Runde" für die Position
   selbst). Die Icon-Reihe selbst ist seit der achten Playtest-Runde
@@ -1258,9 +1292,12 @@ StageDirector, Ship, HUD-CanvasLayer.
   Playtest-Runde prüft es zuerst den entpausierten Baum als Zeichen einer
   Wiederbelebung und blendet dann stattdessen ALLE Menüs aus. Die HoF-Liste
   (`_hof_box`, gerendert über das seit der neunten Playtest-Runde geteilte
-  `_render_hof_into(box, list, highlight)` — auch vom neuen, rein lesenden
-  `"highscores"`-Screen genutzt, erreichbar über einen neuen Button im
-  Titel-Bildschirm, siehe `show_highscores()`) ist seit der siebten
+  `_render_hof_into(box, list, highlight)` — auch vom rein lesenden
+  `"highscores"`-Screen genutzt, erreichbar über einen Button im
+  Titel-Bildschirm UND (seit der zwölften Playtest-Runde) im Pausenmenü;
+  `show_highscores(from)` setzt `_return_to` wie `_open_settings()`/
+  `_open_help()`, damit „Fertig" dorthin zurückführt, siehe dort) ist seit der
+  siebten
   Playtest-Runde ein `GridContainer` (Platz/Name/Score-Spalten,
   rechts-/links-/rechtsbündig) statt einer `VBoxContainer` mit
   leerzeichen-aufgefüllten Text-Zeilen — Letzteres richtete sich in einer
