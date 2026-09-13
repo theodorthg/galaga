@@ -30,9 +30,11 @@ const MANY_THRESHOLD := 3
 const BONUS_ICON_H := 22.0
 const BONUS_ICON_GAP := 6.0
 const BONUS_MAX_SHOWN := 7
-# Turquoise (user request) — matches Laser.ACCENT_NORMAL, the other "in-flight"
-# accent colour, rather than the gold it used to be (didn't match anything else).
-const BONUS_LAP_COLOR := Color("40e0d0")
+# Same colour as the Stage label right next to it (UiStyle.ACCENT — a
+# blue-leaning turquoise, per the user: "also a kind of turquoise", just not
+# the more saturated Laser.ACCENT_NORMAL this used at first) rather than the
+# gold it used to be, so the two neighbouring HUD elements read as one family.
+const BONUS_LAP_COLOR := UiStyle.ACCENT
 ## How long a just-completed 7-icon row stays fully visible before it clears
 ## and the lap counter ticks up (user report: the 7th, previously-unseen icon
 ## used to get wiped in the very same frame it was added — add_bonus_icon()
@@ -46,7 +48,12 @@ const LAP_HOLD_TIME := 0.7
 ## Stage on its right and stays clear of the bonus-icon row (centered, max
 ## 6 icons shown before a lap clears it) on its left.
 const STAGE_LABEL_LEFT := 170.0
-const LAP_MARKER_GAP_RIGHT := 14.0
+# Trimmed from 14 (user report: too much air to Stage, too little to the
+# achievement row) — moving the marker right shrinks the Stage gap by exactly
+# this much AND grows the achievement-row gap by about half as much again
+# (the row's own centering formula also shifts right as the usable zone
+# shrinks), so this one number improves both complaints at once.
+const LAP_MARKER_GAP_RIGHT := 6.0
 const LAP_MARKER_W := 54.0
 const ICON_ROW_GAP_FROM_MARKER := 10.0
 ## Shifts the whole achievement-icon row right, off dead-center (user report:

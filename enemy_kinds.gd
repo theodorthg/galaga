@@ -46,6 +46,11 @@ const BOSS_VARIANTS := [
 ## Which texture(s) a formation slot should use, given its kind and the
 ## current stage. Stage 1 always gets the classic DATA look; stage 2+ cycles
 ## GOEI/ZAKO/BOSS through the Gyaraga variants above for stage-to-stage variety.
+## The returned "variant_idx" (-1 for the classic stage-1 look, else the index
+## into *_VARIANTS above) lets enemy.gd tag which of the several distinct
+## sprites per kind actually died — see game.gd's per-sprite kill breakdown on
+## the run-summary screen (there are 8 visually distinct enemies total across
+## the 3 scoring tiers, not just 3, once stage variants are counted).
 static func pick_visual(kind: int, stage: int) -> Dictionary:
 	var variants: Array = []
 	match kind:
@@ -56,5 +61,24 @@ static func pick_visual(kind: int, stage: int) -> Dictionary:
 		BOSS:
 			variants = BOSS_VARIANTS
 	if stage >= 2 and not variants.is_empty():
-		return variants[(stage - 2) % variants.size()]
-	return {"frames": [], "texture": DATA[kind]["texture"], "scale": DATA[kind]["scale"]}
+		var idx := (stage - 2) % variants.size()
+		var v: Dictionary = variants[idx].duplicate()
+		v["variant_idx"] = idx
+		return v
+	return {"frames": [], "texture": DATA[kind]["texture"], "scale": DATA[kind]["scale"], "variant_idx": -1}
+
+## A single representative texture path for (kind, variant_idx) — used for the
+## run-summary kill-breakdown icons (game.gd/menus.gd), where only a still
+## image is needed, not the live flap animation.
+static func icon_texture(kind: int, variant_idx: int) -> String:
+	if variant_idx < 0:
+		return DATA[kind]["texture"]
+	var variants: Array = []
+	match kind:
+		GOEI:
+			variants = GOEI_VARIANTS
+		ZAKO:
+			variants = ZAKO_VARIANTS
+		BOSS:
+			variants = BOSS_VARIANTS
+	return variants[variant_idx]["frames"][0]

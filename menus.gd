@@ -93,6 +93,7 @@ func _ready() -> void:
 	_screens["help"] = _build_help()
 	_screens["gameover"] = _build_gameover()
 	_screens["summary"] = _build_summary()
+	_screens["highscores"] = _build_highscores()
 	for s in _screens.values():
 		_root.add_child(s)
 	hide_all()
@@ -160,10 +161,17 @@ func show_game_over(score: int, stage: int, won := false) -> void:
 ## Fame rank if they'd qualify. Only after "Weiter" does the player reach the
 ## actual name-entry screen. `won` distinguishes the "Sieg bei X Punkten"
 ## ending from a regular game over, same as show_game_over().
-func show_run_summary(score: int, stage: int, won: bool, rescues: int, rescue_points: int, achievements: int, laps: int, kill_counts: Dictionary, kill_points: Dictionary) -> void:
+func show_run_summary(score: int, stage: int, won: bool, rescues: int, rescue_points: int, achievements: int, laps: int, kill_stats: Array) -> void:
 	_pending = {"score": score, "stage": stage, "won": won}
-	_fill_summary(score, won, rescues, rescue_points, achievements, laps, kill_counts, kill_points)
+	_fill_summary(score, won, rescues, rescue_points, achievements, laps, kill_stats)
 	_swap("summary")
+
+## Reachable from the title screen (user request) — a read-only look at the
+## board, no name entry involved (that only ever happens right after a run,
+## via show_game_over()'s "gameover" screen).
+func show_highscores() -> void:
+	_render_hof_into(_highscores_box, HallOfFame.load_list(), -1)
+	_swap("highscores")
 
 # ---------------------------------------------------------------- helpers
 func _swap(name: String) -> void:
@@ -334,6 +342,7 @@ func _build_title() -> Control:
 	box.add_child(_spacer(18))
 	box.add_child(_button("Spielen", func(): start_game.emit()))
 	box.add_child(_button("Einstellungen", func(): _open_settings("title")))
+	box.add_child(_button("Highscores", func(): show_highscores()))
 	box.add_child(_button("Hilfe", func(): _open_help("title")))
 	if not IS_WEB:
 		box.add_child(_button("Beenden", func(): get_tree().quit()))
@@ -377,9 +386,27 @@ func _build_settings() -> Control:
 	_add_stepper(grid, "Max. Schüsse", _fmt_max_shots, _step_max_shots, _set_max_shots_text)
 	_add_stepper(grid, "Schwierigkeit", _fmt_diff, _step_diff)
 	box.add_child(_spacer(8))
+	box.add_child(_button("Standardwerte", func(): _reset_defaults()))
 	box.add_child(_button("Sound", func(): _open_sound()))
 	box.add_child(_button("Fertig", func(): _close_sub()))
 	return s
+
+## Resets the gameplay steppers above to fixed factory defaults (user request)
+## — NOT Sound, which lives in its own settings.cfg section and has its own
+## per-key defaults already. Only mutates `_cfg` in memory, same as every
+## other stepper here: still needs "Fertig" to actually persist + apply, so
+## it's easy to back out of by just not confirming. Respects the same
+## Leben-lock as the stepper itself (see _update_lives_lock()) — resetting it
+## mid-run would be just as inert as manually stepping it, for the same reason.
+func _reset_defaults() -> void:
+	if _return_to != "pause" and _return_to != "summary":
+		_cfg.lives = 3
+	_cfg.extra_life = 10000
+	_cfg.boss_interval = 5000
+	_cfg.win_score = 0
+	_cfg.max_shots = 2
+	_cfg.difficulty = 1
+	_refresh_settings()
 
 func _open_settings(from: String) -> void:
 	_return_to = from
@@ -402,12 +429,14 @@ func _refresh_settings() -> void:
 ## unlike every other setting here, it's only ever read once, in game.gd's
 ## _new_run(), so editing it mid-game would silently do nothing anyway; better
 ## to make that visible than to let the player think they changed something.
-## _return_to == "pause" is exactly "opened from the in-game pause menu", i.e.
-## a run is in progress; "title" means no run is active yet.
+## _return_to is "pause" (in-game pause menu) or "summary" (the win screen's
+## own "Einstellungen" button, see _build_summary()) whenever a run is still
+## in progress (or, for "summary", could resume — see game.gd's
+## _revive_after_win_edit()); "title" means no run is active yet.
 func _update_lives_lock() -> void:
 	if _lives_stepper.is_empty():
 		return
-	var locked := _return_to == "pause"
+	var locked := _return_to == "pause" or _return_to == "summary"
 	_lives_stepper.left.disabled = locked
 	_lives_stepper.right.disabled = locked
 	var val = _lives_stepper.val
@@ -419,10 +448,19 @@ func _update_lives_lock() -> void:
 func _close_sub() -> void:
 	GameSettings.save(_cfg)
 	settings_changed.emit()
-	# A live "Sieg bei X Punkten" check inside that signal (game.gd's
-	# _reload_settings() -> _check_win()) may have just ended the run and
-	# swapped straight to the summary screen — don't stomp it by swapping back
-	# to the pause menu we came from.
+	# Two ways that signal can change what should happen next, both handled
+	# inside game.gd's _reload_settings() synchronously before emit() returns:
+	#  - it just ENDED a run early (_check_win() — lowering "Sieg bei X
+	#    Punkten" below the current score) and swapped straight to the summary
+	#    screen: don't stomp that by swapping back to the pause menu we came
+	#    from.
+	#  - it just REVIVED a run (_revive_after_win_edit() — raising/disabling
+	#    "Sieg bei X Punkten" from the win screen's own settings button) and
+	#    unpaused the tree to resume gameplay: don't show any menu at all, not
+	#    even the summary screen we came from — that run isn't "won" anymore.
+	if not get_tree().paused:
+		hide_all()
+		return
 	if _screens["summary"].visible or _screens["gameover"].visible:
 		return
 	_swap(_return_to)
@@ -666,11 +704,21 @@ func _build_gameover() -> Control:
 	box.add_child(_hof_box)
 
 	box.add_child(_spacer(8))
-	box.add_child(_button("Nochmal", func(): start_game.emit()))
-	box.add_child(_button("Start-Menü", func(): to_title.emit()))
+	box.add_child(_button("Nochmal", func(): _maybe_auto_commit(); start_game.emit()))
+	box.add_child(_button("Start-Menü", func(): _maybe_auto_commit(); to_title.emit()))
 	if not IS_WEB:
-		box.add_child(_button("Beenden", func(): get_tree().quit()))
+		box.add_child(_button("Beenden", func(): _maybe_auto_commit(); get_tree().quit()))
 	return s
+
+## A qualifying score that's never actually entered (player leaves the screen
+## without typing a name or clicking "Eintragen") would otherwise just be
+## lost — user request: commit it as "YOU" automatically, exactly as if
+## "Eintragen" had been pressed with an empty name. `Entry.visible` is exactly
+## "still needs to enter" (see _fill_gameover()/​_commit_score() below), so it
+## doubles as the "did they forget" check.
+func _maybe_auto_commit() -> void:
+	if _box(_screens["gameover"]).get_node("Entry").visible:
+		_commit_score()
 
 var _pending := {}
 
@@ -682,14 +730,16 @@ func _build_summary() -> Control:
 	title.name = "Title"
 	box.add_child(title)
 	box.add_child(_spacer(8))
-	# Per-kind kill breakdown (count + points earned), one column per enemy
-	# tier — always all three, even at 0, so the layout doesn't jump around.
-	var kills := HBoxContainer.new()
+	# Kill breakdown, one cell per SPRITE actually seen this run (not a fixed
+	# 3-column row any more — there are 8 visually distinct enemies across the
+	# 3 scoring tiers once stage variants are counted, plus a 9th "Boss
+	# (Rettung)" bucket, see _fill_summary()/game.gd's _kill_stats). A
+	# GridContainer wraps as needed instead of assuming a fixed count.
+	var kills := GridContainer.new()
 	kills.name = "Kills"
-	kills.alignment = BoxContainer.ALIGNMENT_CENTER
-	kills.add_theme_constant_override("separation", 20)
-	for kind in [EnemyKinds.ZAKO, EnemyKinds.GOEI, EnemyKinds.BOSS]:
-		kills.add_child(_kill_stat_col(kind))
+	kills.columns = 4
+	kills.add_theme_constant_override("h_separation", 14)
+	kills.add_theme_constant_override("v_separation", 6)
 	box.add_child(kills)
 	box.add_child(_spacer(10))
 	var rescues_l := _title_label("", 18)
@@ -706,37 +756,53 @@ func _build_summary() -> Control:
 	rank_l.name = "Rank"
 	box.add_child(rank_l)
 	box.add_child(_spacer(12))
+	# User request: let the player check/adjust settings right from the win
+	# screen — most useful for "Sieg bei X Punkten": raising it (or turning it
+	# off) here un-ends the run and drops straight back into gameplay instead
+	# of forcing a restart just to keep playing past the old target. See
+	# game.gd's _revive_after_win_edit() / _close_sub() below for the other
+	# half of this.
+	box.add_child(_button("Einstellungen", func(): _open_settings("summary")))
 	box.add_child(_button("Weiter", func(): show_game_over(_pending.score, _pending.stage, _pending.won)))
 	return s
 
-## One column of the Kills row (see _build_summary above): the classic sprite
-## (stage-variant-independent, same idea as the help page's _icon_col) over a
-## "N× / P Pkt." label that _fill_summary fills in per run.
-func _kill_stat_col(kind: int) -> VBoxContainer:
+## One cell of the Kills grid (see _build_summary above): a representative
+## still-frame sprite (game.gd already resolved which one, including the
+## dedicated rescue-kill icon) over an "N× / P Pkt." label.
+func _kill_stat_col(icon: Texture2D, count: int, points: int) -> VBoxContainer:
 	var col := VBoxContainer.new()
-	col.name = "Kind%d" % kind
 	col.alignment = BoxContainer.ALIGNMENT_CENTER
 	col.add_theme_constant_override("separation", 2)
-	var icon := TextureRect.new()
-	icon.texture = load(EnemyKinds.DATA[kind]["texture"])
-	icon.custom_minimum_size = Vector2(36, 36)
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	col.add_child(icon)
-	var lbl := _title_label("", 15)
-	lbl.name = "Label"
-	col.add_child(lbl)
+	var icon_rect := TextureRect.new()
+	icon_rect.texture = icon
+	icon_rect.custom_minimum_size = Vector2(36, 36)
+	icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	col.add_child(icon_rect)
+	col.add_child(_title_label("%d×\n%d Pkt." % [count, points], 14))
 	return col
 
-func _fill_summary(score: int, won: bool, rescues: int, rescue_points: int, achievements: int, laps: int, kill_counts: Dictionary, kill_points: Dictionary) -> void:
+func _fill_summary(score: int, won: bool, rescues: int, rescue_points: int, achievements: int, laps: int, kill_stats: Array) -> void:
 	var box := _box(_screens["summary"])
 	(box.get_node("Title") as Label).text = "SIEG!" if won else "GAME OVER"
-	var kills_row := box.get_node("Kills") as HBoxContainer
-	for kind in [EnemyKinds.ZAKO, EnemyKinds.GOEI, EnemyKinds.BOSS]:
-		var col := kills_row.get_node("Kind%d" % kind)
-		var n := int(kill_counts.get(kind, 0))
-		var p := int(kill_points.get(kind, 0))
-		(col.get_node("Label") as Label).text = "%d×\n%d Pkt." % [n, p]
+	var kills_grid := box.get_node("Kills") as GridContainer
+	for c in kills_grid.get_children():
+		c.queue_free()
+	if kill_stats.is_empty():
+		kills_grid.add_child(_title_label("— keine Gegner abgeschossen —", 15))
+	else:
+		# Stable, readable order: by scoring tier, then stage-variant, with any
+		# rescue-kill bucket last (it's a Boss kill too, but a distinct enough
+		# event to read best at the end rather than interleaved by variant).
+		var sorted: Array = kill_stats.duplicate()
+		sorted.sort_custom(func(a, b):
+			if a.is_rescue != b.is_rescue:
+				return b.is_rescue
+			if a.kind != b.kind:
+				return a.kind < b.kind
+			return a.variant_idx < b.variant_idx)
+		for e in sorted:
+			kills_grid.add_child(_kill_stat_col(e.icon, int(e.count), int(e.points)))
 	(box.get_node("Rescues") as Label).text = "Gerettete Schiffe: %d  (%d Punkte)" % [rescues, rescue_points]
 	(box.get_node("Achv") as Label).text = "Achievements: %d  (Runden: %d)" % [achievements, laps]
 	(box.get_node("Score") as Label).text = "Gesamtpunktzahl: %06d" % score
@@ -763,6 +829,11 @@ func _commit_score() -> void:
 	var who := _name_edit.text.strip_edges()
 	if who == "":
 		who = "YOU"
+	# Stored upper-case (user request: names always display upper-case) —
+	# does nothing for names already typed in caps, and _render_hof_into()
+	# below upper-cases at render time too, so pre-existing lower-case entries
+	# from before this change still display correctly without a migration.
+	who = who.to_upper()
 	var list := HallOfFame.insert(who, int(_pending.score), int(_pending.stage))
 	_box(_screens["gameover"]).get_node("Entry").visible = false
 	var mine := -1
@@ -773,24 +844,48 @@ func _commit_score() -> void:
 	_render_hof(list, mine)
 
 func _render_hof(list: Array, highlight: int) -> void:
-	for c in _hof_box.get_children():
+	_render_hof_into(_hof_box, list, highlight)
+
+## Shared by the game-over screen's board (_hof_box, with a highlighted own
+## entry) and the title screen's read-only "Highscores" screen
+## (_highscores_box, no highlight) — see show_highscores() above.
+func _render_hof_into(box: GridContainer, list: Array, highlight: int) -> void:
+	for c in box.get_children():
 		c.queue_free()
 	if list.is_empty():
-		_hof_box.add_child(_title_label("— noch keine Einträge —", 17))
+		box.add_child(_title_label("— noch keine Einträge —", 17))
 		return
 	for i in list.size():
 		var e = list[i]
 		var col := ACCENT if i == highlight else Color.WHITE
 		var rank_l := _title_label("%d." % (i + 1), 17, col)
 		rank_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		var name_l := _title_label(str(e.name), 17, col)
+		var name_l := _title_label(str(e.name).to_upper(), 17, col)
 		name_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 		name_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var score_l := _title_label("%06d" % int(e.score), 17, col)
 		score_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		_hof_box.add_child(rank_l)
-		_hof_box.add_child(name_l)
-		_hof_box.add_child(score_l)
+		box.add_child(rank_l)
+		box.add_child(name_l)
+		box.add_child(score_l)
+
+# ---------------------------------------------------------------- highscores
+var _highscores_box: GridContainer
+
+func _build_highscores() -> Control:
+	var s := _screen()
+	var box := _box(s)
+	box.add_child(_title_label("Highscores", 30))
+	box.add_child(_spacer(10))
+	_highscores_box = GridContainer.new()
+	_highscores_box.name = "Hof"
+	_highscores_box.columns = 3
+	_highscores_box.add_theme_constant_override("h_separation", 10)
+	_highscores_box.add_theme_constant_override("v_separation", 2)
+	box.add_child(_highscores_box)
+	box.add_child(_spacer(10))
+	box.add_child(_button("Fertig", func(): _swap("title")))
+	return s
 
 # ---------------------------------------------------------------- misc
 func _spacer(h: float) -> Control:

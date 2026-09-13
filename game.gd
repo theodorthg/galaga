@@ -23,6 +23,11 @@ const SCORE_POPUP_SCRIPT := preload("res://score_popup.gd")
 # the range on top of the reset-bug fix gives a bit more headroom either way.
 const BONUS_INTERVAL_MIN := 9.0
 const BONUS_INTERVAL_MAX := 16.0
+## Icon for the run-summary's "Boss (Rettung)" kill-breakdown row (see
+## _kill_stat_entry()) — a rescue-kill is tracked separately from a plain Boss
+## kill, so it gets its own icon rather than reusing the Boss sprite: the
+## freed captive itself, not the Boss that was carrying it.
+const RESCUE_ICON := preload("res://assets/graphics/ship_captured.png")
 
 @onready var _formation: Formation = $Formation
 @onready var _director: StageDirector = $StageDirector
@@ -50,10 +55,15 @@ var _rescues := 0
 var _rescue_points := 0
 var _last_kill_points := 0
 var _achievements_collected := 0
-# Per-kind kill breakdown for the run-summary screen (menus.gd::show_run_summary()
-# / _fill_summary()) — reset once per run in _new_run(), keyed by EnemyKinds enum.
-var _kill_counts := {}
-var _kill_points := {}
+# Per-SPRITE kill breakdown for the run-summary screen (menus.gd::
+# show_run_summary()/_fill_summary()) — reset once per run in _new_run().
+# There are 8 visually distinct enemies across the 3 scoring tiers (classic +
+# 2 stage-variants each for Zako/Goei, classic + 1 stage-variant for Boss),
+# not just 3 — plus a 9th "Boss (Rettung)" bucket for a Boss shot down WHILE
+# carrying a captured ship, tracked separately from a plain Boss kill (user
+# request). Each entry: {kind, variant_idx, is_rescue, icon, count, points} —
+# see _kill_stat_entry().
+var _kill_stats: Array = []
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -104,6 +114,13 @@ func _reload_settings() -> void:
 	_apply_extra_life_setting(int(_cfg.get("extra_life", 0)))
 	_apply_boss_interval_setting(int(_cfg.get("boss_interval", 0)))
 	_win_score = int(_cfg.get("win_score", 0))
+	# The reverse direction: raising the win score (or turning it off) from the
+	# win screen's own "Einstellungen" button (see menus.gd's "summary" screen)
+	# past the current score un-ends a run that was stopped by _check_win() —
+	# see _revive_after_win_edit(). Never applies to a real game-over (ship
+	# count exhausted): _ended_by_win is only ever set by _check_win() itself.
+	if _state == GAME_OVER and _ended_by_win and (_win_score <= 0 or _score < _win_score):
+		_revive_after_win_edit()
 	# Makes "Sieg bei X Punkten" reactive: lowering it below (or to) the score
 	# already reached while a run is in progress ends the run right away,
 	# instead of only taking effect on the next game. Guarded by _state ==
@@ -155,6 +172,7 @@ func _new_run() -> void:
 	_boss_interval = int(_cfg.get("boss_interval", 0))
 	_next_boss_score = _boss_interval
 	_win_score = int(_cfg.get("win_score", 0))
+	_ended_by_win = false
 	# Set ONCE per run, not re-rolled on every stage clear (see
 	# _on_stage_populated() for why that used to throw away a mostly-elapsed
 	# countdown every time a stage ended quickly).
@@ -164,8 +182,7 @@ func _new_run() -> void:
 	_rescue_points = 0
 	_last_kill_points = 0
 	_achievements_collected = 0
-	_kill_counts = {EnemyKinds.ZAKO: 0, EnemyKinds.GOEI: 0, EnemyKinds.BOSS: 0}
-	_kill_points = {EnemyKinds.ZAKO: 0, EnemyKinds.GOEI: 0, EnemyKinds.BOSS: 0}
+	_kill_stats = []
 	_ship.deactivate_hyper_ammo()  # a fresh game never starts with a leftover buff
 	_director.configure(GameSettings.dive_params(int(_cfg.get("difficulty", 1))))
 
@@ -245,14 +262,15 @@ func _on_stage_populated() -> void:
 ## global CLAUDE.md's life-count rule.
 const MAX_LIVES_RUNTIME := 99
 
-func _on_enemy_killed(points: int, kind: int) -> void:
+func _on_enemy_killed(points: int, kind: int, variant_idx: int, was_carrying_captive: bool) -> void:
 	# Hyper-Ammo (see ship.gd::activate_hyper_ammo) doubles points per kill too,
 	# not just the shot count — user request, on top of the existing beam buff.
 	if _ship._hyper_ammo:
 		points *= 2
 	_last_kill_points = points
-	_kill_counts[kind] = int(_kill_counts.get(kind, 0)) + 1
-	_kill_points[kind] = int(_kill_points.get(kind, 0)) + points
+	var stat := _kill_stat_entry(kind, variant_idx, was_carrying_captive)
+	stat.count += 1
+	stat.points += points
 	_score += points
 	_hud.set_score(_score)
 	while _extra_step > 0 and _score >= _next_extra and _lives < MAX_LIVES_RUNTIME:
@@ -263,6 +281,21 @@ func _on_enemy_killed(points: int, kind: int) -> void:
 			_snd.play("extra")
 	_check_boss_threshold()
 	_check_win()
+
+## Finds (or creates) the _kill_stats entry for this exact combination —
+## same kind+variant_idx from different stages of the same run still share
+## one bucket, but a rescue-kill (was_carrying_captive) always gets its own
+## bucket regardless of variant, per the user's explicit request to track it
+## separately from a plain Boss kill. Linear search is fine here: at most 9
+## possible categories total ever exist (8 sprites + 1 rescue bucket).
+func _kill_stat_entry(kind: int, variant_idx: int, is_rescue: bool) -> Dictionary:
+	for e in _kill_stats:
+		if e.kind == kind and e.variant_idx == variant_idx and e.is_rescue == is_rescue:
+			return e
+	var icon: Texture2D = RESCUE_ICON if is_rescue else load(EnemyKinds.icon_texture(kind, variant_idx))
+	var e := {"kind": kind, "variant_idx": variant_idx, "is_rescue": is_rescue, "icon": icon, "count": 0, "points": 0}
+	_kill_stats.append(e)
+	return e
 
 ## "Boss alle X Punkte" (GameSettings.boss_interval) — a guaranteed capture
 ## attempt on top of StageDirector's own random per-interval chance, so the
@@ -281,16 +314,37 @@ func _check_boss_threshold() -> void:
 ## "Sieg bei X Punkten" (GameSettings.win_score) — an optional target score;
 ## 0 = off (endless, as before). Checked alongside the boss threshold so any
 ## scoring event (kill or bonus pickup) can trigger it.
+var _ended_by_win := false
+
 func _check_win() -> void:
 	if _win_score <= 0 or _state != FORMATION or _score < _win_score:
 		return
+	_ended_by_win = true
 	_state = GAME_OVER
 	_director.stop_attacks()
 	if _snd:
 		_snd.stop("music")
 	_hud.set_playing(false)
-	_menus.show_run_summary(_score, _stage, true, _rescues, _rescue_points, _achievements_collected, _hud._bonus_laps, _kill_counts, _kill_points)
+	_menus.show_run_summary(_score, _stage, true, _rescues, _rescue_points, _achievements_collected, _hud._bonus_laps, _kill_stats)
 	get_tree().paused = true
+
+## Undoes _check_win() above if the win screen's own "Einstellungen" button
+## (user request) is used to raise (or turn off) the win score enough that the
+## current score no longer qualifies as a win — lets the player keep playing
+## the SAME run instead of being forced to restart just because they wanted a
+## higher target. Only ever applies to a WIN ending, never a real game-over
+## (no ship left) — `_ended_by_win` distinguishes the two, since both share
+## GAME_OVER. Nothing else about the run's state needs restoring: _check_win()
+## never cleared the board or touched the ship, only paused/stopped things.
+func _revive_after_win_edit() -> void:
+	_ended_by_win = false
+	_state = FORMATION
+	_director.begin_attacks()
+	if _snd:
+		_snd.play("music")
+	_hud.set_playing(true)
+	_menus.hide_all()
+	get_tree().paused = false
 
 var _pending_twin := false
 
@@ -327,7 +381,7 @@ func _on_ship_died() -> void:
 		if not is_instance_valid(self) or _state != GAME_OVER:
 			return
 		_hud.set_playing(false)
-		_menus.show_run_summary(_score, _stage, false, _rescues, _rescue_points, _achievements_collected, _hud._bonus_laps, _kill_counts, _kill_points)
+		_menus.show_run_summary(_score, _stage, false, _rescues, _rescue_points, _achievements_collected, _hud._bonus_laps, _kill_stats)
 		get_tree().paused = true
 		return
 	_lives -= 1

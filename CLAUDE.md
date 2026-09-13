@@ -925,6 +925,103 @@ Touch-Feuern nur bei aufliegendem Finger.**
   `_unhandled_input()`-Aufruf mit synthetischen Touch-Events verifiziert
   (inkl. des Stirbt-mit-gehaltenem-Finger-Randfalls).
 
+**Neunte Playtest-Runde (2026-09-13): Weiterspielen nach Sieg über
+Einstellungen, Standardwerte-Button, Lap-Counter-Farbe/-Position feinjustiert,
+Auto-Eintrag + Großschreibung in der Hall of Fame, Highscores vom Start-Menü,
+Kill-Aufschlüsselung jetzt pro Sprite statt nur pro Gegnertyp.**
+- **Korrektur zur achten Playtest-Runde**: dort stand „es gibt nur 3
+  Gegnertypen" (ZAKO/GOEI/BOSS) — das stimmt nur für die drei PUNKTE-Stufen.
+  Visuell gibt es 8 verschiedene Sprites (klassisch + 2 Stage-Varianten für
+  Zako/Goei, klassisch + 1 Stage-Variante für Boss — siehe „Zusätzliche
+  Gegnertypen" weiter oben), plus jetzt einen 9. Sonderfall für den
+  Boss-Rettungskill (siehe unten). Die Kill-Aufschlüsselung im
+  Run-Summary-Screen zeigt jetzt **pro tatsächlich gesehenem Sprite** eine
+  eigene Kachel (Icon + „N× / P Pkt."), nicht mehr nur 3 fixe Spalten nach
+  Punkte-Stufe. `enemy_kinds.gd::pick_visual()` liefert dafür jetzt zusätzlich
+  `variant_idx` (-1 = klassischer Stage-1-Look, sonst Index in `*_VARIANTS`),
+  `enemy.gd` merkt sich das in `_variant_idx` (gesetzt in `setup()`) und
+  reicht es über sein `killed`-Signal (`points, kind, variant_idx,
+  was_carrying_captive`) durch. **Ein Boss, der abgeschossen wird, während er
+  gerade ein Schiff trägt** (`was_carrying_captive`), bekommt eine eigene,
+  vom normalen Boss-Kill getrennte Kachel mit dem `ship_captured.png`-Icon —
+  Nutzerwunsch, weil das ein qualitativ anderes Ereignis ist (bringt den
+  Zwillingsjäger-Bonus). `game.gd::_kill_stats` ist jetzt ein Array von
+  `{kind, variant_idx, is_rescue, icon, count, points}`-Einträgen
+  (`_kill_stat_entry()` sucht/erstellt den passenden Eintrag), ersetzt die
+  alten `_kill_counts`/`_kill_points`-Dictionaries. `menus.gd`s Kills-Reihe
+  ist dafür jetzt ein `GridContainer` (4 Spalten, umbricht bei Bedarf) statt
+  einer festen 3-Spalten-`HBoxContainer` — zeigt nur Kacheln für tatsächlich
+  getroffene Sprites, sortiert nach Punkte-Stufe/Variante, Rettungskill immer
+  zuletzt. Per Live-Test mit 6 verschiedenen simulierten Kills (3 Zako-Sprites,
+  Goei, Boss normal, Boss-Rettung) verifiziert: 6 korrekt beschriftete Kacheln,
+  sauber in 2 Zeilen umgebrochen.
+- **Weiterspielen nach „Sieg" über die Einstellungen**: der Run-Summary-
+  Screen (siebte Playtest-Runde) hat jetzt einen „Einstellungen"-Button
+  (Nutzerwunsch) — nützlich vor allem für „Sieg bei X Punkten": hebt man den
+  Wert dort an (oder schaltet ihn aus) über den aktuellen Punktestand hinaus,
+  spielt die UNTERBROCHENE Runde direkt weiter, statt zwingend neu anfangen
+  zu müssen. `game.gd::_ended_by_win` merkt sich, ob der aktuelle GAME_OVER
+  ein „Sieg"-Ende war (nie bei einem echten Game Over durch Lebensverlust);
+  `_reload_settings()` prüft danach `_state == GAME_OVER and _ended_by_win
+  and (_win_score <= 0 or _score < _win_score)` und ruft in dem Fall
+  `_revive_after_win_edit()` (Musik/Attacken/HUD/Pause rückgängig machen,
+  `_state = FORMATION`) — nichts vom Spielfeld musste dafür extra
+  aufgehoben werden, `_check_win()` hatte ohnehin nie `_clear_board()`
+  aufgerufen. `menus.gd::_close_sub()` erkennt die Wiederbelebung am
+  entpausierten Baum (`not get_tree().paused` direkt nach dem
+  `settings_changed`-Signal) und blendet dann konsequent ALLE Menüs aus,
+  statt zum Summary-Screen zurückzuspringen — sonst hätte der „Sieg"-Screen
+  wieder aufgemacht, obwohl die Runde gerade erst weiterlief. Der
+  Leben-Regler ist auch hier gesperrt (`_update_lives_lock()` behandelt
+  `_return_to == "summary"` genauso wie `"pause"`), aus demselben Grund wie
+  im Pausenmenü. Per Live-Test komplett durchgespielt: Sieg bei Score 530
+  ausgelöst → Einstellungen geöffnet → Sieg-Score auf 100000 angehoben →
+  Fertig → Spiel läuft mit demselben Score/Formation unmittelbar weiter,
+  kein Menü sichtbar.
+- **„Standardwerte"-Button in den Einstellungen** (Nutzerwunsch): setzt Leben
+  3 / Extra-Leben 10000 / Boss alle 5000 Punkte / Sieg aus / Max. Schüsse 2 /
+  Schwierigkeit Normal — bewusst NICHT Sound (eigene Sektion mit eigenen
+  Defaults, siehe `sound_manager.gd`). Ändert wie jeder Stepper nur `_cfg` im
+  Speicher, erst „Fertig" persistiert. Respektiert dieselbe Leben-Sperre wie
+  der Leben-Stepper selbst — beim Zurücksetzen mitten in einer laufenden
+  Runde (oder vom Sieg-Screen aus) bleibt Leben unangetastet, aus demselben
+  Grund, aus dem der Regler dort gesperrt ist.
+- **Lap-Counter-Farbe korrigiert**: der Nutzer hatte in der achten Runde
+  „türkis" gesagt, gemeint war aber die konkrete Farbe des Stage-Labels
+  direkt daneben (`UiStyle.ACCENT`, ein blaustichiges Türkis) — nicht das
+  sattere `Laser.ACCENT_NORMAL`, das dort ursprünglich gelandet war.
+  `hud.gd::BONUS_LAP_COLOR` zeigt jetzt exakt auf `UiStyle.ACCENT`. Zusätzlich
+  `LAP_MARKER_GAP_RIGHT` 14→6 (Nutzerreport: zu viel Luft zu „Stage", zu
+  wenig zur Achievement-Reihe) — verkleinert den Stage-Abstand um genau diesen
+  Betrag UND vergrößert den Achievement-Abstand um etwa die Hälfte davon (die
+  Icon-Reihe zentriert sich ja auch relativ zur Marker-Position, rutscht beim
+  Verschieben des Markers also indirekt mit). Per Live-Screenshot verifiziert
+  (Marker exakt stage-blau, sichtbarer Abstand auf beiden Seiten bei 6
+  Achievement-Icons + „× 6" Lebensanzeige gleichzeitig).
+- **Vergessene Highscore-Einträge werden automatisch nachgetragen**: verlässt
+  man den Game-Over/Sieg-Bildschirm über „Nochmal", „Start-Menü" oder
+  „Beenden", OHNE vorher „Eintragen" gedrückt zu haben, trägt
+  `menus.gd::_maybe_auto_commit()` den Eintrag jetzt automatisch unter „YOU"
+  ein — exakt das, was auch beim Drücken von „Eintragen" mit leerem Namen
+  passiert wäre (`Entry.visible` dient dabei als „wurde noch nicht
+  eingetragen"-Marker, wird durch `_commit_score()` auf `false` gesetzt).
+  Nutzer nannte explizit „Nochmal"; auf „Start-Menü"/„Beenden" ausgeweitet,
+  weil ein Verlassen ohne Eintrag dort denselben Datenverlust bedeuten würde.
+- **Alle Highscore-Namen werden großgeschrieben angezeigt** — sowohl neu
+  eingetragene (`_commit_score()` ruft jetzt `who.to_upper()` vor dem
+  Speichern) als auch bereits vorhandene, noch klein geschriebene Alteinträge
+  (`_render_hof_into()` ruft zusätzlich `.to_upper()` beim Anzeigen, deckt
+  also auch Daten von vor dieser Änderung ab, ohne Migration).
+- **Highscores vom Start-Menü aus aufrufbar** (Nutzerwunsch): neuer,
+  rein lesender Screen `"highscores"` (`show_highscores()`,
+  `_build_highscores()`) — derselbe `_render_hof_into()`-Renderer wie beim
+  Game-Over-Screen, nur ohne Namenseingabe und ohne hervorgehobenen eigenen
+  Eintrag (`highlight = -1`). Neuer Button „Highscores" im Titel-Bildschirm
+  zwischen „Einstellungen" und „Hilfe".
+- Erledigt bei der Gelegenheit: eine bei einer früheren Testreihe
+  liegengebliebene, mit „bb"/1280 verunreinigte `user://hall_of_fame.cfg`
+  wurde zurückgesetzt.
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,
@@ -953,12 +1050,19 @@ StageDirector, Ship, HUD-CanvasLayer.
   Schwellenüberschreitung `StageDirector.force_boss_capture()` (siehe dort,
   seit 2026-09-13 „sticky"), Letzteres beendet den Lauf mit
   `show_run_summary(score, stage, won=true, ...)`, sobald `GameSettings.win_score`
-  erreicht ist (0 = aus). `achievement_00`-Pickup → `ship.activate_hyper_ammo()`
-  (siehe „Vierte Playtest-Runde") — verdoppelt seit der siebten Playtest-Runde
-  auch die Punktzahl pro Kill, nicht nur die Schusszahl. `_kill_counts`/
-  `_kill_points` (seit der achten Playtest-Runde, Dictionary je
-  `EnemyKinds`-Wert) führen mit, wie viele von welchem Gegnertyp abgeschossen
-  wurden + wie viele Punkte das brachte — für die Kill-Aufschlüsselung im
+  erreicht ist (0 = aus) — seit der neunten Playtest-Runde umkehrbar:
+  `_ended_by_win` + `_revive_after_win_edit()` lassen eine per „Sieg"-Ende
+  gestoppte Runde über den Summary-Screens eigenen „Einstellungen"-Button
+  weiterlaufen, sobald der Sieg-Score wieder über dem aktuellen Punktestand
+  liegt (oder ausgeschaltet wird), siehe dort. `achievement_00`-Pickup →
+  `ship.activate_hyper_ammo()` (siehe „Vierte Playtest-Runde") — verdoppelt
+  seit der siebten Playtest-Runde auch die Punktzahl pro Kill, nicht nur die
+  Schusszahl. `_kill_stats` (seit der achten Playtest-Runde, seit der neunten
+  ein Array von `{kind, variant_idx, is_rescue, icon, count, points}` statt
+  eines nach `EnemyKinds`-Wert gekeyten Dictionary-Paars — pro tatsächlich
+  gesehenem SPRITE, nicht nur pro Punkte-Stufe, plus ein eigener Eintrag für
+  einen Boss-Rettungskill) führt mit, was wie oft abgeschossen wurde + wie
+  viele Punkte das brachte — für die Kill-Aufschlüsselung im
   Run-Summary-Screen, siehe dort. `_reload_settings()` wendet seit der achten
   Playtest-Runde ALLE Einstellungen sofort mid-Run an, nicht mehr nur
   `max_shots` (`_apply_extra_life_setting()`/`_apply_boss_interval_setting()`
@@ -1004,25 +1108,47 @@ StageDirector, Ship, HUD-CanvasLayer.
   einen eigenen `HBoxContainer` zu bauen — sonst richten sich `</>` nicht
   spaltenweise aus, siehe „Sechste Playtest-Runde"; Stepper: Leben /
   Extra-Leben / Boss alle X Punkte / Sieg bei X Punkten / Max. Schüsse /
-  Schwierigkeit). Der Leben-Stepper ist seit der achten Playtest-Runde
-  gesperrt (deaktivierte `<`/`>`, nicht-editierbares Feld, halbtransparent),
-  sobald die Einstellungen aus dem Pausenmenü heraus geöffnet wurden
-  (`_lives_stepper`, `_update_lives_lock()`) — die Einstellung wird ohnehin
-  nur einmalig in `_new_run()` gelesen. Sound-Unterseite (HSlider pro Sound,
-  Loslassen = Vorhören), Hilfe (3 Textseiten mit ‹/›), seit der siebten
-  Playtest-Runde ein Run-Summary-Screen (`"summary"`, `show_run_summary()`,
-  seit der achten Playtest-Runde mit zusätzlicher Kill-Aufschlüsselung nach
-  Gegnertyp — Sprite + „N× / P Pkt." je Typ, siehe dort) VOR dem
-  Game-Over-Screen, dann Game-Over + Hall-of-Fame-Liste + Namenseingabe bei
-  Qualifikation. `_close_sub()` prüft seit der achten Playtest-Runde vor dem
+  Schwierigkeit, seit der neunten Playtest-Runde außerdem ein
+  „Standardwerte"-Button, der alle sechs auf feste Werkseinstellungen
+  zurücksetzt — Sound bleibt unangetastet, hat eigene Defaults). Der
+  Leben-Stepper ist seit der achten Playtest-Runde gesperrt (deaktivierte
+  `<`/`>`, nicht-editierbares Feld, halbtransparent), sobald die
+  Einstellungen aus dem Pausenmenü ODER (seit der neunten Playtest-Runde)
+  dem Sieg-Screen heraus geöffnet wurden (`_lives_stepper`,
+  `_update_lives_lock()`, `_return_to == "pause" or "summary"`) — die
+  Einstellung wird ohnehin nur einmalig in `_new_run()` gelesen; der
+  „Standardwerte"-Button respektiert dieselbe Sperre. Sound-Unterseite
+  (HSlider pro Sound, Loslassen = Vorhören), Hilfe (3 Textseiten mit ‹/›),
+  seit der siebten Playtest-Runde ein Run-Summary-Screen (`"summary"`,
+  `show_run_summary()`, seit der achten Playtest-Runde mit zusätzlicher
+  Kill-Aufschlüsselung — seit der neunten Playtest-Runde pro tatsächlich
+  gesehenem SPRITE statt nur pro Punkte-Stufe, in einem umbrechenden
+  `GridContainer` statt fixer 3 Spalten, siehe dort) VOR dem Game-Over-
+  Screen, dann Game-Over + Hall-of-Fame-Liste + Namenseingabe bei
+  Qualifikation. Der Summary-Screen hat seit der neunten Playtest-Runde
+  zusätzlich einen eigenen „Einstellungen"-Button — erhöht man dort „Sieg
+  bei X Punkten" wieder über den erreichten Score (oder schaltet es aus),
+  spielt die Runde über `game.gd::_revive_after_win_edit()` direkt weiter,
+  siehe dort. `_close_sub()` prüft seit der achten Playtest-Runde vor dem
   Rück-Swap zu `_return_to`, ob inzwischen „summary"/„gameover" sichtbar ist
   (ein live geänderter Sieg-Score kann das synchron im selben Aufruf
-  auslösen) und lässt den Swap in dem Fall aus. Die HoF-Liste (`_hof_box`)
-  ist seit der siebten Playtest-Runde ein `GridContainer` (Platz/Name/Score-
-  Spalten, rechts-/links-/rechtsbündig) statt einer `VBoxContainer` mit
+  auslösen) und lässt den Swap in dem Fall aus; seit der neunten
+  Playtest-Runde prüft es zuerst den entpausierten Baum als Zeichen einer
+  Wiederbelebung und blendet dann stattdessen ALLE Menüs aus. Die HoF-Liste
+  (`_hof_box`, gerendert über das seit der neunten Playtest-Runde geteilte
+  `_render_hof_into(box, list, highlight)` — auch vom neuen, rein lesenden
+  `"highscores"`-Screen genutzt, erreichbar über einen neuen Button im
+  Titel-Bildschirm, siehe `show_highscores()`) ist seit der siebten
+  Playtest-Runde ein `GridContainer` (Platz/Name/Score-Spalten,
+  rechts-/links-/rechtsbündig) statt einer `VBoxContainer` mit
   leerzeichen-aufgefüllten Text-Zeilen — Letzteres richtete sich in einer
-  proportionalen Schrift nicht wirklich aus. Signale `start_game` /
-  `resume_game` / `to_title` / `settings_changed`. „Beenden" nur wenn nicht
+  proportionalen Schrift nicht wirklich aus. Namen werden seit der neunten
+  Playtest-Runde immer großgeschrieben angezeigt (`.to_upper()`, deckt auch
+  alte, klein gespeicherte Einträge ab) und beim Eintragen auch so
+  gespeichert; `_maybe_auto_commit()` trägt einen qualifizierenden, aber
+  vergessenen Score beim Verlassen über „Nochmal"/„Start-Menü"/„Beenden"
+  automatisch als „YOU" ein. Signale `start_game` / `resume_game` /
+  `to_title` / `settings_changed`. „Beenden" nur wenn nicht
   `OS.has_feature("web")`. Überschriften-Outline ist `UiStyle.ACCENT` (Cyan,
   seit 2026-09-13 — vorher ein unpassendes Grün).
 - `game_settings.gd` (`class_name GameSettings`) — `user://settings.cfg` `[s]`:
@@ -1111,9 +1237,11 @@ oder `pause`-Action; bei Pause zusätzlich Tap = Resume.
   `FORCED_RETRY_INTERVAL` (2 s) erneut versucht, bis ein Boss frei ist —
   übersteht damit Stage-Wechsel und Schiffsverlust (siehe „Vierte
   Playtest-Runde").
-  `stop_attacks()` beim Stage-Wechsel. Reicht `enemy_killed(points, kind)`
-  (Gegnertyp seit der achten Playtest-Runde mit im Signal, für die
-  Kill-Aufschlüsselung im Run-Summary-Screen) und `ship_rescued` durch.
+  `stop_attacks()` beim Stage-Wechsel. Reicht `enemy_killed(points, kind,
+  variant_idx, was_carrying_captive)` (Gegnertyp seit der achten, Sprite-
+  Variante + Rettungskill-Flag seit der neunten Playtest-Runde mit im Signal,
+  für die Kill-Aufschlüsselung im Run-Summary-Screen) und `ship_rescued`
+  durch.
 - `enemy.gd` (Area2D, kein `class_name`) — States FLYING_IN / LOCKING /
   IN_FORMATION / DIVING / RETURNING / **CAPTURE_APPROACH / CAPTURE_BEAM**
   (Boss-Capture, siehe unten). Generischer Path-Follower
@@ -1204,7 +1332,11 @@ oder `pause`-Action; bei Pause zusätzlich Tap = Resume.
   Sprite-Textur + Skalierung (siehe „Erste echte Assets"). `pick_visual(kind,
   stage)` liefert ab Stage 2 statt der klassischen Textur eines von
   `GOEI_VARIANTS`/`ZAKO_VARIANTS`/`BOSS_VARIANTS` (Gyaraga-2-Frame-Paare,
-  siehe „Zusätzliche Gegnertypen + Hilfe-Politur").
+  siehe „Zusätzliche Gegnertypen + Hilfe-Politur") — seit der neunten
+  Playtest-Runde außerdem mit `variant_idx` (-1 = klassischer Look) im
+  Rückgabe-Dictionary, für `enemy.gd`s Sprite-genaue Kill-Aufschlüsselung.
+  `icon_texture(kind, variant_idx)` liefert dafür einen einzelnen
+  Standbild-Pfad je Kombination (Frame 0 bei 2-Frame-Varianten).
 
 `_capture.tscn`/`_capture.gd` (gitignored): lädt `game.tscn`, schießt Frames des
 Einflugs als PNG. `godot --path . res://_capture.tscn -- <out_dir>` (braucht

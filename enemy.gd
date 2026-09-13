@@ -31,6 +31,11 @@ const CAPTIVE_TEXTURE := preload("res://assets/graphics/ship_captured.png")
 const CAPTURE_BEAM_TOTAL := 0.95  # keep in sync with capture_beam.gd (grow+hold+shrink)
 
 var kind := EnemyKinds.ZAKO
+## Which of EnemyKinds' several stage-variant sprites this particular enemy is
+## wearing (-1 = the classic stage-1 look, see EnemyKinds.pick_visual()) — set
+## in setup(), read by _explode() for the run-summary's per-sprite kill
+## breakdown (game.gd).
+var _variant_idx := -1
 var _state := FLYING_IN
 var _formation: Formation
 var _slot := -1
@@ -55,7 +60,7 @@ var _flap_tween: Tween
 var _flap_frames: Array = []  # 2 texture paths for a real flap (EnemyKinds variants); empty -> wobble
 
 signal locked_in(enemy)
-signal killed(points, kind)
+signal killed(points, kind, variant_idx, was_carrying_captive)
 signal resolved
 signal ship_rescued(at_position: Vector2)
 
@@ -72,6 +77,7 @@ func setup(p_kind: int, p_formation: Formation, p_slot: int, p_curve: Curve2D, s
 	_flap_frames = vis.get("frames", [])
 	_sprite.texture = load(_flap_frames[0] if _flap_frames.size() == 2 else vis["texture"])
 	_sprite.scale = Vector2.ONE * float(vis["scale"])
+	_variant_idx = int(vis.get("variant_idx", -1))
 
 	_formation.flap_toggled.connect(_on_flap)
 	_start_path(p_curve, FLY_SPEED, _begin_lock)
@@ -307,7 +313,11 @@ func _explode() -> void:
 	_state = LOCKING  # inert
 	if _formation:
 		_formation.release(self)
-	killed.emit(int(EnemyKinds.DATA[kind]["points"]), kind)
+	# _carrying_captive is read here BEFORE the block below clears it, so a
+	# rescue-kill still reports was_carrying_captive=true to the summary
+	# breakdown (game.gd) — it's a separate bucket there, not lumped in with
+	# plain Boss kills.
+	killed.emit(int(EnemyKinds.DATA[kind]["points"]), kind, _variant_idx, _carrying_captive)
 	if _snd:
 		_snd.play("hit")
 	if _carrying_captive:
