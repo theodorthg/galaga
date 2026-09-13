@@ -9,42 +9,42 @@ extends Node
 ## "Snd" identifier does not resolve under `godot --script` (breaks _selftest).
 
 const CFG_PATH := "user://settings.cfg"
-const CALIB_VERSION := 3  # bumped 2026-09-13: whole assets/sounds/ folder swapped
-                          # for a larger, better-matched clip set (old one kept
-                          # as assets/sounds_old/) — several keys renamed or
-                          # retired (see SOUNDS below), so old saved % values
-                          # would be meaningless even where a key survived.
+const CALIB_VERSION := 4  # bumped 2026-09-13 (second time same day): "music"
+                          # (gameplay background loop) retired entirely — NES
+                          # Galaga has no in-game music, user's call — and
+                          # "pause-menu-music" replaced by "menu-music" (a
+                          # single track the user liked better, reused from
+                          # what was going to be the highscore screen's own
+                          # music); dive/extra/stage got real clips for the
+                          # first time. Old saved % values for any of that
+                          # would be meaningless.
 
 # clips: res://assets/sounds/<key>.wav (or .ogg). All-.ogg as of 2026-09-13.
 const EXTS := [".wav", ".ogg"]
 
 # key -> [display name, default %, base_db calibration]. base_db is 0.0 for
-# every key that got a brand-new clip in the 2026-09-13 batch — the user
-# asked to defer calibration to a later round once they've actually heard
-# these in-game, so these are neutral placeholders, not measured levels
-# (contrast "dive"/"extra"/"stage" below, which kept their old 2026-09-11
-# calibration numbers because they did NOT get a new clip this round and are
-# simply silent until one shows up).
+# every key with a clip as of 2026-09-13 — the user asked to defer real
+# calibration to a later round once they've actually heard these in-game, so
+# these are neutral placeholders, not measured levels.
 const SOUNDS := {
-	"music":                   ["Musik", 45, -17.0],
-	"pause-menu-music":        ["Pause-/Einstellungsmusik", 45, 0.0],
+	"menu-music":              ["Menü-Musik", 45, 0.0],
 	"scoring-board-music":     ["Auswertungs-Musik", 45, 0.0],
 	"start-first-level-music": ["Intro-Musik (Level 1)", 45, 0.0],
 	"shoot":                   ["Schuss", 50, 0.0],
 	"enemy-death1":            ["Gegner-Abschuss", 70, 0.0],
 	"enemy-death2":            ["Gegner-Abschuss (Sturzflug)", 70, 0.0],
-	"dive":                    ["Sturzflug", 60, -10.0],
+	"dive":                    ["Sturzflug", 60, 0.0],
 	"enemy-wave1":             ["Wellen-Ankündigung", 70, 0.0],
 	"beam-sound":              ["Traktorstrahl-Fang", 70, 0.0],
-	"boss-killed":             ["Boss (mit Schiff) abgeschossen", 70, 0.0],
+	"boss-killed":             ["Boss abgeschossen", 70, 0.0],
 	"ship-destroyed":          ["Schiff zerstört", 85, 0.0],
-	"extra":                   ["Extra-Leben", 75, -7.0],
+	"extra":                   ["Extra-Leben", 75, 0.0],
 	"bonus-stage-cleared":     ["Achievement-Reihe voll", 70, 0.0],
 	"level-cleared":           ["Stage geschafft", 70, 0.0],
-	"stage":                   ["Stage-Start", 70, -4.0],
+	"stage":                   ["Nächstes Level", 70, 0.0],
 }
 const ORDER := [
-	"music", "pause-menu-music", "scoring-board-music", "start-first-level-music",
+	"menu-music", "scoring-board-music", "start-first-level-music",
 	"shoot", "enemy-death1", "enemy-death2", "dive", "enemy-wave1",
 	"beam-sound", "boss-killed", "ship-destroyed", "extra",
 	"bonus-stage-cleared", "level-cleared", "stage",
@@ -52,11 +52,8 @@ const ORDER := [
 
 ## Tracks played via play(key) auto-loop by re-triggering themselves on
 ## "finished" for as long as they're still "wanted" (stop(key) clears that) —
-## manual, since a plain OGG/WAV import doesn't loop on its own. Generalized
-## 2026-09-13 from a single hardcoded "music" special case to any number of
-## looping tracks (pause/settings and the run-summary screen each got their
-## own loop) — see menus.gd's _apply_screen_music().
-const LOOPING_KEYS := ["music", "pause-menu-music", "scoring-board-music"]
+## manual, since a plain OGG/WAV import doesn't loop on its own.
+const LOOPING_KEYS := ["menu-music", "scoring-board-music"]
 var _wanted := {}  # key (from LOOPING_KEYS) -> bool, "should keep looping"
 
 var _players := {}

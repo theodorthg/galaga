@@ -99,33 +99,42 @@ func hide_all() -> void:
 	for s in _screens.values():
 		s.hide()
 	_glass.visible = false
-	_apply_screen_music("")  # no screen visible -> both menu-music loops off
 
 ## Screen -> which looping music track (see sound_manager.gd's LOOPING_KEYS)
-## should be playing while it's shown — a single choke point so every _swap()
-## (and hide_all() above, for direct callers like game.gd's _resume()/
-## _new_run() that bypass _swap) gets this right without having to remember
-## to call Snd themselves. "help"/"title"/"splash" fall through to the else
-## branch (silence) — not explicitly requested by the user, so left as the
-## simplest default rather than guessed at.
-const MENU_MUSIC_SCREENS := ["pause", "settings", "confirm_reset", "sound", "highscores"]
+## should be playing while it's shown. "menu-music" is genuinely the SAME
+## background music across pause/settings/sound/confirm_reset/highscores/
+## help — the user's point that it shouldn't restart just because the player
+## moved to a different one of those screens — so this tracks what's ALREADY
+## playing (_active_menu_music) and only stops/starts anything when the
+## wanted track actually changes, never on a same-track no-op swap.
+## "title"/"splash" fall through to the empty-string case (silence).
+const MENU_MUSIC_SCREENS := ["pause", "settings", "confirm_reset", "sound", "highscores", "help"]
 const SCORE_MUSIC_SCREENS := ["summary", "gameover"]
+var _active_menu_music := ""  # "" | "menu-music" | "scoring-board-music"
 
 func _apply_screen_music(screen_name: String) -> void:
 	var snd := get_node_or_null("/root/Snd")
 	if not snd:
 		return
+	var wanted := ""
 	if screen_name in MENU_MUSIC_SCREENS:
-		if not snd.is_playing("pause-menu-music"):
-			snd.play("pause-menu-music")
-		snd.stop("scoring-board-music")
+		wanted = "menu-music"
 	elif screen_name in SCORE_MUSIC_SCREENS:
-		if not snd.is_playing("scoring-board-music"):
-			snd.play("scoring-board-music")
-		snd.stop("pause-menu-music")
-	else:
-		snd.stop("pause-menu-music")
-		snd.stop("scoring-board-music")
+		wanted = "scoring-board-music"
+	if wanted == _active_menu_music:
+		return  # same track (or same silence) as before — leave it alone
+	if _active_menu_music != "":
+		snd.stop(_active_menu_music)
+	_active_menu_music = wanted
+	if wanted != "":
+		snd.play(wanted)
+
+## For game.gd's direct hide_all() callers (_resume(), _new_run(),
+## _revive_after_win_edit()) that bypass _swap() — the only other place
+## _apply_screen_music() runs — to correctly silence menu music when leaving
+## the whole menu system for actual gameplay.
+func stop_menu_music() -> void:
+	_apply_screen_music("")
 
 func is_open() -> bool:
 	for s in _screens.values():
@@ -434,7 +443,7 @@ func _build_settings() -> Control:
 func _reset_defaults() -> void:
 	if _return_to != "pause" and _return_to != "summary":
 		_cfg.lives = 3
-	_cfg.extra_life = 10000
+	_cfg.extra_life = 5000
 	_cfg.boss_interval = 5000
 	_cfg.win_score = 0
 	_cfg.max_shots = 2

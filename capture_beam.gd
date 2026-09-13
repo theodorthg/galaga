@@ -5,7 +5,10 @@ extends Area2D
 ## handling destroys it exactly like a bomb hit (lose a life, respawn) —
 ## this script only needs to separately notice the catch itself, so the
 ## owning boss (enemy.gd) knows to carry a captured-ship sprite home instead
-## of returning empty.
+## of returning empty. Also tagged "capture_beam" (on top of "enemy_shots")
+## so ship.gd can tell a capture apart from an actual hit — the user wants
+## the new destruction explosion skipped for a capture (it's not really
+## "destroyed", just carried off), see ship.gd::_destroy().
 
 const GROW_TIME := 0.28
 const HOLD_TIME := 0.45
@@ -25,6 +28,7 @@ signal caught
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_PAUSABLE  # freeze on pause, not inherit Game's ALWAYS
 	add_to_group("enemy_shots")
+	add_to_group("capture_beam")
 	area_entered.connect(_on_area_entered)
 	var shape := RectangleShape2D.new()
 	shape.size = Vector2(WIDTH, 1.0)

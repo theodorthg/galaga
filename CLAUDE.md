@@ -1287,6 +1287,113 @@ Abschuss-Sounds, Traktorstrahl-Fang-Sound, Stage-geschafft/Lap-voll-Sounds.**
   `enemy`-Gruppe aufgerufen → `level-cleared` + `_stage` 1→2; sieben
   simulierte Bonus-Pickups → erst still, beim 7. `bonus-stage-cleared`).
 
+**Vierzehnte Playtest-Runde (2026-09-13, direkt im Anschluss an die
+dreizehnte): Menü-Musik konsolidiert + Neustart-Bug behoben, Boss-Sound
+verallgemeinert, dive/stage/extra befüllt, kein Gameplay-Hintergrundmusik-Slot
+mehr, Schiffs-Explosion als visuelle Komponente, Extra-Leben-Default auf 5000.**
+- **Musik-Konsolidierung**: `pause-menu-music.ogg` doch nicht passend (Nutzer-
+  Feedback) — komplett fallen gelassen (Datei sogar vom Nutzer selbst als
+  `pause-menu-music_not used.ogg` markiert). Stattdessen EINE einzige
+  `menu-music.ogg` (identisch mit der ursprünglich fürs Highscore-Board
+  vorgesehenen Datei, `highscrores-music.ogg` — beide Dateien per `md5sum`
+  bestätigt bytegleich) für ALLE Menü-Screens: Pause, Einstellungen, Sound,
+  Standardwerte-Bestätigung, Highscores **und jetzt auch Hilfe** (Nutzerwunsch
+  „darf in der Hilfe auch weiterlaufen" — vorher bewusst ausgenommen, siehe
+  „Dreizehnte Playtest-Runde"). `sound_manager.gd`: Key `pause-menu-music` →
+  `menu-music`, `LOOPING_KEYS` entsprechend angepasst.
+- **Echter Bug behoben: Menü-Musik startete bei jedem Screen-Wechsel neu** —
+  `menus.gd::hide_all()` rief bisher unbedingt `_apply_screen_music("")` auf
+  (stoppte JEDE Musik), bevor `_swap()` sie für den neuen Screen wieder
+  startete — auch wenn beide Screens dieselbe Musik wollten (z. B.
+  Einstellungen → Sound-Unterseite, beide `menu-music`). Fix: neue
+  `_active_menu_music`-Variable merkt sich, was gerade läuft;
+  `_apply_screen_music(screen_name)` vergleicht nur noch den GEWÜNSCHTEN Track
+  gegen den AKTUELLEN und tut bei Gleichheit gar nichts — stoppt/startet nur
+  bei einem echten Wechsel (z. B. Pause → Auswertung). `hide_all()` fasst
+  Musik jetzt gar nicht mehr an (reine Sichtbarkeit); die drei Stellen in
+  `game.gd`, die `hide_all()` direkt aufrufen statt über `_swap()` zu gehen
+  (`_resume()`, `_new_run()`, `_revive_after_win_edit()`), rufen jetzt
+  zusätzlich explizit die neue `menus.stop_menu_music()` auf. Per Live-Test
+  mit `AudioStreamPlayer.get_playback_position()` verifiziert: Position lief
+  über Pause→Einstellungen→Sound→Standardwerte-Bestätigung→Hilfe→Highscores→
+  zurück zu Pause monoton weiter (nie zurück auf ~0) — keine einzige
+  Unterbrechung.
+- **Echter Bug behoben: automatischer Musikwechsel am Spielende griff nicht
+  zuverlässig** — der konkrete Fall: aus der Pause die Einstellungen öffnen
+  (Musik: `menu-music`), „Sieg bei X Punkten" unter den aktuellen Punktestand
+  senken, „Fertig" — das beendet den Lauf synchron noch INNERHALB von
+  `_close_sub()` (über `settings_changed.emit() → game.gd::_reload_settings()
+  → _check_win()`), der darauf folgende, bereits bestehende „nicht zurück zur
+  Pause swappen"-Schutz in `_close_sub()` ließ dabei aber die Musik unangetastet
+  auf `menu-music` stehen, statt auf `scoring-board-music` zu wechseln. Mit
+  der neuen `_active_menu_music`-Logik löst sich das von selbst — `_swap
+  ("summary")` (ausgelöst durch `show_run_summary()` mitten in diesem Ablauf)
+  erkennt jetzt korrekt den Wechsel und tauscht die Musik aus. Per Live-Test
+  mit exakt diesem Ablauf verifiziert (`_open_settings("pause")`, Score künstlich
+  über den gesenkten `win_score` geschoben, `_close_sub()` aufgerufen →
+  `scoring-board-music` läuft, `menu-music` steht, „summary" sichtbar). Die
+  Rückrichtung (Sieg-Screen → eigene „Einstellungen" → Sieg-Score wieder
+  anheben → „Fertig" → Lauf geht weiter) ebenfalls verifiziert: Musik danach
+  komplett still (kein Gameplay-Musik-Slot mehr, siehe unten).
+- **Boss-Sound gilt jetzt für JEDEN Boss-Kill**, nicht mehr nur für einen
+  Rettungskill (Nutzerwunsch, war ursprünglich zu eng gefasst) —
+  `enemy.gd::_explode()`s Sound-Auswahl prüft jetzt `kind == EnemyKinds.BOSS`
+  statt `_carrying_captive`. Anzeigename in der Sound-Unterseite entsprechend
+  von „Boss (mit Schiff) abgeschossen" zu „Boss abgeschossen" verkürzt.
+- **Klarstellung zur Fanfaren-Zuordnung** (Nutzer-Rückfrage): `level-cleared`
+  läuft genau in dem Moment, in dem eine Stage tatsächlich abgeräumt ist
+  (`game.gd::_process()`, bevor `_stage` hochgezählt wird) — das IST die
+  „Fanfare fürs Levelschaffen". `stage` (neu befüllt mit `stage.ogg`, siehe
+  unten) läuft weiterhin beim Start des JEWEILS NÄCHSTEN Levels
+  (`_start_ready()`s „STAGE n"-Banner) — Anzeigename entsprechend zu „Nächstes
+  Level" umbenannt, um genau diese Abgrenzung sofort klar zu machen. Beide
+  Zuordnungen waren schon in der dreizehnten Playtest-Runde korrekt verdrahtet,
+  nur die Anzeigenamen waren missverständlich.
+- **`dive.ogg`/`stage.ogg`/`extra.ogg` nachgereicht** — dieselben Keys wie
+  zuvor (unverändert seit der ersten Sound-Runde), nur jetzt mit echtem Clip
+  statt still. Kein Code geändert, nur die Dateien nach `assets/sounds/`
+  kopiert.
+- **Gameplay-Hintergrundmusik-Slot „music" komplett entfernt** (nicht nur
+  stumm gelassen) — Nutzer-Feststellung: das originale NES-Galaga hat keine
+  durchlaufende Musik während des Spiels, nur kurze Fanfaren/Jingles. Kurze
+  Web-Recherche bestätigt das (Soundtrack-Komponist Nobuyuki Ohnogi portierte
+  nur die Arcade-Jingles, keine Loop-Musik). `music`-Key aus `SOUNDS`/`ORDER`
+  entfernt, alle `_snd.play("music")`/`_snd.stop("music")`-Aufrufe in
+  `game.gd` (`_new_run()`, `_enter_title()`, `_check_win()`,
+  `_revive_after_win_edit()`, `_on_ship_died()`) ersatzlos gestrichen — kein
+  Slot mehr in der Sound-Unterseite dafür. Bleibt offen, falls der Nutzer
+  online doch noch einen Hinweis auf eine tatsächliche NES-Loop-Musik findet.
+- **Schiffs-Explosion als visuelle Komponente** (Nutzerwunsch: fehlte bisher
+  komplett — das Schiff wurde bei einem Treffer einfach unsichtbar, ohne
+  jeden visuellen Hinweis). Neue `ship_explosion.tscn`/`.gd` (gleiches Muster
+  wie `ship_reconstruct.gd`: `AnimatedSprite2D`, `SpriteFrames` zur Laufzeit
+  aus einzelnen PNGs gebaut, `explosion_done`-Signal, self-`queue_free()`) —
+  4 Frames aus dem bereits im Projekt liegenden, bis dahin ungenutzten
+  `assets/explosion and laser.png` (Bündel aus Laser- und Explosions-
+  Sprites) extrahiert, per Alpha-Bounding-Box automatisiert ausgeschnitten
+  und auf einen gemeinsamen 340×340-Canvas zentriert (`assets/graphics/
+  ship_explosion_f0..3.png` — Funke → mittlerer Ausbruch → heller Höhepunkt →
+  rauchiges Abklingen). `game.gd::_on_ship_died(show_explosion: bool)` spielt
+  sie **vor** jeder Reconstruct-/Game-Over-Logik ab und wartet auf
+  `explosion_done`, bevor irgendetwas anderes passiert — das Schiff kann also
+  nicht reconstructen, solange die Explosion noch zu sehen ist (exakte
+  Nutzervorgabe). `ship.gd::died`-Signal trägt dafür jetzt einen
+  `show_explosion`-Parameter; `_destroy(show_explosion := true)` — `false`
+  ausschließlich beim Boss-Traktorstrahl-Fang (neue Gruppe `"capture_beam"` auf
+  `capture_beam.tscn`, zusätzlich zu dessen bestehender `"enemy_shots"`-
+  Gruppe, lässt `ship.gd::_on_area_entered()` einen Fang von einem echten
+  Treffer unterscheiden) — ein Fang ist keine Zerstörung, dafür gibt's schon
+  den eigenen `beam-sound`. Per Live-Test verifiziert: echter Treffer (Bombe/
+  Laser/Rammen) spawnt die Explosion (Screenshot mit `get_tree().paused=true`
+  mitten in der Animation eingefangen), ein simulierter Boss-Fang (Area2D mit
+  beiden Gruppen-Tags) spawnt sie nachweislich NICHT, obwohl das Schiff in
+  beiden Fällen gleichermaßen `_alive=false` wird.
+- **Extra-Leben-Standardwert 20000 → 5000** (`GameSettings.DEF.extra_life`,
+  sowie `menus.gd::_reset_defaults()`s bisher abweichender Wert 10000 →
+  ebenfalls 5000) — an `boss_interval`s eigenen Default (schon immer 5000)
+  angeglichen, damit ein frisches Spiel für beide Mechaniken dieselbe
+  Punkteschwelle verwendet, wie vom Nutzer gewünscht.
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,
@@ -1447,18 +1554,18 @@ StageDirector, Ship, HUD-CanvasLayer.
 - `sound_manager.gd` (Autoload `Snd`, `project.godot [autoload]`) — ein
   `AudioStreamPlayer` je Key, Key = Dateiname (`res://assets/sounds/<key>`,
   `EXTS` probiert `.wav` vor `.ogg`; fehlt die Datei in beiden Formaten →
-  still, absichtlich — siehe „Dreizehnte Playtest-Runde"). Pro-Sound-Lautstärke 0–100 in
-  `user://settings.cfg [sound]` + `calib_version`, `base_db`-Kalibrierung je
-  Sound. Seit der dreizehnten Playtest-Runde können mehrere Keys gleichzeitig
-  loopen (`LOOPING_KEYS`, `_wanted`-Dictionary statt einer einzelnen Bool) —
-  vorher nur `music` als Sonderfall. Aktuelle Keys (16, siehe `ORDER`):
-  `music pause-menu-music scoring-board-music start-first-level-music shoot
-  enemy-death1 enemy-death2 dive enemy-wave1 beam-sound boss-killed
-  ship-destroyed extra bonus-stage-cleared level-cleared stage` — `music`,
-  `dive`, `extra`, `stage` sind aktuell OHNE Clip (still, bis der Nutzer
-  passende Dateien nachliefert), die übrigen 12 sind die zweite,
-  nutzerkuratierte Clip-Sammlung vom 2026-09-13 (`assets/sounds/`; die erste,
-  vom 2026-09-11, liegt als `assets/sounds_old/` daneben).
+  still, absichtlich — siehe „Dreizehnte"/„Vierzehnte Playtest-Runde").
+  Pro-Sound-Lautstärke 0–100 in `user://settings.cfg [sound]` + `calib_version`,
+  `base_db`-Kalibrierung je Sound. Mehrere Keys können gleichzeitig loopen
+  (`LOOPING_KEYS`, `_wanted`-Dictionary). Aktuelle Keys (15, siehe `ORDER`) —
+  ALLE mit echtem Clip, kein einziger mehr still: `menu-music
+  scoring-board-music start-first-level-music shoot enemy-death1
+  enemy-death2 dive enemy-wave1 beam-sound boss-killed ship-destroyed extra
+  bonus-stage-cleared level-cleared stage`. Kein Gameplay-Hintergrundmusik-Key
+  mehr (`music` wurde in der vierzehnten Playtest-Runde ersatzlos entfernt —
+  NES-Galaga hat keine durchlaufende Musik, nur Fanfaren). Clips liegen in
+  `assets/sounds/` (die erste, inzwischen komplett abgelöste Sammlung vom
+  2026-09-11 liegt als `assets/sounds_old/` daneben).
 
 ### Geräte-Layout (Phase 3)
 
@@ -1616,6 +1723,14 @@ oder `pause`-Action; bei Pause zusätzlich Tap = Resume.
   `ship-(re)construction.gif`), `build_done`-Signal, self-`queue_free()`.
   Läuft am Rundenstart und bei jedem Respawn (siehe `game.gd::
   _play_reconstruct()`).
+- `ship_explosion.gd` / `ship_explosion.tscn` (neu, vierzehnte Playtest-Runde)
+  — gleiches Muster wie `ship_reconstruct`: einmalige Explosions-Animation
+  (`AnimatedSprite2D`, 4 Frames aus `assets/graphics/ship_explosion_f0..3.png`,
+  ausgeschnitten aus `assets/explosion and laser.png`), `explosion_done`-Signal,
+  self-`queue_free()`. Läuft bei einem echten Treffer (nicht beim
+  Boss-Traktorstrahl-Fang) VOR jedem Reconstruct/Game-Over — siehe
+  `game.gd::_on_ship_died()`/`_play_explosion()` und `ship.gd::_destroy()`s
+  `show_explosion`-Parameter.
 - `enemy_kinds.gd` (`class_name EnemyKinds`) — ZAKO/GOEI/BOSS: Radius, Punkte,
   Sprite-Textur + Skalierung (siehe „Erste echte Assets"). `pick_visual(kind,
   stage)` liefert ab Stage 2 statt der klassischen Textur eines von

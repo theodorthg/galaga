@@ -330,12 +330,13 @@ func _explode() -> void:
 	killed.emit(int(EnemyKinds.DATA[kind]["points"]), kind, _variant_idx, _carrying_captive)
 	if _snd:
 		# Three distinct kill sounds (2026-09-13, replacing the one generic
-		# "hit"): a Boss shot down WHILE carrying a captured ship gets its own
-		# fanfare (checked first — only ever true for a Boss, and mutually
-		# exclusive with the other two), otherwise a plain in-formation kill
-		# vs. one caught mid-attack (DIVING/RETURNING) get different sounds —
-		# the user specifically wanted a diving kill to sound distinct.
-		if _carrying_captive:
+		# "hit"): ANY Boss kill gets its own fanfare — originally only the
+		# carrying-a-captive case, widened same-day per user request to every
+		# Boss kill regardless of whether it was carrying anyone — otherwise a
+		# plain in-formation kill vs. one caught mid-attack (DIVING/RETURNING)
+		# get different sounds, the user specifically wanted a diving kill to
+		# sound distinct.
+		if kind == EnemyKinds.BOSS:
 			_snd.play("boss-killed")
 		elif was_diving:
 			_snd.play("enemy-death2")

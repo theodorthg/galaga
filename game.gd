@@ -13,6 +13,7 @@ enum { TITLE, READY, ENTERING, FORMATION, GAME_OVER }
 
 const GAME_OVER_DELAY := 1.0
 const RECONSTRUCT_SCENE := preload("res://ship_reconstruct.tscn")
+const EXPLOSION_SCENE := preload("res://ship_explosion.tscn")
 const BONUS_ITEM_SCENE := preload("res://bonus_item.tscn")
 const SCORE_POPUP_SCRIPT := preload("res://score_popup.gd")
 # Tightened from 14-24s (2026-09-13 report: "one achievement in a 60000-point
@@ -172,8 +173,6 @@ func _enter_title() -> void:
 	_paused = false
 	_director.abort()
 	_clear_board()
-	if _snd:
-		_snd.stop("music")
 	_hud.set_playing(false)
 	_menus.show_title()
 	get_tree().paused = true
@@ -211,11 +210,11 @@ func _new_run() -> void:
 	_hud.clear_bonus_icons()
 	_hud.set_playing(true)
 	_menus.hide_all()
+	_menus.stop_menu_music()  # in case this run started from "Nochmal" on the game-over screen, scoring-board-music was still playing
 
 	_paused = false
 	get_tree().paused = false
 	if _snd:
-		_snd.play("music")
 		# One-shot intro, stage 1 of a fresh game only (user request) — gates
 		# the fly-in in _start_ready() below until it finishes or the player
 		# clicks/taps to skip (see _unhandled_input()).
@@ -240,6 +239,16 @@ func _play_reconstruct(at: Vector2) -> void:
 	r.global_position = at
 	await r.build_done
 
+## Plays the ship_explosion.tscn boom at `at` and waits for it — a real hit
+## (not a Boss capture, see ship.gd::_destroy()'s show_explosion) always gets
+## this BEFORE any reconstruct/game-over handling runs, so the ship visibly
+## blows up before it's allowed to start materializing again (user request).
+func _play_explosion(at: Vector2) -> void:
+	var e := EXPLOSION_SCENE.instantiate()
+	add_child(e)
+	e.global_position = at
+	await e.explosion_done
+
 ## Where the ship reappears — always horizontally centered (respawn() does
 ## the same), at whatever y the ship scene was authored with.
 func _ship_spawn_pos() -> Vector2:
@@ -256,6 +265,7 @@ func _request_pause() -> void:
 func _resume() -> void:
 	_paused = false
 	_menus.hide_all()
+	_menus.stop_menu_music()
 	_hud.set_playing(true)
 	get_tree().paused = false
 
@@ -359,8 +369,6 @@ func _check_win() -> void:
 	_ended_by_win = true
 	_state = GAME_OVER
 	_director.stop_attacks()
-	if _snd:
-		_snd.stop("music")
 	_hud.set_playing(false)
 	_menus.show_run_summary(_score, _stage, true, _rescues, _rescue_points, _achievements_collected, _hud._bonus_laps, _kill_stats)
 	get_tree().paused = true
@@ -377,10 +385,9 @@ func _revive_after_win_edit() -> void:
 	_ended_by_win = false
 	_state = FORMATION
 	_director.begin_attacks()
-	if _snd:
-		_snd.play("music")
 	_hud.set_playing(true)
 	_menus.hide_all()
+	_menus.stop_menu_music()  # was on menu-music (from the summary screen's own "Einstellungen" button)
 	get_tree().paused = false
 
 var _pending_twin := false
@@ -404,7 +411,13 @@ func _on_ship_rescued(at_position: Vector2) -> void:
 	if _snd:
 		_snd.play("extra")
 
-func _on_ship_died() -> void:
+func _on_ship_died(show_explosion: bool) -> void:
+	# Captured BEFORE anything below runs — _ship.position doesn't change
+	# again until respawn()/_ship_spawn_pos() later, so this is still exactly
+	# where it was hit. A capture (show_explosion == false) skips this: not a
+	# destruction, no boom (user request).
+	if show_explosion:
+		await _play_explosion(_ship.global_position)
 	# _lives already excludes the ship that just died (it was never counted in
 	# the reserve), so game-over is "no reserve left to draw from", checked
 	# BEFORE decrementing — decrementing an already-zero reserve would send it
@@ -412,8 +425,6 @@ func _on_ship_died() -> void:
 	if _lives <= 0:
 		_state = GAME_OVER
 		_director.stop_attacks()
-		if _snd:
-			_snd.stop("music")
 		await get_tree().create_timer(GAME_OVER_DELAY).timeout
 		if not is_instance_valid(self) or _state != GAME_OVER:
 			return

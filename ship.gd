@@ -76,7 +76,11 @@ var _thruster2: Line2D
 @onready var _sprite: Sprite2D = $Sprite2D
 @onready var _thruster: Line2D = $MainThruster
 
-signal died
+## show_explosion is false only for a Boss tractor-beam capture (see
+## _on_area_entered() below) — game.gd's handler plays ship_explosion.tscn
+## at the ship's position and waits for it before reconstructing, but only
+## when this is true (a capture isn't a destruction, no boom for it).
+signal died(show_explosion: bool)
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_PAUSABLE  # freeze on pause, not inherit Game's ALWAYS
@@ -175,19 +179,20 @@ func _on_area_entered(area: Area2D) -> void:
 	if not _alive or _invuln > 0.0:
 		return
 	if area.is_in_group("enemy_shots"):
+		var is_capture := area.is_in_group("capture_beam")
 		area.queue_free()
-		_destroy()
+		_destroy(not is_capture)
 	elif area.is_in_group("enemy") and area.is_active_diver():
-		_destroy()
+		_destroy(true)
 
-func _destroy() -> void:
+func _destroy(show_explosion := true) -> void:
 	_alive = false
 	visible = false
 	set_deferred("monitoring", false)
 	_revert_twin()  # twin bonus doesn't survive a hit, matches the arcade original
 	if _snd:
 		_snd.play("ship-destroyed")
-	died.emit()
+	died.emit(show_explosion)
 
 func respawn() -> void:
 	position.x = viewport_width * 0.5
