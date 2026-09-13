@@ -71,6 +71,19 @@ func _ready() -> void:
 	_touch = OS.has_feature("mobile") or DisplayServer.is_touchscreen_available()
 	_apply_display_mode()
 	_menus.set_touch_context(_touch)
+	# Ship is a CHILD node, so its own _ready() (and _update_home_y() inside
+	# it) already ran BEFORE this parent _ready() — against whatever aspect
+	# was in effect at scene load, not the one _apply_display_mode() just set
+	# above. On a device where touch is known upfront (OS.has_feature
+	# ("mobile")), that stale KEEP-based position never gets corrected
+	# afterwards: the retroactive-flip group call below only fires on an
+	# actual touch/drag INPUT EVENT, which never happens on a device that was
+	# already touch-known from the start. Re-running the whole
+	# touch_layout_listeners group here (harmless no-op for game.gd's own
+	# listener, since _touch is already set) re-homes the ship against the
+	# now-correct KEEP_WIDTH viewport height — fixes the ship sitting far too
+	# high on tall touch devices (e.g. OnePlus 12), user-reported 2026-09-13.
+	get_tree().call_group("touch_layout_listeners", "apply_touch_layout")
 	_snd = get_node_or_null("/root/Snd")
 
 	_director.setup(_formation, self)

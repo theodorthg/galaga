@@ -36,24 +36,23 @@
     <rect x="474" y="490" width="6" height="70"/>
   </g>
   <text x="450" y="600" text-anchor="middle" font-size="30" font-weight="700" fill="#eef4ff">Flaggschiff-Symbol = Hyper-Ammo</text>
-  <text x="450" y="634" text-anchor="middle" font-size="24" fill="#8fa3c8">Doppellaser bis zum Ende der Stage</text>
+  <text x="450" y="634" text-anchor="middle" font-size="24" fill="#8fa3c8">Doppellaser, färbt sich rot-weiß,</text>
+  <text x="450" y="664" text-anchor="middle" font-size="24" fill="#8fa3c8">bis zum Ende der Stage</text>
 
-  <rect x="60" y="670" width="780" height="2" fill="#4db2ff" fill-opacity="0.2"/>
+  <rect x="60" y="700" width="780" height="2" fill="#4db2ff" fill-opacity="0.2"/>
 
-  <!-- lap row mock-up, matching the real HUD strip -->
-  <text x="450" y="726" text-anchor="middle" font-size="30" font-weight="700" fill="#eef4ff">7 verschiedene Symbole in einer Reihe</text>
-  <g transform="translate(180 764)">
-    <g fill="#4db2ff" fill-opacity="0.35">
-      <rect x="0"   y="0" width="46" height="46" rx="8"/>
-      <rect x="58"  y="0" width="46" height="46" rx="8"/>
-      <rect x="116" y="0" width="46" height="46" rx="8"/>
-      <rect x="174" y="0" width="46" height="46" rx="8"/>
-      <rect x="232" y="0" width="46" height="46" rx="8"/>
-      <rect x="290" y="0" width="46" height="46" rx="8"/>
-      <rect x="348" y="0" width="46" height="46" rx="8"/>
-    </g>
-    <text x="440" y="34" font-size="34" font-weight="700" fill="#4db2ff">Laps 1</text>
+  <!-- lap row mock-up: real achievement icons, matching the actual HUD strip -->
+  <text x="450" y="756" text-anchor="middle" font-size="30" font-weight="700" fill="#eef4ff">7 verschiedene Symbole in einer Reihe</text>
+  <g transform="translate(181 790)">
+    <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/achievement_02.png" x="0"     y="0" width="97.8" height="52"/>
+    <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/achievement_03.png" x="111.8" y="0" width="61.9" height="52"/>
+    <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/achievement_04.png" x="187.7" y="0" width="71.8" height="52"/>
+    <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/achievement_08.png" x="273.5" y="0" width="62.7" height="52"/>
+    <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/achievement_09.png" x="350.2" y="0" width="53.1" height="52"/>
+    <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/achievement_10.png" x="417.3" y="0" width="62.9" height="52"/>
+    <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/achievement_11.png" x="494.2" y="0" width="43.5" height="52"/>
   </g>
-  <text x="450" y="866" text-anchor="middle" font-size="26" fill="#4db2ff" font-weight="700">+2500 Bonuspunkte, Laps-Zähler +1</text>
-  <text x="450" y="912" text-anchor="middle" font-size="24" fill="#8fa3c8">Reihe leert sich danach, sammeln geht weiter</text>
+  <text x="450" y="878" text-anchor="middle" font-size="30" font-weight="700" fill="#4db2ff">Laps 1</text>
+  <text x="450" y="916" text-anchor="middle" font-size="24" fill="#4db2ff" font-weight="700">+2500 Bonuspunkte, Laps-Zähler +1</text>
+  <text x="450" y="950" text-anchor="middle" font-size="22" fill="#8fa3c8">Reihe leert sich danach, sammeln geht weiter</text>
 </svg>

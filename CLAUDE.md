@@ -1068,13 +1068,84 @@ als Text + näher an Stage, komplett bildbasierte Hilfe.**
   layoutet, keine Überlappungen (mehrere davon erst nach Layout-Korrekturen
   anhand der gerenderten PNGs, siehe die SVGs selbst für Details).
 
+**Elfte Playtest-Runde (2026-09-13): eigene Hilfe-Karte „Schwierigkeitsstufen",
+echte Achievement-Icons statt Platzhalter-Kacheln in der Bonus-Hilfe, echter
+Bug bei der Schiffsposition auf hohen Touch-Geräten gefunden + behoben.**
+- **Neue Hilfe-Seite „Schwierigkeitsstufen"** (Nutzerwunsch, nachdem er nach
+  dem Unterschied zwischen Leicht/Normal/Schwer gefragt hatte — siehe
+  `game_settings.gd::dive_params()`: die drei Stufen ändern NUR, wie oft und
+  wie viele Gegner gleichzeitig aus der Formation stürzen, nicht Punkte,
+  Leben oder die tatsächliche Flug-/Sturzgeschwindigkeit selbst). Neue
+  `assets/help_src/difficulty.svg` → `difficulty.png`: ein „Angriffstempo"-
+  Balken pro Stufe (grün/cyan/rot, Füllstand nur relativ — Leicht niedrig,
+  Schwer fast voll, **bewusst ohne exakte Zahlen**, wie vom Nutzer verlangt)
+  plus eine Reihe mit 1/2/3 Zako-Sprites für „gleichzeitige Angreifer", darunter
+  zwei Klartext-Zeilen, dass sich sonst nichts ändert. Eingehängt in BEIDE
+  `menus.gd::HELP_PAGES_DESKTOP`/`HELP_PAGES_TOUCH`, direkt nach „Ziel &
+  Punkte" (6 Desktop- bzw. 5 Touch-Seiten jetzt, vorher 5/4). Per Live-Test in
+  beiden Seiten-Sets verifiziert (Dot-Indikator korrekt bei 6 bzw. 5, Karte
+  sauber im Panel, keine Überlappung).
+- **Bonus-Hilfe: echte Icons statt der Platzhalter-Kacheln** — die
+  „7 verschiedene Symbole in einer Reihe"-Mini-HUD-Mockup auf der
+  Achievements-Hilfeseite zeigte bisher 7 einfarbige abgerundete Rechtecke
+  (`fill-opacity 0.35`) statt echter Symbole — genau die vom Nutzer bemängelten
+  „Karos". `assets/help_src/bonus.svg` bettet an deren Stelle jetzt 7
+  tatsächlich unterschiedliche `achievement_XX.png` (Indizes 2/3/4/8/9/10/11,
+  alle aus `bonus_item.gd::ICON_INDICES`, seitenverhältnis-korrekt skaliert auf
+  eine gemeinsame Höhe von 52px) ein — zeigt die echte Symbolvielfalt statt
+  einer abstrakten Platzhalter-Reihe. Zusätzlich (Nutzer-Zusatz) einen
+  expliziten Hinweis ergänzt, dass das Flaggschiff-Symbol (`achievement_00`)
+  den Laser **rot-weiß färbt** (vorher stand nur „Doppellaser", die Farbe war
+  nirgends erwähnt) — dritte Textzeile „Doppellaser, färbt sich rot-weiß, bis
+  zum Ende der Stage" im Hyper-Ammo-Abschnitt, restliche Sektion (Divider,
+  „Laps 1"-Text, Bonuspunkte-Zeilen) entsprechend nach unten verschoben. Per
+  Live-Screenshot verifiziert: alle 7 Icons sichtbar unterschiedlich, keine
+  Überlappung, „rot-weiß" lesbar.
+- **Echter Bug gefunden: Schiff auf hohen Touch-Geräten (z. B. OnePlus 12)
+  saß noch immer zu weit oben** — die achte Playtest-Runde hatte
+  `ship.gd::_update_home_y()` zwar schon korrekt auf die echte Viewport-Höhe
+  umgestellt (statt einer canvas-fixen y), aber der Fix griff nur beim
+  RETROAKTIVEN Touch-Flip (`apply_touch_layout()`, ausgelöst durch ein
+  tatsächliches Touch-Input-Event) vollständig. Ursache: `Ship` ist ein
+  KIND-Node von `Game` — Godot ruft `_ready()` von Kindern grundsätzlich VOR
+  dem der Eltern auf. `ship._ready()` (und damit `_update_home_y()`) lief also
+  schon, BEVOR `game._ready()` überhaupt `_apply_display_mode()` aufrief und
+  `content_scale_aspect` von der Vorgabe auf `KEEP_WIDTH` umstellte. Auf einem
+  Gerät, das Touch schon beim Start kennt (`OS.has_feature("mobile")` liefert
+  sofort `true`, kein „später erkannt"-Fall), lief die
+  `touch_layout_listeners`-Gruppe (die genau diese Neuberechnung nachholen
+  würde) aber nie — sie wird ausschließlich von einem echten
+  `InputEventScreenTouch`/`ScreenDrag` in `game.gd::_input()` ausgelöst, nicht
+  vom synchronen Erkennungspfad in `_ready()`. Die einmalig in `ship._ready()`
+  berechnete Position blieb also dauerhaft auf dem VORHERIGEN (kleineren)
+  Viewport-Höhenwert stehen — exakt das vom Nutzer gemeldete Symptom. Fix:
+  `game.gd::_ready()` ruft direkt nach `_apply_display_mode()` jetzt
+  `get_tree().call_group("touch_layout_listeners", "apply_touch_layout")` auf
+  (für `game.gd`s eigenen Listener ein harmloses No-op, da `_touch` da schon
+  gesetzt ist; für `ship.gd` löst es `_update_home_y.call_deferred()` erneut
+  aus — jetzt gegen den bereits korrekt umgeschalteten Aspect). Per
+  Live-Test verifiziert (da die Embedded-Game-Ansicht im Editor sich nicht auf
+  eine andere Fensterauflösung als die Design-Canvas bringen ließ, wurde die
+  Korrektur-Mechanik direkt nachgewiesen: `ship.position.y` künstlich auf
+  einen falschen Wert gesetzt, danach derselbe `call_group(...)`-Aufruf wie im
+  Fix ausgeführt → Position sprang zuverlässig auf den aus der aktuellen
+  Viewport-Höhe berechneten korrekten Wert zurück).
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,
 StageDirector, Ship, HUD-CanvasLayer.
 
 - `game.gd` (`class_name Game`) — State-Machine TITLE → READY → ENTERING →
-  FORMATION → GAME_OVER + `_paused`. `_new_run()` (aus Titel/„Nochmal"): liest
+  FORMATION → GAME_OVER + `_paused`. `_ready()` ruft nach `_apply_display_mode()`
+  seit der elften Playtest-Runde zusätzlich
+  `get_tree().call_group("touch_layout_listeners", "apply_touch_layout")` auf —
+  `Ship` ist ein Kind-Node und hat seine eigene `_ready()` (inkl.
+  `_update_home_y()`) schon VOR diesem Aufruf laufen lassen, gegen den zu dem
+  Zeitpunkt noch nicht umgeschalteten `content_scale_aspect`; ohne diesen
+  Nachtrag blieb die Schiffsposition auf Geräten, die Touch schon beim Start
+  kennen, dauerhaft auf dem falschen (zu kleinen) Viewport-Höhenwert stehen,
+  siehe dort. `_new_run()` (aus Titel/„Nochmal"): liest
   `GameSettings`, setzt Leben/Extra-Leben-Schwelle, `_director.configure(...)`
   aus der Schwierigkeit, räumt das Feld (`_clear_board`), entpausiert, Musik an,
   spielt die Ship-Reconstruct-Animation + „BEREIT"-Banner (`_play_reconstruct()`)
@@ -1167,8 +1238,9 @@ StageDirector, Ship, HUD-CanvasLayer.
   zehnten Playtest-Runde erst über den neuen `"confirm_reset"`-Screen nach,
   statt sofort zurückzusetzen. Sound-Unterseite (HSlider pro Sound,
   Loslassen = Vorhören), Hilfe (seit der zehnten Playtest-Runde bildbasiert —
-  `HELP_PAGES_DESKTOP`/`HELP_PAGES_TOUCH`, je 4–5 Seiten mit `‹`/`›`, siehe
-  dort — vorher 3 reine Textseiten), seit der siebten Playtest-Runde ein
+  `HELP_PAGES_DESKTOP`/`HELP_PAGES_TOUCH`, seit der elften Playtest-Runde
+  6 bzw. 5 Seiten mit `‹`/`›` (die neue „Schwierigkeitsstufen"-Karte kam
+  dazu), siehe dort — vorher 3 reine Textseiten), seit der siebten Playtest-Runde ein
   Run-Summary-Screen (`"summary"`,
   `show_run_summary()`, seit der achten Playtest-Runde mit zusätzlicher
   Kill-Aufschlüsselung — seit der neunten Playtest-Runde pro tatsächlich

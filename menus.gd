@@ -46,12 +46,14 @@ const HELP_PAGES_DESKTOP := [
 	{"file": "keyboard", "h": "Steuerung — Tastatur"},
 	{"file": "mouse", "h": "Steuerung — Maus"},
 	{"file": "goal", "h": "Ziel & Punkte"},
+	{"file": "difficulty", "h": "Schwierigkeitsstufen"},
 	{"file": "capture", "h": "Boss-Capture"},
 	{"file": "bonus", "h": "Achievements & Boni"},
 ]
 const HELP_PAGES_TOUCH := [
 	{"file": "touch", "h": "Steuerung — Touch"},
 	{"file": "goal", "h": "Ziel & Punkte"},
+	{"file": "difficulty", "h": "Schwierigkeitsstufen"},
 	{"file": "capture", "h": "Boss-Capture"},
 	{"file": "bonus", "h": "Achievements & Boni"},
 ]
