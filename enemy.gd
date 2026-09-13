@@ -219,15 +219,26 @@ func _begin_lock() -> void:
 	locked_in.emit(self)
 	_finish()
 
-## Shootable Boss coverup: while it's hovering to beam up the ship, or already
-## carrying one back up to its formation slot (top row — see Formation's ROWS
-## layout), a hit is absorbed with no effect. Without this, the Boss could die
-## mid-capture off a shot already in flight and the player would never even
-## see that the tractor beam had caught them. Vulnerable again the instant it
-## settles back into formation (_begin_lock() -> IN_FORMATION).
+## Two unrelated reasons an enemy can't be hit right now:
+##  - Boss mid-capture (see the CAPTURE_* states above) — a hit is absorbed
+##    with no effect so the Boss can't die mid-capture off a shot already in
+##    flight, which would hide that the tractor beam had caught the player.
+##    Vulnerable again once it settles back into formation (IN_FORMATION).
+##  - The BOTTOM_UP fly-in entry (entry_paths.gd) spawns enemies from BELOW
+##    the screen and flies them up past the player before they loop into
+##    formation — while still below the ship's own gun height, "shooting"
+##    them makes no physical sense (the beam fires upward from the ship).
+##    Only applies during FLYING_IN; TOP_LEFT/TOP_RIGHT entries never start
+##    below the ship, so this is a no-op for them.
 func _is_invulnerable() -> bool:
-	return _state == CAPTURE_APPROACH or _state == CAPTURE_BEAM \
-		or (_state == RETURNING and _carrying_captive)
+	if _state == CAPTURE_APPROACH or _state == CAPTURE_BEAM \
+		or (_state == RETURNING and _carrying_captive):
+		return true
+	if _state == FLYING_IN:
+		var player := get_tree().get_first_node_in_group("player")
+		if player and global_position.y > player.global_position.y:
+			return true
+	return false
 
 func _on_area_entered(area: Area2D) -> void:
 	if area.is_in_group("player_lasers"):

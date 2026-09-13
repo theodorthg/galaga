@@ -23,7 +23,9 @@ const SIDE_MARGIN := 40.0
 # source grid).
 const ICON_INDICES := [0, 2, 3, 4, 8, 9, 10, 11, 12, 13, 14, 15]
 
-signal collected(points, icon)
+## icon_index is passed along so game.gd can special-case achievement_00 (see
+## ship.gd::activate_hyper_ammo) — every other index is just points.
+signal collected(points, icon, icon_index)
 
 var _t := 0.0
 var _base_x := 0.0
@@ -31,6 +33,7 @@ var _amplitude := 0.0
 var _phase := 0.0
 var _sway_speed := 1.0
 var _icon_tex: Texture2D
+var _icon_idx := -1
 
 @onready var _sprite: Sprite2D = $Sprite2D
 @onready var _col: CollisionShape2D = $CollisionShape2D
@@ -47,8 +50,8 @@ func _ready() -> void:
 	_phase = randf_range(0.0, TAU)
 	_sway_speed = randf_range(SWAY_SPEED_MIN, SWAY_SPEED_MAX)
 	position.x = _base_x + sin(_phase) * _amplitude
-	var idx: int = ICON_INDICES.pick_random()
-	_icon_tex = load("res://assets/graphics/achievement_%02d.png" % idx)
+	_icon_idx = ICON_INDICES.pick_random()
+	_icon_tex = load("res://assets/graphics/achievement_%02d.png" % _icon_idx)
 	_sprite.texture = _icon_tex
 	_sprite.scale = Vector2.ONE * (DISPLAY_H / float(_icon_tex.get_height()))
 	var circ := CircleShape2D.new()
@@ -70,5 +73,5 @@ func _on_area_entered(area: Area2D) -> void:
 		_collect()
 
 func _collect() -> void:
-	collected.emit(POINTS, _icon_tex)
+	collected.emit(POINTS, _icon_tex, _icon_idx)
 	queue_free()

@@ -36,6 +36,7 @@ var _snd: Node
 var _bonus_t := 0.0
 var _boss_interval := 0
 var _next_boss_score := 0
+var _win_score := 0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -102,7 +103,9 @@ func _new_run() -> void:
 	_next_extra = _extra_step
 	_boss_interval = int(_cfg.get("boss_interval", 0))
 	_next_boss_score = _boss_interval
+	_win_score = int(_cfg.get("win_score", 0))
 	_pending_twin = false
+	_ship.deactivate_hyper_ammo()  # a fresh game never starts with a leftover buff
 	_director.configure(GameSettings.dive_params(int(_cfg.get("difficulty", 1))))
 
 	_clear_board()
@@ -187,17 +190,35 @@ func _on_enemy_killed(points: int) -> void:
 		if _snd:
 			_snd.play("extra")
 	_check_boss_threshold()
+	_check_win()
 
 ## "Boss alle X Punkte" (GameSettings.boss_interval) — a guaranteed capture
 ## attempt on top of StageDirector's own random per-interval chance, so the
 ## mechanic isn't left purely to luck. `while` (not `if`) covers a big single
 ## score jump (e.g. the bonus-lap bonus) crossing more than one threshold at once.
+## force_boss_capture() itself keeps retrying every couple of seconds until a
+## Boss is actually available — see stage_director.gd — so this "fire and
+## forget" call survives a stage change or the player losing a ship in between.
 func _check_boss_threshold() -> void:
 	if _boss_interval <= 0:
 		return
 	while _score >= _next_boss_score:
 		_next_boss_score += _boss_interval
 		_director.force_boss_capture()
+
+## "Sieg bei X Punkten" (GameSettings.win_score) — an optional target score;
+## 0 = off (endless, as before). Checked alongside the boss threshold so any
+## scoring event (kill or bonus pickup) can trigger it.
+func _check_win() -> void:
+	if _win_score <= 0 or _state != FORMATION or _score < _win_score:
+		return
+	_state = GAME_OVER
+	_director.stop_attacks()
+	if _snd:
+		_snd.stop("music")
+	_hud.set_playing(false)
+	_menus.show_game_over(_score, _stage, true)
+	get_tree().paused = true
 
 var _pending_twin := false
 
@@ -231,7 +252,7 @@ func _on_ship_died() -> void:
 		if not is_instance_valid(self) or _state != GAME_OVER:
 			return
 		_hud.set_playing(false)
-		_menus.show_game_over(_score, _stage)
+		_menus.show_game_over(_score, _stage, false)
 		get_tree().paused = true
 		return
 	_lives -= 1
@@ -267,6 +288,7 @@ func _process(delta: float) -> void:
 		return
 	if get_tree().get_nodes_in_group("enemy").is_empty():
 		_stage += 1
+		_ship.deactivate_hyper_ammo()  # Hyper-Ammo only lasts "for the rest of this stage"
 		_start_ready()
 		return
 	_bonus_t -= delta
@@ -287,12 +309,17 @@ func _spawn_bonus_item() -> void:
 ## BONUS_MAX_SHOWN / add_bonus_icon) — on top of the per-item POINTS.
 const BONUS_LAP_POINTS := 2500
 
-func _on_bonus_collected(points: int, icon: Texture2D) -> void:
+func _on_bonus_collected(points: int, icon: Texture2D, icon_index: int) -> void:
 	_score += points
 	if _hud.add_bonus_icon(icon):
 		_score += BONUS_LAP_POINTS
 	_hud.set_score(_score)
 	_check_boss_threshold()
+	_check_win()
+	# achievement_00 specifically ("the flagship one") grants Hyper-Ammo — two
+	# closely-spaced beams per shot — for the rest of the current stage.
+	if icon_index == 0:
+		_ship.activate_hyper_ammo()
 	if _snd:
 		_snd.play("extra")
 

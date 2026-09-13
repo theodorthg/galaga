@@ -14,6 +14,9 @@ const DEF := {
 	"boss_interval": 5000, # 0 = off, sonst BOSS_INTERVAL_STEP..BOSS_INTERVAL_MAX in
 	                        # BOSS_INTERVAL_STEP-Schritten — garantierter Boss-Capture-
 	                        # Versuch alle N Punkte, zusätzlich zur Zufallschance pro Stage
+	"win_score": 100000,    # 0 = aus (endlos wie bisher), sonst WIN_SCORE_STEP..
+	                        # WIN_SCORE_MAX — Zielscore für ein "gewonnenes" Spiel
+	                        # (eigener Eintrag in derselben Hall of Fame)
 }
 
 const LIVES_MIN := 2
@@ -24,6 +27,8 @@ const MAX_SHOTS_MIN := 1
 const MAX_SHOTS_MAX := 5
 const BOSS_INTERVAL_MAX := 20000
 const BOSS_INTERVAL_STEP := 1000
+const WIN_SCORE_MAX := 500000
+const WIN_SCORE_STEP := 10000
 const DIFF_NAMES := ["Leicht", "Normal", "Schwer"]
 
 static func load_all() -> Dictionary:

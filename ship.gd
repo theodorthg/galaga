@@ -14,6 +14,16 @@ const LASER_SCENE := preload("res://laser.tscn")
 const RESPAWN_INVULN := 1.6
 const TWIN_OFFSET := 34.0
 const SINGLE_HALF_WIDTH := 34.0
+## Two beams close together instead of one, while Hyper-Ammo is active (see
+## activate_hyper_ammo()) — much narrower than TWIN_OFFSET, which represents a
+## whole second ship rather than a tighter spread from the same gun.
+const HYPER_OFFSET := 10.0
+## The main thruster's flame can reach up to its own max_length below the ship
+## at full power (plus the GPU particle trail) — far enough to dip into the
+## HUD's bottom-center bonus-icon row (hud.gd) on a tall/thin canvas. Shifting
+## the resting position up by that length + a small safety margin keeps the
+## flame clear of it regardless of how main_thruster.tscn's max_length is tuned.
+const THRUSTER_CLEARANCE_MARGIN := 5.0
 
 var speed := 480.0
 var ship_half_width := 34.0
@@ -27,13 +37,14 @@ var _touch := false
 var _snd: Node
 var _max_lasers_base := 2  # set from GameSettings.max_shots via configure()
 var _max_lasers := _max_lasers_base
+var _hyper_ammo := false
 
 var _twin := false
 var _sprite2: Sprite2D
-var _thruster2: Node2D
+var _thruster2: Line2D
 
 @onready var _sprite: Sprite2D = $Sprite2D
-@onready var _thruster: Node2D = $MainThruster
+@onready var _thruster: Line2D = $MainThruster
 
 signal died
 
@@ -45,6 +56,7 @@ func _ready() -> void:
 	_snd = get_node_or_null("/root/Snd")
 	area_entered.connect(_on_area_entered)
 	viewport_width = get_viewport_rect().size.x
+	position.y -= _thruster.max_length + THRUSTER_CLEARANCE_MARGIN
 
 # group "touch_layout_listeners": first real touch event flips us to touch mode
 func apply_touch_layout() -> void:
@@ -89,13 +101,17 @@ func _unhandled_input(event: InputEvent) -> void:
 func shoot() -> void:
 	if get_tree().get_nodes_in_group("player_lasers").size() >= _max_lasers:
 		return
-	_fire_laser(-TWIN_OFFSET if _twin else 0.0)
-	if _twin:
-		_fire_laser(TWIN_OFFSET)
+	for gun_x in ([-TWIN_OFFSET, TWIN_OFFSET] if _twin else [0.0]):
+		if _hyper_ammo:
+			_fire_laser(gun_x - HYPER_OFFSET * 0.5)
+			_fire_laser(gun_x + HYPER_OFFSET * 0.5)
+		else:
+			_fire_laser(gun_x)
 
 func _fire_laser(x_offset: float) -> void:
 	var laser := LASER_SCENE.instantiate()
 	laser.add_to_group("player_lasers")
+	laser.accent_color = Laser.ACCENT_HYPER if _hyper_ammo else Laser.ACCENT_NORMAL
 	get_parent().add_child(laser)
 	laser.global_position = global_position + Vector2(x_offset, -22)
 	if _snd:
@@ -150,6 +166,18 @@ func become_twin() -> void:
 	_thruster2 = _thruster.duplicate()
 	_thruster2.position.x = TWIN_OFFSET
 	add_child(_thruster2)
+
+## Rewarded for collecting the achievement_00 bonus item specifically (see
+## game.gd's _on_bonus_collected) — two closely-spaced beams per shot instead
+## of one, in a distinct white-red flash so it reads as a different power-up
+## from the normal white-turquoise laser. Lasts for the rest of the current
+## stage (game.gd clears it on every stage change), independent of the
+## twin-ship reward — stacks with it if both are active.
+func activate_hyper_ammo() -> void:
+	_hyper_ammo = true
+
+func deactivate_hyper_ammo() -> void:
+	_hyper_ammo = false
 
 func _revert_twin() -> void:
 	if not _twin:

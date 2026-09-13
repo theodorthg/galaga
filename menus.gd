@@ -146,8 +146,11 @@ func show_title() -> void:
 func show_pause() -> void:
 	_swap("pause")
 
-func show_game_over(score: int, stage: int) -> void:
-	_fill_gameover(score, stage)
+## `won` distinguishes a "Sieg bei X Punkten" ending (GameSettings.win_score,
+## game.gd::_check_win()) from a regular game over — same screen, same Hall
+## of Fame, just a different heading.
+func show_game_over(score: int, stage: int, won := false) -> void:
+	_fill_gameover(score, stage, won)
 	_swap("gameover")
 
 # ---------------------------------------------------------------- helpers
@@ -349,6 +352,7 @@ func _build_settings() -> Control:
 	box.add_child(_stepper("Leben", _fmt_lives, _step_lives, _set_lives_text))
 	box.add_child(_stepper("Extra-Leben", _fmt_extra, _step_extra, _set_extra_text))
 	box.add_child(_stepper("Boss alle X Punkte", _fmt_boss_interval, _step_boss_interval, _set_boss_interval_text))
+	box.add_child(_stepper("Sieg bei X Punkten", _fmt_win_score, _step_win_score, _set_win_score_text))
 	box.add_child(_stepper("Max. Schüsse", _fmt_max_shots, _step_max_shots, _set_max_shots_text))
 	box.add_child(_stepper("Schwierigkeit", _fmt_diff, _step_diff))
 	box.add_child(_spacer(8))
@@ -403,6 +407,18 @@ func _set_boss_interval_text(t: String) -> void:
 		return
 	var n := clampi(t.to_int(), 0, GameSettings.BOSS_INTERVAL_MAX)
 	_cfg.boss_interval = int(roundf(float(n) / GameSettings.BOSS_INTERVAL_STEP)) * GameSettings.BOSS_INTERVAL_STEP
+
+func _fmt_win_score() -> String:
+	return "aus" if _cfg.win_score == 0 else str(_cfg.win_score)
+func _step_win_score(d: int) -> void:
+	_cfg.win_score = clampi(_cfg.win_score + d * GameSettings.WIN_SCORE_STEP, 0, GameSettings.WIN_SCORE_MAX)
+func _set_win_score_text(t: String) -> void:
+	var s := t.strip_edges().to_lower()
+	if s == "" or s == "aus":
+		_cfg.win_score = 0
+		return
+	var n := clampi(t.to_int(), 0, GameSettings.WIN_SCORE_MAX)
+	_cfg.win_score = int(roundf(float(n) / GameSettings.WIN_SCORE_STEP)) * GameSettings.WIN_SCORE_STEP
 
 func _fmt_max_shots() -> String: return str(_cfg.max_shots)
 func _step_max_shots(d: int) -> void:
@@ -554,7 +570,9 @@ var _hof_box: VBoxContainer
 func _build_gameover() -> Control:
 	var s := _screen()
 	var box := _box(s)
-	box.add_child(_title_label("GAME OVER", 36))
+	var title := _title_label("GAME OVER", 36)
+	title.name = "Title"
+	box.add_child(title)
 	var sub := _title_label("", 20)
 	sub.name = "Sub"
 	box.add_child(sub)
@@ -601,9 +619,10 @@ func _build_gameover() -> Control:
 
 var _pending := {}
 
-func _fill_gameover(score: int, stage: int) -> void:
+func _fill_gameover(score: int, stage: int, won := false) -> void:
 	_pending = {"score": score, "stage": stage}
 	var box := _box(_screens["gameover"])
+	(box.get_node("Title") as Label).text = "SIEG!" if won else "GAME OVER"
 	(box.get_node("Sub") as Label).text = "SCORE  %06d      STAGE  %d" % [score, stage]
 	var qualifies := HallOfFame.qualifies(score)
 	box.get_node("Entry").visible = qualifies

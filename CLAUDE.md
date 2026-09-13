@@ -425,6 +425,83 @@ Capture unverwundbar, Überschriften-Outline auf Cyan.**
   nicht getrennt, für ein einheitliches Bild. Per Screenshot verifiziert
   (Titel-Screen „GALAGA").
 
+**Vierte Playtest-Runde (2026-09-13): Laser-Flash, Boss-Garantie „sticky"
+gemacht, Schiffs-Freiraum, Einflug-von-unten-Unverwundbarkeit, Hyper-Ammo,
+Sieg-Bedingung.**
+- **Laser flasht Weiß/Türkis statt statischem Strich**: `laser.gd` bekam
+  `class_name Laser` + einen loopenden `Tween` auf `modulate` zwischen Weiß
+  und `ACCENT_NORMAL` (`40e0d0`, Türkis) — multipliziert die schon
+  gezeichneten `_draw()`-Farben zur Laufzeit, kein Neuzeichnen nötig. Per
+  Live-Test verifiziert (`modulate` wandert über mehrere Ticks Richtung Türkis).
+- **„Boss alle X Punkte" war nicht wirklich garantiert**: Nutzer-Report — bei
+  eingestellten 5000 kam der erste erzwungene Boss erst nach 15000 Punkten.
+  Ursache: `force_boss_capture()` (2026-09-12 eingeführt) versuchte es genau
+  einmal im Moment der Schwellenüberschreitung — war in diesem Moment kein
+  Boss frei (mitten im Einflug, alle schon am Tauchen/Fangen, Stage-Wechsel im
+  Gange …), verpuffte der Versuch ersatzlos und die nächste Chance kam erst
+  bei der nächsten Schwelle. Fix: `stage_director.gd` merkt sich jetzt nur
+  noch einen `_forced_pending`-Wunsch und probiert ihn alle
+  `FORCED_RETRY_INTERVAL` (2 s) erneut — unabhängig von Schiffsverlust oder
+  Stage-Wechsel (`_attacks_on` pausiert die Versuche nur zwischen den Stages,
+  wirft den Wunsch aber nicht weg) —, bis tatsächlich ein Boss verfügbar ist.
+  Wird bei jedem neuen Spiel (`configure()`) bzw. beim Verlassen zum Titel
+  (`abort()`) zurückgesetzt, damit kein alter Wunsch ins nächste Spiel
+  durchsickert. `_try_capture_dive()` und `force_boss_capture()` laufen jetzt
+  beide über dieselbe `_attempt_capture_dive()`, die jetzt `bool` zurückgibt
+  (Erfolg/Misserfolg). Per Live-Test verifiziert: alle Bosse künstlich
+  „beschäftigt" (`LOCKING`) → Wunsch bleibt `_forced_pending=true` und nichts
+  passiert; sobald einer wieder `IN_FORMATION` ist, greift der nächste Retry
+  sofort (`CAPTURE_APPROACH`).
+- **Schiff braucht mehr Freiraum zur Flamme**: die Haupttriebwerksflamme
+  (`main_thruster.tscn`, `max_length = 100`) kann bei voller Leistung bis
+  knapp unter den unteren Bildschirmrand reichen — auf der schmalen
+  540×960-Canvas überlappt das mit `hud.gd`s Bonus-Icon-Reihe unten mittig.
+  `ship.gd::_ready()` verschiebt die Ausgangsposition jetzt automatisch um
+  `_thruster.max_length + THRUSTER_CLEARANCE_MARGIN (5)` nach oben (aus
+  `main_thruster.tscn` gelesen, nicht hartkodiert, bleibt also synchron, falls
+  die Flammenlänge je angepasst wird). `_thruster`/`_thruster2` sind jetzt als
+  `Line2D` statt `Node2D` typisiert, damit `.max_length` direkt lesbar ist.
+  Der tatsächlich verwendete Ship-Startwert kommt aus `game.tscn`s
+  Instanz-Override (`position = Vector2(270, 884)`, NICHT `ship.tscn`s eigener
+  Vorgabe 828!) — landet nach dem Shift bei y=779. Per Live-Test verifiziert.
+- **Einflug von unten: erst über der eigenen Kanone abschießbar**: der
+  `BOTTOM_UP`-Einflugpfad (`entry_paths.gd`) lässt Gegner unterhalb des
+  Bildschirms starten und erst nach oben Richtung Formation fliegen — dabei
+  passieren sie kurzzeitig eine Position UNTER dem Schiff, wo ein
+  „Abschuss" physikalisch keinen Sinn ergibt (der Strahl fliegt nach oben).
+  `enemy.gd::_is_invulnerable()` blockt jetzt zusätzlich Treffer während
+  `FLYING_IN`, solange `global_position.y > player.global_position.y` — sobald
+  der Gegner über die Kanonenhöhe steigt, ist er normal verwundbar. Betrifft
+  `TOP_LEFT`/`TOP_RIGHT`-Einflüge nicht (starten schon oben). Per Live-Test
+  mit zwei Positionen (unter/über der Kanone) verifiziert.
+- **Hyper-Ammo**: Sammelt man `achievement_00` aus einem Bonus-Item ein (statt
+  der anderen 11 Indizes, die nur Punkte geben), feuert das Schiff bis zum
+  Stage-Ende zwei eng nebeneinanderliegende Strahlen pro Schuss
+  (`ship.gd::HYPER_OFFSET = 10`, deutlich enger als `TWIN_OFFSET = 34` der
+  Zwillingsjäger-Belohnung — beide Boni sind unabhängig und stapeln sich).
+  Farblich klar unterscheidbar: Hyper-Ammo flasht Weiß/Rot
+  (`Laser.ACCENT_HYPER = ff4d4d`) statt Weiß/Türkis. `bonus_item.gd`s
+  `collected`-Signal gibt jetzt den Icon-Index mit durch, `game.gd::
+  _on_bonus_collected()` ruft bei Index 0 `ship.activate_hyper_ammo()`;
+  `deactivate_hyper_ammo()` läuft bei jedem Stage-Wechsel (`_process()`s
+  Stage-Clear-Zweig) UND in `_new_run()` (damit ein neues Spiel nie mit einem
+  Rest-Bonus aus der letzten Partie startet). Übersteht Schiffsverlust
+  innerhalb derselben Stage (das Schiff-Node ist persistent, `_hyper_ammo`
+  bleibt beim Respawn unangetastet). Per Live-Test verifiziert (2 Strahlen
+  bei ±5 px, beide korrekt rot).
+- **Sieg-Bedingung**: neue Einstellung „Sieg bei X Punkten"
+  (`GameSettings.win_score`, Default 100000, „aus" möglich, 10000er-Schritte
+  bis 500000) — auf Nachfrage des Nutzers, ob ein Endlos-Charakter ohne
+  Ziel sinnvoll ist; mit dem Angebot, es umzusetzen "falls nichts dagegen
+  spricht" (nichts sprach dagegen, umgesetzt). `game.gd::_check_win()` läuft
+  neben `_check_boss_threshold()` bei jeder Punktegutschrift; bei Erreichen:
+  gleicher Ablauf wie Game Over (Tree pausiert, Musik stoppt), aber
+  `menus.gd::show_game_over(score, stage, won=true)` zeigt „SIEG!" statt
+  „GAME OVER" (Titel-Label jetzt als `Title`-Node referenzierbar) — dieselbe
+  Hall of Fame, kein separates Ranking. Per Live-Test verifiziert (Score über
+  die Schwelle geschoben → Zustand wechselt zu GAME_OVER, Screenshot zeigt
+  „SIEG!" korrekt mit Score/Stage und Namenseingabe).
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,
@@ -444,6 +521,13 @@ StageDirector, Ship, HUD-CanvasLayer.
   → Tree pausiert + `menus.show_pause()`. `_enter_title()` bei „Zum Titel".
   `_snd` = `get_node_or_null("/root/Snd")` (bare `Snd` bricht `_selftest`).
   `content_scale_aspect` KEEP/KEEP_WIDTH je Touch. `process_mode = ALWAYS`.
+  `_check_boss_threshold()` und `_check_win()` laufen bei jeder
+  Punktegutschrift (Kill UND Bonus-Pickup) — Ersteres ruft bei
+  Schwellenüberschreitung `StageDirector.force_boss_capture()` (siehe dort,
+  seit 2026-09-13 „sticky"), Letzteres beendet den Lauf mit
+  `show_game_over(score, stage, won=true)`, sobald `GameSettings.win_score`
+  erreicht ist (0 = aus). `achievement_00`-Pickup → `ship.activate_hyper_ammo()`
+  (siehe „Vierte Playtest-Runde").
 - `hud.gd` (`class_name Hud`) — **nur noch das In-Game-HUD**: Score (oben links),
   Stage (unten rechts), Leben unten links (`_draw`, echte `player_trim.png`-
   Sprites statt Platzhalter-Dreiecke; ab `MANY_THRESHOLD = 5` ein Icon + „× N"
@@ -529,7 +613,11 @@ Steuerung Touch: **Drag irgendwo** = relatives Lenken (`ship._unhandled_input`,
   `game.gd::_check_boss_threshold()`) laufen seit 2026-09-13 über dieselbe
   `_attempt_capture_dive()` — `_try_capture_dive()` würfelt zuerst
   `CAPTURE_CHANCE`, `force_boss_capture()` (von `game.gd` aufgerufen) ruft sie
-  direkt ohne Würfeln auf.
+  direkt ohne Würfeln auf. `force_boss_capture()` selbst setzt seit 2026-09-13
+  nur noch ein `_forced_pending`-Flag, das `_process()` alle
+  `FORCED_RETRY_INTERVAL` (2 s) erneut versucht, bis ein Boss frei ist —
+  übersteht damit Stage-Wechsel und Schiffsverlust (siehe „Vierte
+  Playtest-Runde").
   `stop_attacks()` beim Stage-Wechsel. Reicht `enemy_killed(points)` und
   `ship_rescued` durch.
 - `enemy.gd` (Area2D, kein `class_name`) — States FLYING_IN / LOCKING /
@@ -541,10 +629,12 @@ Steuerung Touch: **Drag irgendwo** = relatives Lenken (`ship._unhandled_input`,
   bis zu 2 Bomben (`bomb.tscn`), kehrt nach dem Kurvenende via `return_to`
   zurück und belegt den Slot neu. Sprite + Skew/Squash-Flap
   (`EnemyKinds.DATA[kind]["texture"/"scale"]`, siehe „Erste echte Assets").
-  Kollision Layer 4 / Maske 8. `_is_invulnerable()` (seit 2026-09-13) blockt
-  `_explode()` (Laser wird trotzdem konsumiert) während `CAPTURE_APPROACH`,
-  `CAPTURE_BEAM` und `RETURNING`-mit-`_carrying_captive` — siehe „Dritte
-  Playtest-Runde".
+  Kollision Layer 4 / Maske 8. `_is_invulnerable()` blockt `_explode()`
+  (Laser wird trotzdem konsumiert) während `CAPTURE_APPROACH`, `CAPTURE_BEAM`
+  und `RETURNING`-mit-`_carrying_captive` (siehe „Dritte Playtest-Runde"),
+  und seit 2026-09-13 zusätzlich während `FLYING_IN`, solange die
+  y-Position noch unter der des Schiffs liegt (der `BOTTOM_UP`-Einflug startet
+  unterhalb des Bildschirms — siehe „Vierte Playtest-Runde").
 - **Boss-Capture** (`enemy.gd` + `capture_beam.gd`/`.tscn` + `attack_paths.gd`s
   `capture_approach()`): Boss hovert statt durchzufliegen (CAPTURE_APPROACH),
   lässt `capture_beam.tscn` herab (grüner Strahl, wächst/hält/zieht sich
@@ -563,10 +653,13 @@ Steuerung Touch: **Drag irgendwo** = relatives Lenken (`ship._unhandled_input`,
 - `bomb.gd` / `bomb.tscn` — Gegner-Schuss, fällt (leicht Richtung Spieler-x zum
   Abwurfzeitpunkt), Platzhalter-Raute. Layer 16 (enemy_shots) / Maske 9
   (player + player_shots — Laser können Bomben abschießen).
-- `laser.gd` — Platzhalter-Strich im `_draw()` (laser.png raus), Layer 8,
-  Hitbox 9×18 (sichtbarer Strahl bleibt 3 px schmal — großzügiger als er
-  aussieht, Nutzer fand Treffen zu schwer). Farbe rein weiß — soll laut
-  Nutzer noch „irgendwas Blaues" bekommen, siehe „Offen" Punkt 8.
+- `laser.gd` (`class_name Laser`) — Platzhalter-Strich im `_draw()`
+  (laser.png raus), Layer 8, Hitbox 9×18 (sichtbarer Strahl bleibt 3 px
+  schmal — großzügiger als er aussieht, Nutzer fand Treffen zu schwer). Seit
+  2026-09-13 flasht `modulate` loopend zwischen Weiß und `accent_color`
+  (`ACCENT_NORMAL` Türkis normal, `ACCENT_HYPER` Rot bei Hyper-Ammo — siehe
+  „Vierte Playtest-Runde" und `ship.gd::activate_hyper_ammo()`), statt
+  statisch reinweiß zu sein.
 - `bonus_item.gd` / `bonus_item.tscn` — Bonus-Sammelobjekt, fällt langsam,
   schwingt seit 2026-09-13 selbstständig über die **gesamte** Bildschirmbreite
   (`_base_x`/`_amplitude` aus der eigenen Viewport-Breite berechnet, nicht mehr
@@ -575,7 +668,8 @@ Steuerung Touch: **Drag irgendwo** = relatives Lenken (`ship._unhandled_input`,
   (collectibles) / Maske 9 (player + player_shots), zufälliges Icon aus 12 von
   16 `achievement_00..15.png` (5/6/7 und seit 2026-09-13 auch 1
   ausgeschlossen), 500 Punkte, per Berührung oder Laser einsammelbar,
-  `collected(points, icon)`-Signal.
+  `collected(points, icon, icon_index)`-Signal (der Index seit 2026-09-13
+  zusätzlich, damit `game.gd` Index 0 als Hyper-Ammo-Auslöser erkennen kann).
 - `ship_reconstruct.gd` / `ship_reconstruct.tscn` — einmalige „Schiff
   materialisiert sich"-Animation (`AnimatedSprite2D`, 28 Frames aus
   `ship-(re)construction.gif`), `build_done`-Signal, self-`queue_free()`.
@@ -696,15 +790,21 @@ und „Boss-Capture" weiter oben für Details.
    Nutzer sucht ggf. passende Sounds selbst (auch unter den ursprünglich
    kopierten OGGs, nicht nur den SFX-Rips) — bei Bedarf hier ergänzen und
    `sound_manager.gd`s `SOUNDS`/`ORDER` erweitern.
-8. **Menü-Farbkonzept + Laser-Farbe** (Nutzer-Feedback 2026-09-12) — **Teil
-   erledigt 2026-09-13**: die grüne Überschriften-Outline ist jetzt Cyan
-   (`UiStyle.impact_label()`, siehe „Dritte Playtest-Runde"). Weiterhin offen:
-   der Rest des Menü-Farbkonzepts (kein Detail genannt, erst mal nur
-   vorgemerkt) und der Laser (`laser.gd::_draw()`, aktuell reines Weiß/
-   `cfefff`) soll „irgendwas Blaues" enthalten statt nur Weiß zu sein.
+8. **Menü-Farbkonzept + Laser-Farbe** (Nutzer-Feedback 2026-09-12) — **beide
+   Teilpunkte jetzt erledigt**: die grüne Überschriften-Outline ist Cyan
+   (2026-09-13, „Dritte Playtest-Runde"), der Laser flasht seit 2026-09-13
+   Weiß/Türkis statt statisch reinweiß zu sein (siehe „Vierte
+   Playtest-Runde"). Weiterhin unspezifisch offen: der Rest des
+   Menü-Farbkonzepts abseits der Outline-Farbe (der Nutzer nannte nie ein
+   konkretes Detail dazu).
 9. **`ship-warp-drive.gif` / `hyper-ammo.gif` / `cyclone-ammo.gif`** —
    vorhanden (siehe „Ship-Reconstruct-Intro/Respawn..." weiter oben für Maße),
-   Einsatzzweck noch offen, Nutzer will sich das später überlegen.
+   Einsatzzweck noch offen, Nutzer will sich das später überlegen. **Wichtig:
+   nicht verwechseln** mit der am 2026-09-13 neu eingebauten
+   Gameplay-Mechanik „Hyper-Ammo" (zwei eng nebeneinanderliegende Laserstrahlen
+   nach `achievement_00`-Pickup, `ship.gd::activate_hyper_ammo()`) — die nutzt
+   nur gezeichnete Laser-Strahlen, nicht diese Grafikdatei. Ob/wie
+   `hyper-ammo.gif` selbst noch verwendet wird, bleibt offen.
 10. **Hilfe-Seiten um mehr Grafik erweitern** (Nutzerwunsch 2026-09-13) —
     nächste Runde nach Prüfung des aktuellen Stands durch den Nutzer. Die
     Ziel-Seite hat seit 2026-09-12 schon eine Icon-Legende (Punkt 3 oben), die

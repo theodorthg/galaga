@@ -23,6 +23,9 @@ const ATTACK_DEFAULT := {"first": 1.8, "min": 1.3, "max": 3.2, "max_divers": 3}
 const CAPTURE_CHANCE := 0.33      # rolled each time the interval below elapses
 const CAPTURE_INTERVAL_MIN := 5.0
 const CAPTURE_INTERVAL_MAX := 9.0
+# How often a still-unfulfilled force_boss_capture() request (see below) gets
+# retried while it waits for a Boss to actually become available.
+const FORCED_RETRY_INTERVAL := 2.0
 
 var _formation: Formation
 var _spawn_parent: Node
@@ -33,6 +36,8 @@ var _attack_t := 0.0
 var _capture_t := 0.0
 var _atk := ATTACK_DEFAULT.duplicate()
 var _run_id := 0
+var _forced_pending := false
+var _forced_retry_t := 0.0
 
 signal stage_populated
 signal enemy_killed(points)
@@ -48,6 +53,10 @@ func setup(formation: Formation, spawn_parent: Node) -> void:
 func configure(params: Dictionary) -> void:
 	for k in params:
 		_atk[k] = params[k]
+	# Called once per fresh run (game.gd::_new_run()) — any force_boss_capture()
+	# request left unfulfilled from a previous game no longer means anything
+	# once the score resets.
+	_forced_pending = false
 
 # --- fly-in ------------------------------------------------------------
 func start_stage(stage: int) -> void:
@@ -60,6 +69,7 @@ func abort() -> void:
 	_attacks_on = false
 	_spawning = false
 	_pending = 0
+	_forced_pending = false
 
 func _run_stage(stage: int, run_id: int) -> void:
 	_spawning = true
@@ -121,6 +131,12 @@ func _process(delta: float) -> void:
 	if _capture_t <= 0.0:
 		_capture_t = randf_range(CAPTURE_INTERVAL_MIN, CAPTURE_INTERVAL_MAX)
 		_try_capture_dive()
+	if _forced_pending:
+		_forced_retry_t -= delta
+		if _forced_retry_t <= 0.0:
+			_forced_retry_t = FORCED_RETRY_INTERVAL
+			if _attempt_capture_dive():
+				_forced_pending = false
 
 ## Bosses are excluded here — they're dedicated to capture attempts
 ## (_try_capture_dive() below). Previously they competed for the same random
@@ -139,6 +155,22 @@ func _launch_dive() -> void:
 		return
 	(ready_to_dive.pick_random() as Node).dive()
 
+## Called from game.gd whenever the score crosses a "boss every N points"
+## threshold (GameSettings.boss_interval) — a guaranteed attempt on top of the
+## per-interval random chance above, so a Boss capture isn't left purely to
+## luck. Doesn't try to force a capture through immediately: the exact moment
+## a threshold is crossed there may be no Boss free (mid fly-in, all Bosses
+## already diving/capturing/carrying a captive, a stage transition in
+## progress...). Instead it just raises a flag that _process() above keeps
+## retrying every FORCED_RETRY_INTERVAL seconds — including across a stage
+## change or the player losing a ship in between — until a Boss is actually
+## available. This is what fixed "no forced Boss until 15000 points despite a
+## 5000 setting": the old one-shot version silently gave up the instant a
+## single attempt failed, wasting that threshold for the rest of the run.
+func force_boss_capture() -> void:
+	_forced_pending = true
+	_forced_retry_t = 0.0  # try on the very next _process() tick
+
 ## Independent of _launch_dive() above: every CAPTURE_INTERVAL_MIN..MAX seconds,
 ## roll CAPTURE_CHANCE for a formation Boss to peel off on a capture attempt
 ## instead of waiting to maybe get picked by the regular dive lottery.
@@ -147,22 +179,18 @@ func _try_capture_dive() -> void:
 		return
 	_attempt_capture_dive()
 
-## Called from game.gd whenever the score crosses a "boss every N points"
-## threshold (GameSettings.boss_interval) — a guaranteed attempt on top of the
-## per-interval random chance above, so a Boss capture isn't left purely to luck.
-func force_boss_capture() -> void:
-	_attempt_capture_dive()
-
-func _attempt_capture_dive() -> void:
+## Returns true if a Boss actually started a capture attempt just now.
+func _attempt_capture_dive() -> bool:
 	var divers := 0
 	var bosses: Array = []
 	for e in get_tree().get_nodes_in_group("enemy"):
 		if e.is_carrying_captive():
-			return  # only one captive ship in play at a time (arcade original)
+			return false  # only one captive ship in play at a time (arcade original)
 		if e.is_active_diver():
 			divers += 1
 		elif e.kind == EnemyKinds.BOSS and e.is_available_to_dive():
 			bosses.append(e)
 	if divers >= int(_atk["max_divers"]) or bosses.is_empty():
-		return
+		return false
 	(bosses.pick_random() as Node).capture_dive()
+	return true
