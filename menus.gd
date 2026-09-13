@@ -30,44 +30,37 @@ var _cfg := {}
 var _splash_active := false
 var _splash_tween: Tween
 
-# how-to-play pages
-const HELP_PAGES := [
-	{
-		"h": "Steuerung — Tastatur / Maus",
-		"l": [
-			"Pfeiltasten links/rechts  oder  A / D   bewegen",
-			"Leertaste  oder  Pfeiltaste hoch   schießen",
-			"Maus: Schiff folgt dem Zeiger, Linksklick schießt",
-			"Esc / P    Pause",
-		],
-	},
-	{
-		"h": "Steuerung — Touch",
-		"l": [
-			"Irgendwo ziehen, um das Schiff zu lenken",
-			"Es wird automatisch geschossen",
-			"Pause-Knopf oben rechts",
-		],
-	},
-	{
-		"h": "Ziel & Punkte",
-		"l": [
-			"Räume die Formation ab, bevor sie dich erwischt.",
-			"Gegner tauchen einzeln herab und werfen Bomben —",
-			"ausweichen und zurückschießen. Alle weg = nächste Stage.",
-			"",
-			"Ein Boss kann dein Schiff mit einem Traktorstrahl fangen.",
-			"Schießt du genau diesen Boss danach ab, bekommst du es",
-			"zurück — als Doppeljäger mit doppelter Feuerkraft.",
-		],
-		"icons": [
-			{"kind": EnemyKinds.ZAKO, "name": "Biene"},
-			{"kind": EnemyKinds.GOEI, "name": "Schmetterling"},
-			{"kind": EnemyKinds.BOSS, "name": "Flaggschiff"},
-		],
-	},
+# How-to-play pages — image-based (like tetris' ui.gd), not plain text: each
+# page is one full illustration rendered from assets/help_src/<file>.svg (see
+# that folder's render.sh) to assets/graphics/help/<file>.png, in Galaga's own
+# colour scheme (UiStyle.ACCENT cyan on dark navy) rather than tetris' own
+# palette. Two sets, matched to how the player is actually driving the ship
+# right now (see set_touch_context()) — desktop gets separate keyboard/mouse
+# pages, touch gets one combined swipe/tap page instead; both sets share the
+# goal/boss-capture/bonus-item pages, since those don't depend on input method.
+const HELP_DIR := "res://assets/graphics/help/"
+# Fully spelled out (not built via array concatenation) — GDScript const
+# initializers need to be compile-time constant expressions, and it's not
+# worth relying on Array "+" folding there for two short lists.
+const HELP_PAGES_DESKTOP := [
+	{"file": "keyboard", "h": "Steuerung — Tastatur"},
+	{"file": "mouse", "h": "Steuerung — Maus"},
+	{"file": "goal", "h": "Ziel & Punkte"},
+	{"file": "capture", "h": "Boss-Capture"},
+	{"file": "bonus", "h": "Achievements & Boni"},
+]
+const HELP_PAGES_TOUCH := [
+	{"file": "touch", "h": "Steuerung — Touch"},
+	{"file": "goal", "h": "Ziel & Punkte"},
+	{"file": "capture", "h": "Boss-Capture"},
+	{"file": "bonus", "h": "Achievements & Boni"},
 ]
 var _help_page := 0
+## Which page set _help_pages() returns — set from game.gd (see
+## set_touch_context()), mirroring the same touch detection/retroactive flip
+## game.gd itself uses for content_scale_aspect, so the help matches whatever
+## input method the player is actually using right now.
+var _touch_context := false
 
 func _ready() -> void:
 	layer = 10
@@ -89,6 +82,7 @@ func _ready() -> void:
 	_screens["title"] = _build_title()
 	_screens["pause"] = _build_pause()
 	_screens["settings"] = _build_settings()
+	_screens["confirm_reset"] = _build_confirm_reset()
 	_screens["sound"] = _build_sound()
 	_screens["help"] = _build_help()
 	_screens["gameover"] = _build_gameover()
@@ -386,7 +380,7 @@ func _build_settings() -> Control:
 	_add_stepper(grid, "Max. Schüsse", _fmt_max_shots, _step_max_shots, _set_max_shots_text)
 	_add_stepper(grid, "Schwierigkeit", _fmt_diff, _step_diff)
 	box.add_child(_spacer(8))
-	box.add_child(_button("Standardwerte", func(): _reset_defaults()))
+	box.add_child(_button("Standardwerte", func(): _swap("confirm_reset")))
 	box.add_child(_button("Sound", func(): _open_sound()))
 	box.add_child(_button("Fertig", func(): _close_sub()))
 	return s
@@ -398,6 +392,9 @@ func _build_settings() -> Control:
 ## it's easy to back out of by just not confirming. Respects the same
 ## Leben-lock as the stepper itself (see _update_lives_lock()) — resetting it
 ## mid-run would be just as inert as manually stepping it, for the same reason.
+## Only ever called after the "confirm_reset" screen's "Ja" (see below) — the
+## "Standardwerte" button itself only opens that confirmation, so a stray tap
+## can't silently wipe every setting.
 func _reset_defaults() -> void:
 	if _return_to != "pause" and _return_to != "summary":
 		_cfg.lives = 3
@@ -407,6 +404,30 @@ func _reset_defaults() -> void:
 	_cfg.max_shots = 2
 	_cfg.difficulty = 1
 	_refresh_settings()
+
+## Confirmation gate for "Standardwerte" (user request: a misclick shouldn't
+## silently wipe every setting) — "Nein" just goes back to "settings" with
+## nothing changed, "Ja" actually calls _reset_defaults() first.
+func _build_confirm_reset() -> Control:
+	var s := _screen()
+	var box := _box(s)
+	box.add_child(_title_label("Zurücksetzen?", 26))
+	box.add_child(_spacer(6))
+	var msg := _title_label("Wirklich die Einstellungen\nauf Standardwerte zurücksetzen?", 18)
+	msg.autowrap_mode = TextServer.AUTOWRAP_WORD
+	box.add_child(msg)
+	box.add_child(_spacer(10))
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
+	var no_btn := _button("Nein", func(): _swap("settings"))
+	no_btn.custom_minimum_size = Vector2(130, TOUCH_H)
+	var yes_btn := _button("Ja", func(): _reset_defaults(); _swap("settings"))
+	yes_btn.custom_minimum_size = Vector2(130, TOUCH_H)
+	row.add_child(no_btn)
+	row.add_child(yes_btn)
+	box.add_child(row)
+	return s
 
 func _open_settings(from: String) -> void:
 	_return_to = from
@@ -559,24 +580,25 @@ func _open_sound() -> void:
 	_swap("sound")
 
 # ---------------------------------------------------------------- help
+## Image-based (see HELP_PAGES_DESKTOP/_TOUCH above) — the panel is widened
+## well past the standard 340px other screens use so the illustration has
+## real room, matching how _build_splash() also breaks from the shared
+## narrow-box convention for its own full-bleed art.
 func _build_help() -> Control:
 	var s := _screen()
 	var box := _box(s)
 	box.name = "Box"
-	var head := _title_label("", 30, ACCENT)
+	box.custom_minimum_size = Vector2(460, 0)
+	var head := _title_label("", 26, ACCENT)
 	head.name = "Head"
 	box.add_child(head)
-	box.add_child(_spacer(8))
-	var body := _title_label("", 22)
-	body.name = "Body"
-	body.custom_minimum_size = Vector2(400, 210)
-	body.autowrap_mode = TextServer.AUTOWRAP_WORD  # long lines wrap instead of stretching the panel
-	box.add_child(body)
-	var icons := HBoxContainer.new()
-	icons.name = "Icons"
-	icons.alignment = BoxContainer.ALIGNMENT_CENTER
-	icons.add_theme_constant_override("separation", 22)
-	box.add_child(icons)
+	box.add_child(_spacer(6))
+	var img := TextureRect.new()
+	img.name = "Image"
+	img.custom_minimum_size = Vector2(430, 468)
+	img.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	img.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	box.add_child(img)
 	box.add_child(_spacer(8))
 	var nav := HBoxContainer.new()
 	nav.name = "Nav"
@@ -598,6 +620,18 @@ func _build_help() -> Control:
 	box.add_child(_button("Fertig", func(): _swap(_return_to)))
 	return s
 
+## Called from game.gd whenever it (re)determines whether the player is on a
+## touch device — initial detection AND the retroactive flip
+## (apply_touch_layout()) both call this, so Help always matches the input
+## method actually in use. Only affects which page SET _help_pages() returns;
+## an already-open Help screen doesn't need to react live, this just needs to
+## be current by the time _open_help() is next called.
+func set_touch_context(v: bool) -> void:
+	_touch_context = v
+
+func _help_pages() -> Array:
+	return HELP_PAGES_TOUCH if _touch_context else HELP_PAGES_DESKTOP
+
 func _open_help(from: String) -> void:
 	_return_to = from
 	_help_page = 0
@@ -605,50 +639,25 @@ func _open_help(from: String) -> void:
 	_swap("help")
 
 func _help_go(d: int) -> void:
-	_help_page = wrapi(_help_page + d, 0, HELP_PAGES.size())
+	_help_page = wrapi(_help_page + d, 0, _help_pages().size())
 	_help_render()
 
 func _help_render() -> void:
-	var p: Dictionary = HELP_PAGES[_help_page]
+	var pages := _help_pages()
+	var p: Dictionary = pages[_help_page]
 	var box := _box(_screens["help"])
 	(box.get_node("Head") as Label).text = p.h
-	(box.get_node("Body") as Label).text = "\n".join(p.l)
-
-	var icons := box.get_node("Icons") as HBoxContainer
-	for c in icons.get_children():
-		c.queue_free()
-	var icon_entries: Array = p.get("icons", [])
-	icons.visible = not icon_entries.is_empty()
-	for entry in icon_entries:
-		icons.add_child(_icon_col(entry.kind, entry.name))
+	(box.get_node("Image") as TextureRect).texture = load(HELP_DIR + p.file + ".png")
 
 	var dots := box.get_node("Nav/Dots") as HBoxContainer
 	for c in dots.get_children():
 		c.queue_free()
-	for i in HELP_PAGES.size():
+	for i in pages.size():
 		var d := ColorRect.new()
 		d.custom_minimum_size = Vector2(10, 10)
 		d.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 		d.color = ACCENT if i == _help_page else Color(1, 1, 1, 0.22)
 		dots.add_child(d)
-
-## Small "legend" column for the Ziel-page icon row: the enemy's classic
-## sprite (stage-variant-independent, so it stays recognizable no matter
-## which stage's reskin is currently in play) over its name + point value.
-func _icon_col(kind: int, label_text: String) -> VBoxContainer:
-	var col := VBoxContainer.new()
-	col.alignment = BoxContainer.ALIGNMENT_CENTER
-	col.add_theme_constant_override("separation", 4)
-	var icon := TextureRect.new()
-	icon.texture = load(EnemyKinds.DATA[kind]["texture"])
-	icon.custom_minimum_size = Vector2(44, 44)
-	icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-	icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-	col.add_child(icon)
-	var lbl := _title_label("%s\n%d Pkt." % [label_text, int(EnemyKinds.DATA[kind]["points"])], 15)
-	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	col.add_child(lbl)
-	return col
 
 # ---------------------------------------------------------------- game over
 var _name_edit: LineEdit

@@ -1022,6 +1022,52 @@ Kill-Aufschlüsselung jetzt pro Sprite statt nur pro Gegnertyp.**
   liegengebliebene, mit „bb"/1280 verunreinigte `user://hall_of_fame.cfg`
   wurde zurückgesetzt.
 
+**Zehnte Playtest-Runde (2026-09-13): Standardwerte-Bestätigung, Laps-Anzeige
+als Text + näher an Stage, komplett bildbasierte Hilfe.**
+- **„Standardwerte" fragt jetzt nach** (Nutzer-Zusatz): der Button öffnet
+  einen neuen Bestätigungs-Screen `"confirm_reset"` („Wirklich die
+  Einstellungen auf Standardwerte zurücksetzen?" + „Ja"/„Nein") statt sofort
+  zurückzusetzen — ein Verklicker kann die Einstellungen nicht mehr
+  versehentlich wegwerfen. `_reset_defaults()` selbst läuft unverändert nur
+  noch nach „Ja".
+- **Lap-Anzeige ist jetzt Klartext**: `hud.gd::_draw_lap_marker()` zeichnet
+  statt eines Kreis-Symbols + „× N" jetzt einfach „Laps N" (gleiche Farbe wie
+  „Stage" daneben). `LAP_MARKER_GAP_RIGHT` weiter verkleinert (6→2 — dritte
+  Anpassung in Folge, siehe „Neunte Playtest-Runde") und `LAP_MARKER_W` auf
+  die neue Textbreite angepasst. Per Live-Screenshot mit `×12`-Lebensanzeige
+  + 6 Achievement-Icons verifiziert: sauberer Abstand auf beiden Seiten.
+- **Hilfe komplett neu, bildbasiert** (Nutzerwunsch, an tetris'
+  `assets/help_src/`-Pipeline orientiert, aber Galagas eigenes Farbschema
+  statt tetris' Gold/Lila): 6 neue Vektor-Illustrationen
+  (`assets/help_src/*.svg`, gerendert per `render.sh`/Inkscape nach
+  `assets/graphics/help/*.png`, 900px breit) — `keyboard`, `mouse`, `touch`,
+  `goal`, `capture`, `bonus`. Jede bettet die ECHTEN Spiel-Sprites ein
+  (`<image xlink:href="file:///…">` auf die tatsächlichen PNGs unter
+  `assets/graphics/`, nicht nachgebaute Vektor-Icons) — Schiff, die drei
+  Gegnertypen, das befreite Passagier-Sprite, zwei Achievement-Icons. Farben:
+  dunkles Navy-Verlaufs-Panel + `UiStyle.ACCENT` (Cyan) für Akzente/Pfeile,
+  passend zum Rest der Menüs.
+  `menus.gd::HELP_PAGES_DESKTOP` (Tastatur, Maus, Ziel, Boss-Capture,
+  Achievements — 5 Seiten) und `HELP_PAGES_TOUCH` (Touch statt Tastatur+Maus,
+  sonst dieselben 3 gemeinsamen Seiten — 4 Seiten) ersetzen die alte
+  text-only `HELP_PAGES`-Konstante; `_help_pages()` wählt anhand
+  `_touch_context` (neu, gesetzt über `set_touch_context()` — `game.gd` ruft
+  das sowohl bei der initialen Touch-Erkennung in `_ready()` als auch beim
+  retroaktiven Touch-Flip in `apply_touch_layout()` auf, damit die Hilfe
+  immer zur tatsächlich genutzten Eingabemethode passt). `_build_help()`
+  bekommt dafür ein verbreitertes Panel (460px statt der sonst üblichen
+  340px, wie schon `_build_splash()` vom schmalen Standard abweicht) mit
+  einem `TextureRect` (430×468, `STRETCH_KEEP_ASPECT_CENTERED`) statt der
+  alten Body-Label + Icons-Reihe; die Überschrift (`Head`-Label, z. B.
+  „Steuerung — Tastatur") bleibt ein echtes Godot-Label darüber, nicht ins
+  Bild gebacken — bleibt dadurch scharf und unabhängig von der
+  Bild-Auflösung. `_icon_col()` (nur von der alten Ziel-Seite genutzt) war
+  dadurch überflüssig und wurde entfernt. Per Live-Test alle 5 Desktop- und
+  alle 4 Touch-Seiten durchgeklickt (inkl. Umschalten über
+  `set_touch_context()`/`apply_touch_layout()`) — jede Seite sauber
+  layoutet, keine Überlappungen (mehrere davon erst nach Layout-Korrekturen
+  anhand der gerenderten PNGs, siehe die SVGs selbst für Details).
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,
@@ -1117,9 +1163,13 @@ StageDirector, Ship, HUD-CanvasLayer.
   dem Sieg-Screen heraus geöffnet wurden (`_lives_stepper`,
   `_update_lives_lock()`, `_return_to == "pause" or "summary"`) — die
   Einstellung wird ohnehin nur einmalig in `_new_run()` gelesen; der
-  „Standardwerte"-Button respektiert dieselbe Sperre. Sound-Unterseite
-  (HSlider pro Sound, Loslassen = Vorhören), Hilfe (3 Textseiten mit ‹/›),
-  seit der siebten Playtest-Runde ein Run-Summary-Screen (`"summary"`,
+  „Standardwerte"-Button respektiert dieselbe Sperre und fragt seit der
+  zehnten Playtest-Runde erst über den neuen `"confirm_reset"`-Screen nach,
+  statt sofort zurückzusetzen. Sound-Unterseite (HSlider pro Sound,
+  Loslassen = Vorhören), Hilfe (seit der zehnten Playtest-Runde bildbasiert —
+  `HELP_PAGES_DESKTOP`/`HELP_PAGES_TOUCH`, je 4–5 Seiten mit `‹`/`›`, siehe
+  dort — vorher 3 reine Textseiten), seit der siebten Playtest-Runde ein
+  Run-Summary-Screen (`"summary"`,
   `show_run_summary()`, seit der achten Playtest-Runde mit zusätzlicher
   Kill-Aufschlüsselung — seit der neunten Playtest-Runde pro tatsächlich
   gesehenem SPRITE statt nur pro Punkte-Stufe, in einem umbrechenden

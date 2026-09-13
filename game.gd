@@ -70,6 +70,7 @@ func _ready() -> void:
 	add_to_group("touch_layout_listeners")
 	_touch = OS.has_feature("mobile") or DisplayServer.is_touchscreen_available()
 	_apply_display_mode()
+	_menus.set_touch_context(_touch)
 	_snd = get_node_or_null("/root/Snd")
 
 	_director.setup(_formation, self)
@@ -99,6 +100,7 @@ func apply_touch_layout() -> void:
 		return
 	_touch = true
 	_apply_display_mode()
+	_menus.set_touch_context(_touch)
 
 # --- run lifecycle ----------------------------------------------------
 func _reload_settings() -> void:

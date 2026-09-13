@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="900" height="980" viewBox="0 0 900 980" font-family="DejaVu Sans, 'Liberation Sans', sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#121631"/><stop offset="1" stop-color="#05060c"/>
+    </linearGradient>
+    <marker id="ah" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#4db2ff"/>
+    </marker>
+  </defs>
+  <rect width="900" height="980" fill="url(#bg)"/>
+  <rect x="14" y="14" width="872" height="952" rx="18" fill="none" stroke="#4db2ff" stroke-opacity="0.18" stroke-width="2"/>
+
+  <!-- falling achievement icons -->
+  <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/achievement_02.png" x="140" y="60" width="120" height="63"/>
+  <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/achievement_09.png" x="620" y="90" width="90" height="88"/>
+  <g stroke="#4db2ff" stroke-width="5" fill="#4db2ff">
+    <line x1="200" y1="150" x2="200" y2="210" marker-end="url(#ah)"/>
+    <line x1="665" y1="200" x2="665" y2="240" marker-end="url(#ah)"/>
+  </g>
+
+  <text x="450" y="250" text-anchor="middle" font-size="32" font-weight="700" fill="#eef4ff">Berührung oder Laser sammelt ein</text>
+  <text x="450" y="286" text-anchor="middle" font-size="26" fill="#4db2ff" font-weight="700">500 Punkte pro Symbol</text>
+
+  <rect x="60" y="320" width="780" height="2" fill="#4db2ff" fill-opacity="0.2"/>
+
+  <!-- hyper ammo -->
+  <g transform="translate(450 420)">
+    <circle cx="0" cy="0" r="80" fill="#ff4d4d" fill-opacity="0.12"/>
+    <circle cx="0" cy="0" r="80" fill="none" stroke="#ff4d4d" stroke-width="3" stroke-dasharray="6 6"/>
+    <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/achievement_00.png" x="-64" y="-60" width="128" height="119"/>
+  </g>
+  <g fill="#ff4d4d">
+    <rect x="420" y="490" width="6" height="70"/>
+    <rect x="438" y="490" width="6" height="70"/>
+    <rect x="456" y="490" width="6" height="70"/>
+    <rect x="474" y="490" width="6" height="70"/>
+  </g>
+  <text x="450" y="600" text-anchor="middle" font-size="30" font-weight="700" fill="#eef4ff">Flaggschiff-Symbol = Hyper-Ammo</text>
+  <text x="450" y="634" text-anchor="middle" font-size="24" fill="#8fa3c8">Doppellaser bis zum Ende der Stage</text>
+
+  <rect x="60" y="670" width="780" height="2" fill="#4db2ff" fill-opacity="0.2"/>
+
+  <!-- lap row mock-up, matching the real HUD strip -->
+  <text x="450" y="726" text-anchor="middle" font-size="30" font-weight="700" fill="#eef4ff">7 verschiedene Symbole in einer Reihe</text>
+  <g transform="translate(180 764)">
+    <g fill="#4db2ff" fill-opacity="0.35">
+      <rect x="0"   y="0" width="46" height="46" rx="8"/>
+      <rect x="58"  y="0" width="46" height="46" rx="8"/>
+      <rect x="116" y="0" width="46" height="46" rx="8"/>
+      <rect x="174" y="0" width="46" height="46" rx="8"/>
+      <rect x="232" y="0" width="46" height="46" rx="8"/>
+      <rect x="290" y="0" width="46" height="46" rx="8"/>
+      <rect x="348" y="0" width="46" height="46" rx="8"/>
+    </g>
+    <text x="440" y="34" font-size="34" font-weight="700" fill="#4db2ff">Laps 1</text>
+  </g>
+  <text x="450" y="866" text-anchor="middle" font-size="26" fill="#4db2ff" font-weight="700">+2500 Bonuspunkte, Laps-Zähler +1</text>
+  <text x="450" y="912" text-anchor="middle" font-size="24" fill="#8fa3c8">Reihe leert sich danach, sammeln geht weiter</text>
+</svg>

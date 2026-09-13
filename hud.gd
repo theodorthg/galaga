@@ -48,13 +48,17 @@ const LAP_HOLD_TIME := 0.7
 ## Stage on its right and stays clear of the bonus-icon row (centered, max
 ## 6 icons shown before a lap clears it) on its left.
 const STAGE_LABEL_LEFT := 170.0
-# Trimmed from 14 (user report: too much air to Stage, too little to the
-# achievement row) — moving the marker right shrinks the Stage gap by exactly
-# this much AND grows the achievement-row gap by about half as much again
-# (the row's own centering formula also shifts right as the usable zone
-# shrinks), so this one number improves both complaints at once.
-const LAP_MARKER_GAP_RIGHT := 6.0
-const LAP_MARKER_W := 54.0
+# Trimmed 14 -> 6 -> 2 across two rounds (user report both times: too much air
+# to Stage, too little to the achievement row) — moving the marker right
+# shrinks the Stage gap by exactly this much AND grows the achievement-row gap
+# by about half as much again (the row's own centering formula also shifts
+# right as the usable zone shrinks), so this one number improves both
+# complaints at once.
+const LAP_MARKER_GAP_RIGHT := 2.0
+# Reserved width for the "Laps N" text (plain text now, not a circle + "× N" —
+# see _draw_lap_marker()); sized for "Laps 99" at font size 18 with a little
+# breathing room, verified live against the font's actual string width.
+const LAP_MARKER_W := 74.0
 const ICON_ROW_GAP_FROM_MARKER := 10.0
 ## Shifts the whole achievement-icon row right, off dead-center (user report:
 ## at 3+ remaining ships the lives readout becomes "icon × N" text — see
@@ -261,17 +265,16 @@ func _draw_bonus_icons() -> void:
 		draw_texture_rect(_bonus_icons[i], Rect2(x, icon_y, widths[i], icon_h), false)
 		x += widths[i] + gap
 
-## Small turquoise "lap" badge — how many times a full row has been cleared —
-## at its fixed position near the right edge, see STAGE_LABEL_LEFT above.
-## Always drawn, starting at "× 0" (see _draw_bonus_icons()).
+## "Laps N" — how many times a full achievement row has been cleared — at its
+## fixed position near the right edge, see STAGE_LABEL_LEFT above. Plain text
+## (user request, replacing a small circle + "× N") in the same colour as the
+## Stage label right next to it. Always drawn, starting at "Laps 0" (see
+## _draw_bonus_icons()).
 func _draw_lap_marker(y: float) -> void:
 	var x := size.x - STAGE_LABEL_LEFT - LAP_MARKER_GAP_RIGHT - LAP_MARKER_W
-	var r := BONUS_ICON_H * 0.5
-	var center := Vector2(x + r, y + r)
-	draw_circle(center, r, BONUS_LAP_COLOR)
-	draw_arc(center, r, 0.0, TAU, 24, Color(0, 0, 0, 0.85), 2.0)
 	var font := get_theme_default_font()
-	var fsize := 16
-	var label_pos := Vector2(x + BONUS_ICON_H + 4.0, y + BONUS_ICON_H - 5.0)
-	draw_string_outline(font, label_pos, "× %d" % _bonus_laps, HORIZONTAL_ALIGNMENT_LEFT, -1, fsize, 3, Color(0, 0, 0, 0.85))
-	draw_string(font, label_pos, "× %d" % _bonus_laps, HORIZONTAL_ALIGNMENT_LEFT, -1, fsize, BONUS_LAP_COLOR)
+	var fsize := 18
+	var text := "Laps %d" % _bonus_laps
+	var label_pos := Vector2(x, y + BONUS_ICON_H - 5.0)
+	draw_string_outline(font, label_pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fsize, 4, Color(0, 0, 0, 0.85))
+	draw_string(font, label_pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, fsize, BONUS_LAP_COLOR)
