@@ -44,6 +44,12 @@ var _bonus_t := 0.0
 var _boss_interval := 0
 var _next_boss_score := 0
 var _win_score := 0
+# Run-summary tracking (menus.gd::show_run_summary(), see _on_ship_died() /
+# _check_win()) — reset once per run in _new_run().
+var _rescues := 0
+var _rescue_points := 0
+var _last_kill_points := 0
+var _achievements_collected := 0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -115,6 +121,10 @@ func _new_run() -> void:
 	# countdown every time a stage ended quickly).
 	_bonus_t = randf_range(BONUS_INTERVAL_MIN, BONUS_INTERVAL_MAX)
 	_pending_twin = false
+	_rescues = 0
+	_rescue_points = 0
+	_last_kill_points = 0
+	_achievements_collected = 0
 	_ship.deactivate_hyper_ammo()  # a fresh game never starts with a leftover buff
 	_director.configure(GameSettings.dive_params(int(_cfg.get("difficulty", 1))))
 
@@ -130,6 +140,7 @@ func _new_run() -> void:
 	if _snd:
 		_snd.play("music")
 	_ship.visible = false
+	_ship._alive = false  # blocks shoot() during the materialize animation below
 	_ship.set_deferred("monitoring", false)
 	_hud.flash_banner("BEREIT")
 	await _play_reconstruct(_ship_spawn_pos())
@@ -194,6 +205,11 @@ func _on_stage_populated() -> void:
 const MAX_LIVES_RUNTIME := 99
 
 func _on_enemy_killed(points: int) -> void:
+	# Hyper-Ammo (see ship.gd::activate_hyper_ammo) doubles points per kill too,
+	# not just the shot count — user request, on top of the existing beam buff.
+	if _ship._hyper_ammo:
+		points *= 2
+	_last_kill_points = points
 	_score += points
 	_hud.set_score(_score)
 	while _extra_step > 0 and _score >= _next_extra and _lives < MAX_LIVES_RUNTIME:
@@ -230,18 +246,21 @@ func _check_win() -> void:
 	if _snd:
 		_snd.stop("music")
 	_hud.set_playing(false)
-	_menus.show_game_over(_score, _stage, true)
+	_menus.show_run_summary(_score, _stage, true, _rescues, _rescue_points, _achievements_collected, _hud._bonus_laps)
 	get_tree().paused = true
 
 var _pending_twin := false
 
-func _on_ship_rescued() -> void:
+func _on_ship_rescued(at_position: Vector2) -> void:
 	# The Boss that had been carrying a captured ship just got destroyed — the
 	# prisoner comes home. Common edge case: a laser fired just before you got
 	# captured lands on that same boss a moment later, so the ship rescue
 	# happens while your new ship hasn't respawned yet (mid-reconstruct animation).
 	# Don't just drop the reward on that timing coincidence — queue it for the
 	# respawn that's already on its way.
+	_rescues += 1
+	_rescue_points += _last_kill_points
+	_spawn_score_popup(at_position, "+%d" % _last_kill_points)
 	if _state == GAME_OVER:
 		return
 	if is_instance_valid(_ship) and _ship._alive:
@@ -265,7 +284,7 @@ func _on_ship_died() -> void:
 		if not is_instance_valid(self) or _state != GAME_OVER:
 			return
 		_hud.set_playing(false)
-		_menus.show_game_over(_score, _stage, false)
+		_menus.show_run_summary(_score, _stage, false, _rescues, _rescue_points, _achievements_collected, _hud._bonus_laps)
 		get_tree().paused = true
 		return
 	_lives -= 1
@@ -327,6 +346,7 @@ func _spawn_bonus_item() -> void:
 const BONUS_LAP_POINTS := 2500
 
 func _on_bonus_collected(points: int, icon: Texture2D, icon_index: int, at_position: Vector2) -> void:
+	_achievements_collected += 1
 	var total := points
 	_score += points
 	if _hud.add_bonus_icon(icon, icon_index):

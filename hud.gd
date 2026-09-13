@@ -20,7 +20,7 @@ var _pause_glass: ColorRect
 const SHIP_ICON := preload("res://assets/graphics/player_trim.png")
 const ICON_H := 24.0
 const ICON_GAP := 8.0
-const MANY_THRESHOLD := 5
+const MANY_THRESHOLD := 3
 
 ## Bottom-centre row of collected bonus_item icons (see bonus_item.gd). A full
 ## row of BONUS_MAX_SHOWN is the most that fits without crowding — reaching it
@@ -31,6 +31,16 @@ const BONUS_ICON_H := 22.0
 const BONUS_ICON_GAP := 6.0
 const BONUS_MAX_SHOWN := 7
 const BONUS_LAP_COLOR := Color(0.95, 0.75, 0.15)
+## Lap marker now sits at a FIXED spot near the right edge (user request: was
+## drawn immediately after the icon row, which made it drift left/right with
+## the row's own width) — anchored off the Stage label's own left edge
+## (game.tscn: anchor_right=1, offset_left=-170) so it keeps a real gap to
+## Stage on its right and stays clear of the bonus-icon row (centered, max
+## 6 icons shown before a lap clears it) on its left.
+const STAGE_LABEL_LEFT := 170.0
+const LAP_MARKER_GAP_RIGHT := 14.0
+const LAP_MARKER_W := 54.0
+const ICON_ROW_GAP_FROM_MARKER := 10.0
 
 # Stage banner: full-opacity hold, then a fade tail (tetris' main.gd _flash()
 # does the same "hold then fade" instead of a hard on/off — a banner that
@@ -159,6 +169,12 @@ func _draw_lives() -> void:
 	draw_string(font, label_pos, "× %d" % _lives, HORIZONTAL_ALIGNMENT_LEFT, -1, fsize, UiStyle.ACCENT)
 
 ## Bottom-centre — plenty of free space there per the user's own suggestion.
+## Centered within the space LEFT of the fixed lap-marker zone (not the full
+## screen width) — a true center would let a full 6-icon row collide with the
+## marker (verified live: at 6 icons the row's own half-width already reaches
+## past the marker's fixed left edge). Off-center by a constant, visually
+## unnoticeable amount, but guarantees the gap the user asked for regardless
+## of how many icons are currently shown.
 func _draw_bonus_icons() -> void:
 	if _bonus_icons.is_empty() and _bonus_laps <= 0:
 		return
@@ -169,16 +185,19 @@ func _draw_bonus_icons() -> void:
 		widths.append(w)
 		total_w += w + BONUS_ICON_GAP
 	var y := size.y - BONUS_ICON_H - 6.0
-	var x := size.x * 0.5 - total_w * 0.5
+	var marker_left := size.x - STAGE_LABEL_LEFT - LAP_MARKER_GAP_RIGHT - LAP_MARKER_W
+	var usable_w := marker_left - ICON_ROW_GAP_FROM_MARKER
+	var x := usable_w * 0.5 - total_w * 0.5
 	for i in _bonus_icons.size():
 		draw_texture_rect(_bonus_icons[i], Rect2(x, y, widths[i], BONUS_ICON_H), false)
 		x += widths[i] + BONUS_ICON_GAP
 	if _bonus_laps > 0:
-		_draw_lap_marker(x + (BONUS_ICON_GAP if not _bonus_icons.is_empty() else 0.0), y)
+		_draw_lap_marker(y)
 
-## Small gold "lap" badge — how many times a full row has been cleared —
-## drawn right after the current (possibly empty) icon row.
-func _draw_lap_marker(x: float, y: float) -> void:
+## Small gold "lap" badge — how many times a full row has been cleared — at
+## its fixed position near the right edge, see STAGE_LABEL_LEFT above.
+func _draw_lap_marker(y: float) -> void:
+	var x := size.x - STAGE_LABEL_LEFT - LAP_MARKER_GAP_RIGHT - LAP_MARKER_W
 	var r := BONUS_ICON_H * 0.5
 	var center := Vector2(x + r, y + r)
 	draw_circle(center, r, BONUS_LAP_COLOR)

@@ -25,6 +25,20 @@ static func qualifies(score: int) -> bool:
 		return true
 	return score > int(list[list.size() - 1].get("score", 0))
 
+## The rank (1-based) `score` would land at if entered right now, or -1 if it
+## doesn't qualify (see qualifies() above) — used by the run-summary screen
+## (menus.gd::show_run_summary()) to tell the player where they'd land BEFORE
+## they actually type a name in.
+static func rank_for(score: int) -> int:
+	if not qualifies(score):
+		return -1
+	var list := load_list()
+	var rank := 1
+	for e in list:
+		if score <= int(e.get("score", 0)):
+			rank += 1
+	return rank
+
 static func insert(who: String, score: int, stage: int) -> Array:
 	var list := load_list()
 	list.append({"name": who, "score": score, "stage": stage})

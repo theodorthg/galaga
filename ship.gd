@@ -29,6 +29,12 @@ const THRUSTER_CLEARANCE_MARGIN := 5.0
 ## above the gun" check (BOTTOM_UP fly-in) measures from the real muzzle
 ## point instead of the ship's body origin, which sits 22px lower.
 const GUN_MUZZLE_OFFSET_Y := -22.0
+## Minimum time between shots, regardless of slot capacity — without this, a
+## twin-ship + high-max_shots combo could re-fill its laser slots as fast as
+## they left the muzzle (limited only by travel time to a hit), clearing a
+## whole stage in a few seconds. Independent of _max_lasers/_twin so it caps
+## every fire-rate combo the same way.
+const FIRE_COOLDOWN := 0.15
 
 var speed := 480.0
 var ship_half_width := 34.0
@@ -43,6 +49,7 @@ var _snd: Node
 var _max_lasers_base := 2  # set from GameSettings.max_shots via configure()
 var _max_lasers := _max_lasers_base
 var _hyper_ammo := false
+var _fire_cooldown_t := 0.0
 
 var _twin := false
 var _sprite2: Sprite2D
@@ -74,6 +81,9 @@ func _process(delta: float) -> void:
 		if _invuln <= 0.0:
 			modulate.a = 1.0
 
+	if _fire_cooldown_t > 0.0:
+		_fire_cooldown_t -= delta
+
 	if not _alive:
 		return
 
@@ -104,8 +114,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			ship_half_width, viewport_width - ship_half_width)
 
 func shoot() -> void:
+	if _fire_cooldown_t > 0.0:
+		return
 	if get_tree().get_nodes_in_group("player_lasers").size() >= _max_lasers:
 		return
+	_fire_cooldown_t = FIRE_COOLDOWN
 	for gun_x in ([-TWIN_OFFSET, TWIN_OFFSET] if _twin else [0.0]):
 		if _hyper_ammo:
 			_fire_laser(gun_x - HYPER_OFFSET * 0.5)

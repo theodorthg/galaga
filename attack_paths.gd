@@ -45,21 +45,6 @@ static func dive(slot_pos: Vector2, player_pos: Vector2, vp: Vector2) -> Curve2D
 				Vector2(vp.x * 0.5 - side * vp.x * 0.18, vp.y + 90.0),
 			]))
 
-## Boss-only capture approach: peels out like a normal dive, but stops hovering
-## above the player instead of sweeping through — the pause is where the
-## tractor beam extends (see enemy.gd's CAPTURE_BEAM state).
-static func capture_approach(slot_pos: Vector2, player_pos: Vector2, vp: Vector2) -> Curve2D:
-	var side := -1.0 if slot_pos.x < vp.x * 0.5 else 1.0
-	var px: float = clampf(player_pos.x, vp.x * 0.15, vp.x * 0.85)
-	var hover_y := vp.y * 0.6
-	return _smooth(PackedVector2Array([
-		slot_pos,
-		slot_pos + Vector2(side * 60.0, -10.0),
-		Vector2(vp.x * 0.5 + side * vp.x * 0.35, vp.y * 0.3),
-		Vector2(px + side * 40.0, hover_y - 70.0),
-		Vector2(px, hover_y),
-	]))
-
 static func return_to(slot_pos: Vector2, vp: Vector2) -> Curve2D:
 	var drift := randf_range(-70.0, 70.0)
 	return _smooth(PackedVector2Array([

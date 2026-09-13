@@ -92,6 +92,7 @@ func _ready() -> void:
 	_screens["sound"] = _build_sound()
 	_screens["help"] = _build_help()
 	_screens["gameover"] = _build_gameover()
+	_screens["summary"] = _build_summary()
 	for s in _screens.values():
 		_root.add_child(s)
 	hide_all()
@@ -152,6 +153,17 @@ func show_pause() -> void:
 func show_game_over(score: int, stage: int, won := false) -> void:
 	_fill_gameover(score, stage, won)
 	_swap("gameover")
+
+## Shown first, before "gameover" (see show_game_over above) — a recap of the
+## run (rescued ships + the points earned specifically from those, achievements
+## collected + lap bonuses, total score) plus the player's prospective Hall of
+## Fame rank if they'd qualify. Only after "Weiter" does the player reach the
+## actual name-entry screen. `won` distinguishes the "Sieg bei X Punkten"
+## ending from a regular game over, same as show_game_over().
+func show_run_summary(score: int, stage: int, won: bool, rescues: int, rescue_points: int, achievements: int, laps: int) -> void:
+	_pending = {"score": score, "stage": stage, "won": won}
+	_fill_summary(score, won, rescues, rescue_points, achievements, laps)
+	_swap("summary")
 
 # ---------------------------------------------------------------- helpers
 func _swap(name: String) -> void:
@@ -572,7 +584,7 @@ func _icon_col(kind: int, label_text: String) -> VBoxContainer:
 
 # ---------------------------------------------------------------- game over
 var _name_edit: LineEdit
-var _hof_box: VBoxContainer
+var _hof_box: GridContainer
 
 func _build_gameover() -> Control:
 	var s := _screen()
@@ -612,9 +624,15 @@ func _build_gameover() -> Control:
 	entry.add_child(save_btn)
 	box.add_child(entry)
 
-	_hof_box = VBoxContainer.new()
+	# GridContainer (rank / name / score columns), not one padded/centered string
+	# per row — a monospace-style padded string doesn't actually line up in a
+	## proportional font (user report). Same fix as the settings-stepper grid
+	# above: each column sizes to its own widest cell.
+	_hof_box = GridContainer.new()
 	_hof_box.name = "Hof"
-	_hof_box.add_theme_constant_override("separation", 2)
+	_hof_box.columns = 3
+	_hof_box.add_theme_constant_override("h_separation", 10)
+	_hof_box.add_theme_constant_override("v_separation", 2)
 	box.add_child(_hof_box)
 
 	box.add_child(_spacer(8))
@@ -625,6 +643,43 @@ func _build_gameover() -> Control:
 	return s
 
 var _pending := {}
+
+# ---------------------------------------------------------------- run summary
+func _build_summary() -> Control:
+	var s := _screen()
+	var box := _box(s)
+	var title := _title_label("", 36)
+	title.name = "Title"
+	box.add_child(title)
+	box.add_child(_spacer(10))
+	var rescues_l := _title_label("", 18)
+	rescues_l.name = "Rescues"
+	box.add_child(rescues_l)
+	var achv_l := _title_label("", 18)
+	achv_l.name = "Achv"
+	box.add_child(achv_l)
+	box.add_child(_spacer(8))
+	var score_l := _title_label("", 26, ACCENT)
+	score_l.name = "Score"
+	box.add_child(score_l)
+	var rank_l := _title_label("", 18, ACCENT)
+	rank_l.name = "Rank"
+	box.add_child(rank_l)
+	box.add_child(_spacer(12))
+	box.add_child(_button("Weiter", func(): show_game_over(_pending.score, _pending.stage, _pending.won)))
+	return s
+
+func _fill_summary(score: int, won: bool, rescues: int, rescue_points: int, achievements: int, laps: int) -> void:
+	var box := _box(_screens["summary"])
+	(box.get_node("Title") as Label).text = "SIEG!" if won else "GAME OVER"
+	(box.get_node("Rescues") as Label).text = "Gerettete Schiffe: %d  (%d Punkte)" % [rescues, rescue_points]
+	(box.get_node("Achv") as Label).text = "Achievements: %d  (Runden: %d)" % [achievements, laps]
+	(box.get_node("Score") as Label).text = "Gesamtpunktzahl: %06d" % score
+	var rank_l := box.get_node("Rank") as Label
+	var rank := HallOfFame.rank_for(score)
+	rank_l.visible = rank > 0
+	if rank > 0:
+		rank_l.text = "Neuer Highscore — Platz %d!" % rank
 
 func _fill_gameover(score: int, stage: int, won := false) -> void:
 	_pending = {"score": score, "stage": stage}
@@ -660,10 +715,17 @@ func _render_hof(list: Array, highlight: int) -> void:
 		return
 	for i in list.size():
 		var e = list[i]
-		var line := _title_label("%2d.  %-8s  %06d" % [i + 1, str(e.name), int(e.score)], 17,
-			ACCENT if i == highlight else Color.WHITE)
-		line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		_hof_box.add_child(line)
+		var col := ACCENT if i == highlight else Color.WHITE
+		var rank_l := _title_label("%d." % (i + 1), 17, col)
+		rank_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		var name_l := _title_label(str(e.name), 17, col)
+		name_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		name_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		var score_l := _title_label("%06d" % int(e.score), 17, col)
+		score_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		_hof_box.add_child(rank_l)
+		_hof_box.add_child(name_l)
+		_hof_box.add_child(score_l)
 
 # ---------------------------------------------------------------- misc
 func _spacer(h: float) -> Control:

@@ -41,7 +41,7 @@ var _forced_retry_t := 0.0
 
 signal stage_populated
 signal enemy_killed(points)
-signal ship_rescued
+signal ship_rescued(at_position)
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_PAUSABLE  # freeze on pause, not inherit Game's ALWAYS
@@ -99,7 +99,7 @@ func _spawn(idx: int, curve: Curve2D, delay: float, stage: int) -> void:
 	_spawn_parent.add_child(e)
 	e.resolved.connect(_on_resolved)
 	e.killed.connect(func(pts: int): enemy_killed.emit(pts))
-	e.ship_rescued.connect(func(): ship_rescued.emit())
+	e.ship_rescued.connect(func(pos): ship_rescued.emit(pos))
 	_pending += 1
 	e.setup(_formation.slot_kind(idx), _formation, idx, curve, delay, stage)
 

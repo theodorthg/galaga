@@ -11,6 +11,13 @@ var speed := 850.0
 const ACCENT_NORMAL := Color("40e0d0")
 const ACCENT_HYPER := Color("ff4d4d")
 const FLASH_TIME := 0.12
+## Visual beam length, shortened to 2/3 of the original 16px/5px (user report:
+## the beam read as too long) — front tip stays at y=-8 so the muzzle-aligned
+## look is unchanged, only the trailing length shrinks. Hitbox (9x18, see
+## ship.gd's GUN_MUZZLE_OFFSET_Y comment) is untouched — deliberately more
+## generous than the visible beam already, not part of this change.
+const BEAM_LEN := 16.0 * (2.0 / 3.0)
+const BEAM_HEAD_LEN := 5.0 * (2.0 / 3.0)
 
 var accent_color := ACCENT_NORMAL
 
@@ -39,5 +46,5 @@ func _on_screen_exited() -> void:
 
 # Temporärer Platzhalter statt des zu großen laser.png — kurzer heller Strich.
 func _draw() -> void:
-	draw_rect(Rect2(-1.5, -8.0, 3.0, 16.0), Color("cfefff"))
-	draw_rect(Rect2(-1.5, -8.0, 3.0, 5.0), Color.WHITE)
+	draw_rect(Rect2(-1.5, -8.0, 3.0, BEAM_LEN), Color("cfefff"))
+	draw_rect(Rect2(-1.5, -8.0, 3.0, BEAM_HEAD_LEN), Color.WHITE)

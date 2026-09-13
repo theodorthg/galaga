@@ -6,11 +6,18 @@ extends Area2D
 ##   DIVING           — peeled off, sweeping down at the player, dropping bombs
 ##   RETURNING        — off the bottom, curving back in from the top to its slot
 ##   LOCKING          — transient tween into the slot (from FLYING_IN or RETURNING)
-##   CAPTURE_APPROACH — Boss only: peels out and hovers above the player instead
-##                      of sweeping through (see capture_dive())
-##   CAPTURE_BEAM     — Boss only: holds position while the tractor beam extends;
-##                      catches the ship -> carries a captive sprite home, which
-##                      a later kill of THIS boss releases (ship_rescued)
+##   CAPTURE_APPROACH — Boss only: actively homes toward the player's CURRENT
+##                      x position while descending to a fixed hover height —
+##                      not a pre-baked curve to a one-time snapshot position
+##                      (see capture_dive()). The player doesn't have to fly
+##                      into the beam and can't simply out-position it: the
+##                      Boss keeps re-aiming every frame until it's overhead.
+##   CAPTURE_BEAM     — Boss only: still homes on the player's x (see
+##                      _track_player_x()) while the tractor beam — now a
+##                      CHILD of the Boss, so it moves with it for free —
+##                      extends; catches the ship -> carries a captive sprite
+##                      home, which a later kill of THIS boss releases
+##                      (ship_rescued)
 
 enum { FLYING_IN, LOCKING, IN_FORMATION, DIVING, RETURNING, CAPTURE_APPROACH, CAPTURE_BEAM }
 
@@ -50,7 +57,7 @@ var _flap_frames: Array = []  # 2 texture paths for a real flap (EnemyKinds vari
 signal locked_in(enemy)
 signal killed(points)
 signal resolved
-signal ship_rescued
+signal ship_rescued(at_position: Vector2)
 
 func setup(p_kind: int, p_formation: Formation, p_slot: int, p_curve: Curve2D, start_delay: float, p_stage: int = 1) -> void:
 	kind = p_kind
@@ -111,7 +118,16 @@ func dive() -> void:
 	var ppos: Vector2 = player.global_position if player else Vector2(vp.x * 0.5, vp.y * 0.82)
 	_start_path(AttackPaths.dive(global_position, ppos, vp), DIVE_SPEED, _begin_return)
 
-# Boss-only tractor-beam attempt — see the CAPTURE_* states above.
+# Boss-only tractor-beam attempt — see the CAPTURE_* states above. Homing
+# instead of a pre-baked curve (see _home_toward_player()), so the outcome
+# doesn't depend on a stale snapshot of where the player happened to be the
+# instant this started.
+const CAPTURE_HOVER_Y_FRAC := 0.58
+const CAPTURE_HOMING_SPEED := 640.0  # faster than the ship's own 480 px/s move
+									  # speed, so it always eventually closes
+									  # the horizontal gap — "kann nicht
+									  # entkommen" per the user's request.
+
 func capture_dive() -> void:
 	if _state != IN_FORMATION or kind != EnemyKinds.BOSS:
 		return
@@ -119,17 +135,34 @@ func capture_dive() -> void:
 	_state = CAPTURE_APPROACH
 	if _snd:
 		_snd.play("dive")
-	var vp := get_viewport_rect().size
+
+func _home_toward_player(delta: float) -> void:
 	var player := get_tree().get_first_node_in_group("player")
-	var ppos: Vector2 = player.global_position if player else Vector2(vp.x * 0.5, vp.y * 0.82)
-	_start_path(AttackPaths.capture_approach(global_position, ppos, vp), DIVE_SPEED, _begin_capture_beam)
+	var vp := get_viewport_rect().size
+	var target_x: float = player.global_position.x if player else global_position.x
+	var target_y: float = vp.y * CAPTURE_HOVER_Y_FRAC
+	global_position.x = move_toward(global_position.x, target_x, CAPTURE_HOMING_SPEED * delta)
+	global_position.y = move_toward(global_position.y, target_y, DIVE_SPEED * delta)
+	if is_equal_approx(global_position.y, target_y):
+		_begin_capture_beam()
+
+## Keeps the Boss (and with it the beam, its child — see _begin_capture_beam())
+## tracking the player horizontally for as long as the beam is live, so a
+## sideways dodge during the grow/hold window doesn't let the player slip out
+## from under it.
+func _track_player_x(delta: float) -> void:
+	var player := get_tree().get_first_node_in_group("player")
+	if player:
+		global_position.x = move_toward(global_position.x, player.global_position.x, CAPTURE_HOMING_SPEED * delta)
 
 func _begin_capture_beam() -> void:
 	_state = CAPTURE_BEAM
 	rotation = 0.0
 	var beam := CAPTURE_BEAM_SCENE.instantiate()
-	get_parent().add_child(beam)
-	beam.global_position = global_position
+	add_child(beam)  # child of the Boss, not a scene-tree sibling — it now
+					  # tracks the Boss's own position for free as _track_player_x()
+					  # keeps adjusting it, no manual position sync needed.
+	beam.position = Vector2.ZERO
 	# Flag the catch (and attach the visual) the instant it happens, not after
 	# the beam's hold/shrink finishes — a bullet already in flight can still
 	# blow up this boss during that tail end, and _explode() only grants the
@@ -180,11 +213,14 @@ func _start_path(curve: Curve2D, speed: float, done: Callable) -> void:
 
 func _physics_process(delta: float) -> void:
 	match _state:
-		FLYING_IN, DIVING, RETURNING, CAPTURE_APPROACH:
+		FLYING_IN, DIVING, RETURNING:
 			_follow_path(delta)
 		IN_FORMATION:
 			global_position = _formation.slot_global(_slot)
-		# CAPTURE_BEAM: holds still where the approach path left it.
+		CAPTURE_APPROACH:
+			_home_toward_player(delta)
+		CAPTURE_BEAM:
+			_track_player_x(delta)
 	if _state == DIVING:
 		_maybe_bomb(delta)
 
@@ -280,7 +316,7 @@ func _explode() -> void:
 			_captive_glow_tween.kill()
 		if is_instance_valid(_captive_visual):
 			_captive_visual.queue_free()
-		ship_rescued.emit()
+		ship_rescued.emit(global_position)
 	_finish()
 	var t := create_tween()
 	t.set_parallel(true)

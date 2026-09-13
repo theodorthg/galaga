@@ -647,6 +647,127 @@ für echte Spalten-Ausrichtung, Boss/Passagier-Überlappung behoben.**
   verifiziert: sichtbarer Abstand zwischen Passagier-Sprite und der
   Goei-Zeile darunter, keine Überlappung mehr.
 
+**Siebte Playtest-Runde (2026-09-13): Capture-Beam-Homing statt Snapshot-Kurve,
+Feuerrate-Cooldown, Schuss-vor-Rekonstruktion verhindert, Laser gekürzt,
+Hyper-Ammo verdoppelt auch Punkte, Run-Summary-Screen + HoF-Rang-Vorschau,
+HUD-Layout (Lap-Marker fest, weniger Lebens-Icons), Hall-of-Fame-Spalten,
+Punkte-Popup bei Boss-Rettungskill.**
+- **Nutzer-Frage geklärt: „Muss ich in den Strahl fliegen oder passiert das
+  automatisch?"** — Ursache der wahrgenommenen Inkonsistenz: der alte
+  Capture-Anflug (`AttackPaths.capture_approach()`) backte die Kurve aus einer
+  EINMALIGEN Momentaufnahme der Spielerposition beim Start des Angriffs. Bewegt
+  sich der Spieler währenddessen (~1–2 s Anflug), landet der Strahl am Ende oft
+  gar nicht mehr über ihm — daher „Strahl gesehen, aber nicht gefangen". Der
+  gegenteilige Fall („gefangen, ganz ohne Strahl gesehen") ist vermutlich reine
+  Wahrnehmung: der Strahl ist nur ~0,73 s sichtbar (Wachsen+Halten) in einem
+  vollen Formationsbild — kein separater Bug dahinter gefunden.
+- **Fix: echtes Live-Homing statt Snapshot-Kurve.** `enemy.gd`s
+  `capture_dive()` fliegt keine vorgebackene Kurve mehr — neue States laufen
+  jetzt über `_home_toward_player(delta)` (Anflug: `move_toward()` Richtung
+  der AKTUELLEN Spielerposition, jeden Frame neu berechnet, bis die Hover-Höhe
+  `CAPTURE_HOVER_Y_FRAC = 0.58` erreicht ist) und `_track_player_x(delta)`
+  (hält den Boss horizontal auf dem Spieler, solange der Strahl unten hängt).
+  `CAPTURE_HOMING_SPEED = 640 px/s` liegt bewusst über der Schiffs-eigenen
+  Geschwindigkeit (480 px/s) — der Abstand kann dadurch nur schrumpfen, ein
+  Ausweichen verzögert den Fang, verhindert ihn aber nicht („kann nicht
+  entkommen", wie vom Nutzer gewünscht). Der Strahl (`capture_beam.tscn`) ist
+  jetzt außerdem Kind-Node des Bosses statt Geschwister im Baum — er folgt der
+  live nachjustierten Boss-Position automatisch mit, ganz ohne eigenen
+  Sync-Code. `AttackPaths.capture_approach()` (die alte Kurvenfunktion) war
+  dadurch tot und wurde entfernt. `enemy.gd`s `ship_rescued`-Signal trägt jetzt
+  `at_position: Vector2` mit (Boss-Position beim Zerstören) — durchgereicht via
+  `stage_director.gd` bis zu `game.gd`, Basis für den Punkte-Popup weiter unten.
+  **Verifiziert per direktem Methodenaufruf** (`_home_toward_player`/
+  `_track_player_x` mit manuell kontrolliertem `delta` und einer zwischen den
+  Aufrufen hin- und herspringenden Spielerposition, um Wall-Clock-Drift
+  zwischen MCP-Tool-Aufrufen zu umgehen — bei echtem Live-Spiel lief der ganze
+  Fang-Zyklus regelmäßig schon innerhalb eines einzigen Tool-Roundtrips durch):
+  der Boss-x folgt in jedem simulierten Frame exakt der jeweils aktuellen
+  Spieler-x-Position, unabhängig davon, wie oft sich diese zwischendurch ändert.
+- **Feuerrate-Cooldown gegen 5-Sekunden-Stage-Clears**: Zwillingsjäger +
+  hohe „Max. Schüsse"-Einstellung konnten die Laser-Slots so schnell
+  nachfüllen, wie sie durch Treffer wieder frei wurden — begrenzt effektiv nur
+  durch die Flugzeit zum nächsten Treffer, nicht durch eine echte Kadenz. Neue
+  `ship.gd::FIRE_COOLDOWN = 0.15` s, `shoot()` blockt jetzt zusätzlich zur
+  Slot-Kapazitätsprüfung auch bei laufendem Cooldown. Per Live-Test verifiziert:
+  ein sofortiger zweiter `shoot()`-Aufruf direkt nach dem ersten wird geblockt,
+  nach Ablauf von `FIRE_COOLDOWN` klappt der nächste Schuss wieder.
+- **Schießen war während der Rekonstruktions-Animation möglich**: `ship.gd`s
+  `_alive` startet beim Skript-Laden als `true` und wurde vor dem ALLERERSTEN
+  Rekonstruktions-Lauf in `game.gd::_new_run()` nie explizit auf `false`
+  gesetzt (nur `_destroy()` bei echten Treffern tat das) — `_process()`s
+  `if not _alive: return`-Gate griff deshalb beim Rundenstart nicht, ein
+  gehaltener Schuss-Input feuerte trotz unsichtbarem/nicht-monitorndem Schiff.
+  Fix: `_new_run()` setzt jetzt `_ship._alive = false` direkt neben
+  `_ship.visible = false`, noch vor dem `await _play_reconstruct(...)`. Der
+  Respawn-Pfad (`_on_ship_died()`) war davon nicht betroffen — dort setzt
+  `_destroy()` `_alive` schon vorher korrekt. Per Live-Test verifiziert:
+  `_ship._alive` ist unmittelbar nach `_new_run()` (vor dem ersten `await`)
+  `false`.
+- **Laser auf 2/3 gekürzt**: `laser.gd::_draw()` nutzt jetzt
+  `BEAM_LEN`/`BEAM_HEAD_LEN` (16px/5px × 2/3) statt der harten Werte — nur die
+  sichtbaren `_draw()`-Rechtecke, die Trefferbox (9×18, bewusst großzügiger als
+  der sichtbare Strahl) ist unangetastet.
+- **Hyper-Ammo verdoppelt jetzt auch die Punktzahl pro Kill**, nicht nur die
+  Schusszahl: `game.gd::_on_enemy_killed()` verdoppelt `points`, wenn
+  `_ship._hyper_ammo` aktiv ist, bevor sie zum Score addiert werden. Per
+  Live-Test verifiziert: derselbe 50-Punkte-Kill bringt mit aktivem Hyper-Ammo
+  100, ohne 50.
+- **Neuer Run-Summary-Screen vor dem Game-Over/Highscore-Bildschirm**:
+  `menus.gd::show_run_summary(score, stage, won, rescues, rescue_points,
+  achievements, laps)` (neuer Screen `"summary"`) zeigt Anzahl geretteter
+  Schiffe + die dadurch erzielte Punktzahl, Anzahl gesammelter Achievements +
+  Runden (Laps), die Gesamtpunktzahl, und — falls die Punktzahl für die
+  Top 10 reicht — den voraussichtlichen Highscore-Platz (neue
+  `HallOfFame.rank_for(score)`). Erst der „Weiter"-Button dort führt zum
+  bestehenden `"gameover"`-Screen mit Namenseingabe. `game.gd` trackt dafür neu
+  `_rescues`, `_rescue_points`, `_achievements_collected` (alle einmal pro Run
+  in `_new_run()` zurückgesetzt) und ruft in `_on_ship_died()`s Game-Over-Zweig
+  sowie in `_check_win()` jetzt `show_run_summary(...)` statt direkt
+  `show_game_over(...)` auf. Per Live-Screenshot verifiziert (inkl. der
+  Highscore-Rang-Zeile bei einer qualifizierenden Punktzahl).
+- **Punkte-Popup jetzt auch bei Boss-Rettungskills**: `game.gd::
+  _on_ship_rescued(at_position)` (neuer Parameter, siehe Homing-Fix oben) ruft
+  jetzt `_spawn_score_popup(at_position, "+%d" % _last_kill_points)` auf —
+  `_last_kill_points` wird in `_on_enemy_killed()` mitgeführt (die schon
+  bestehende, bereits eventuell verdoppelte Kill-Punktzahl); da `killed` und
+  `ship_rescued` synchron nacheinander aus `enemy.gd::_explode()` feuern, ist
+  der Wert beim Rettungs-Handler garantiert schon aktuell. Gleiche
+  Popup-Machinerie wie bei Bonus-Item-Pickups, nur an der Boss-Position statt
+  am Item. Per Live-Test verifiziert (`_rescues`/`_rescue_points` erhöhen sich
+  korrekt, Popup-Aufruf mit dem richtigen Betrag).
+- **HUD-Layout**: `MANY_THRESHOLD` (Lebens-Icons) 5 → 3 — ab 3 verbleibenden
+  Schiffen jetzt ein Icon + „× N" statt einzelner Symbole. Der Runden-Zähler
+  (Lap-Marker, goldener Kreis) sitzt jetzt an einer FESTEN Position nahe dem
+  rechten Rand (`hud.gd::STAGE_LABEL_LEFT/LAP_MARKER_GAP_RIGHT/LAP_MARKER_W`)
+  statt direkt hinter der wechselnd breiten Achievement-Icon-Reihe herzuwandern.
+  **Dabei einen echten Kollisions-Bug beim ersten Anlauf gefunden und behoben**:
+  eine volle 6-Icon-Reihe (das Maximum vor dem automatischen Rundenschluss bei
+  7) reichte bei echter Bildschirmzentrierung bis in den fest positionierten
+  Marker-Bereich hinein (per Live-Screenshot entdeckt — Icons und Marker
+  überlappten sichtbar). Fix: die Icon-Reihe zentriert sich jetzt nicht mehr
+  über die volle Bildschirmbreite, sondern nur über den Platz LINKS vom
+  Marker-Bereich (`ICON_ROW_GAP_FROM_MARKER`) — dadurch bleibt garantiert
+  Abstand zum Marker, unabhängig von der aktuellen Icon-Zahl. Per
+  Live-Screenshot mit 6 Icons erneut verifiziert: kein Überlapp mehr, sichtbare
+  Lücken zu beiden Seiten des Markers. Die Stage-Anzeige war schon vorher
+  Cyan (`UiStyle.ACCENT`, siehe `hud.gd::_ready()`) — dieser Teil des
+  Nutzerwunsches war bereits erfüllt.
+- **Hall-of-Fame-Liste spaltenweise ausgerichtet**: die alte Darstellung baute
+  einen einzigen mit Leerzeichen aufgefüllten String pro Zeile
+  (`"%2d.  %-8s  %06d"`) — mit einer proportionalen Schrift richten
+  Leerzeichen nichts zuverlässig aus. Fix: `_hof_box` ist jetzt ein
+  `GridContainer` (3 Spalten: Platz/Name/Score, gleiche Technik wie beim
+  Settings-Stepper-Grid der sechsten Runde) statt einer `VBoxContainer` mit
+  Text-Zeilen — Rang rechtsbündig, Name linksbündig (mit
+  `SIZE_EXPAND_FILL`, damit die Score-Spalte immer am rechten Rand bleibt),
+  Score rechtsbündig. Per Live-Screenshot verifiziert: alle Namen exakt
+  linksbündig, alle Scores exakt rechtsbündig untereinander, unabhängig von
+  Namenslänge.
+- Erledigt bei der Gelegenheit: eine während dieser Testreihe versehentlich mit
+  Test-Einträgen ("bb", "X", "MITTELLANG", …) verunreinigte
+  `user://hall_of_fame.cfg` wurde zurückgesetzt.
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,
@@ -660,7 +781,8 @@ StageDirector, Ship, HUD-CanvasLayer.
   bevor das Schiff überhaupt erscheint. Ship `died` → Reserve-Check (siehe
   globale Leben-Anzeige-Regel) → bei Rest: Reconstruct-Animation statt reinem
   Timer-Wait, dann `respawn()`; bei 0 → GAME_OVER (1 s Delay, dann
-  `menus.show_game_over`, Tree pausiert). Während `FORMATION` außerdem alle
+  `menus.show_run_summary(...)` — seit der siebten Playtest-Runde vor
+  `show_game_over`, siehe dort — Tree pausiert). Während `FORMATION` außerdem alle
   `BONUS_INTERVAL_MIN/MAX` (9–16 s) ein `bonus_item` (`_spawn_bonus_item()`) —
   `_bonus_t` wird seit 2026-09-13 nur einmal pro Run gesetzt (`_new_run()`),
   NICHT mehr bei jedem Stage-Wechsel zurückgesetzt (das war der eigentliche
@@ -673,14 +795,17 @@ StageDirector, Ship, HUD-CanvasLayer.
   Punktegutschrift (Kill UND Bonus-Pickup) — Ersteres ruft bei
   Schwellenüberschreitung `StageDirector.force_boss_capture()` (siehe dort,
   seit 2026-09-13 „sticky"), Letzteres beendet den Lauf mit
-  `show_game_over(score, stage, won=true)`, sobald `GameSettings.win_score`
+  `show_run_summary(score, stage, won=true, ...)`, sobald `GameSettings.win_score`
   erreicht ist (0 = aus). `achievement_00`-Pickup → `ship.activate_hyper_ammo()`
-  (siehe „Vierte Playtest-Runde").
+  (siehe „Vierte Playtest-Runde") — verdoppelt seit der siebten Playtest-Runde
+  auch die Punktzahl pro Kill, nicht nur die Schusszahl.
 - `hud.gd` (`class_name Hud`) — **nur noch das In-Game-HUD**: Score (oben links),
-  Stage (unten rechts), Leben unten links (`_draw`, echte `player_trim.png`-
-  Sprites statt Platzhalter-Dreiecke; ab `MANY_THRESHOLD = 5` ein Icon + „× N"
-  statt wachsender Reihe — `_lives` ist die Reserve, siehe `game.gd`),
-  Center-Banner, Pause-Button oben rechts (seit 2026-09-13 immer sichtbar/
+  Stage (unten rechts, Cyan), Leben unten links (`_draw`, echte `player_trim.png`-
+  Sprites statt Platzhalter-Dreiecke; ab `MANY_THRESHOLD = 3` (seit der siebten
+  Playtest-Runde, vorher 5) ein Icon + „× N" statt wachsender Reihe — `_lives`
+  ist die Reserve, siehe `game.gd`), Lap-Marker seit der siebten Playtest-Runde
+  an fester Position nahe dem rechten Rand (siehe dort), Center-Banner,
+  Pause-Button oben rechts (seit 2026-09-13 immer sichtbar/
   mausklickbar statt nur auf Touch-Geräten, mit eigenem Milchglas-Hintergrund
   via `_add_pause_glass()` — siehe „Fünfte Playtest-Runde"), Signal
   `pause_pressed`,
@@ -700,8 +825,14 @@ StageDirector, Ship, HUD-CanvasLayer.
   spaltenweise aus, siehe „Sechste Playtest-Runde"; Stepper: Leben /
   Extra-Leben / Boss alle X Punkte / Sieg bei X Punkten / Max. Schüsse /
   Schwierigkeit), Sound-Unterseite (HSlider pro Sound,
-  Loslassen = Vorhören), Hilfe (3 Textseiten mit ‹/›), Game-Over +
-  Hall-of-Fame-Liste + Namenseingabe bei Qualifikation. Signale `start_game` /
+  Loslassen = Vorhören), Hilfe (3 Textseiten mit ‹/›), seit der siebten
+  Playtest-Runde ein Run-Summary-Screen (`"summary"`, `show_run_summary()`,
+  siehe dort) VOR dem Game-Over-Screen, dann Game-Over + Hall-of-Fame-Liste +
+  Namenseingabe bei Qualifikation. Die HoF-Liste (`_hof_box`) ist seit der
+  siebten Playtest-Runde ein `GridContainer` (Platz/Name/Score-Spalten,
+  rechts-/links-/rechtsbündig) statt einer `VBoxContainer` mit
+  leerzeichen-aufgefüllten Text-Zeilen — Letzteres richtete sich in einer
+  proportionalen Schrift nicht wirklich aus. Signale `start_game` /
   `resume_game` / `to_title` / `settings_changed`. „Beenden" nur wenn nicht
   `OS.has_feature("web")`. Überschriften-Outline ist `UiStyle.ACCENT` (Cyan,
   seit 2026-09-13 — vorher ein unpassendes Grün).
@@ -714,7 +845,9 @@ StageDirector, Ship, HUD-CanvasLayer.
   `difficulty` (0–2).
   `dive_params(difficulty)` → `{first, min, max, max_divers}` für den Director.
 - `hall_of_fame.gd` (`class_name HallOfFame`) — `user://hall_of_fame.cfg`, Top 10
-  nach Score (`qualifies` / `insert`).
+  nach Score (`qualifies` / `insert`). `rank_for(score)` (seit der siebten
+  Playtest-Runde) liefert den voraussichtlichen Platz für den Run-Summary-Screen,
+  ohne schon einzutragen.
 - `sound_manager.gd` (Autoload `Snd`, `project.godot [autoload]`) — ein
   `AudioStreamPlayer` je Key, Clip `res://assets/sounds/<key>.wav` (fällt auf
   `.ogg` zurück; fehlt die Datei → still). Pro-Sound-Lautstärke 0–100 in
@@ -801,31 +934,45 @@ Steuerung Touch: **Drag irgendwo** = relatives Lenken (`ship._unhandled_input`,
   2026-09-13, siehe „Sechste Playtest-Runde") verkleinern/verschieben das
   Passagier-Sprite in `_spawn_captive_visual()`, um Überlappung mit der
   Formationsreihe darunter zu vermeiden.
-- **Boss-Capture** (`enemy.gd` + `capture_beam.gd`/`.tscn` + `attack_paths.gd`s
-  `capture_approach()`): Boss hovert statt durchzufliegen (CAPTURE_APPROACH),
-  lässt `capture_beam.tscn` herab (grüner Strahl, wächst/hält/zieht sich
-  zurück, Gruppe `"enemy_shots"` — zerstört das Schiff über den schon
-  bestehenden Kollisions-Code in `ship.gd`, kein Sonderfall nötig). Trifft der
-  Strahl (`caught`-Signal), wird `_carrying_captive` **sofort im Signal-Handler**
-  gesetzt (nicht erst nach Ablauf des Beam-Timers, siehe
+- **Boss-Capture** (`enemy.gd` + `capture_beam.gd`/`.tscn`): Boss hovert statt
+  durchzufliegen (CAPTURE_APPROACH), homt dabei seit der siebten Playtest-Runde
+  live jeden Frame auf die AKTUELLE Spielerposition (`_home_toward_player()`,
+  `CAPTURE_HOMING_SPEED = 640 px/s` > Schiffs-eigene 480 px/s — der Spieler
+  kann den Fang verzögern, aber nicht entkommen) statt einer vorgebackenen
+  Snapshot-Kurve (`AttackPaths.capture_approach()`, entfernt). Sobald die
+  Hover-Höhe erreicht ist, lässt er `capture_beam.tscn` herab (grüner Strahl,
+  jetzt Kind-Node des Bosses statt Geschwister — folgt dessen weiterhin live
+  nachgeführter x-Position (`_track_player_x()`) automatisch mit; wächst/hält/
+  zieht sich zurück, Gruppe `"enemy_shots"` — zerstört das Schiff über den
+  schon bestehenden Kollisions-Code in `ship.gd`, kein Sonderfall nötig).
+  Trifft der Strahl (`caught`-Signal), wird `_carrying_captive` **sofort im
+  Signal-Handler** gesetzt (nicht erst nach Ablauf des Beam-Timers, siehe
   „Boss-Capture-Race-Condition (Teil 2)") und der Boss trägt eine
   `ship_captured.png`-Sprite als Kind-Node zurück in die Formation (folgt
   Position/Rotation automatisch).
   Wird genau dieser Boss später zerstört (`_explode()`), feuert er
-  `ship_rescued` — `game.gd::_on_ship_rescued()` macht daraus
+  `ship_rescued(at_position)` (Positions-Parameter seit der siebten
+  Playtest-Runde) — `game.gd::_on_ship_rescued()` macht daraus
   `ship.become_twin()`: zweites Schiff+Triebwerk (Duplikat, `TWIN_OFFSET=34`),
   doppelte Laser-Kapazität, ein Treffer beendet den Bonus wieder
   (`_destroy() -> _revert_twin()`). Max. ein gefangenes Schiff gleichzeitig.
+  Zeigt außerdem seit der siebten Playtest-Runde einen kurzen „+Punkte"-Popup
+  an der Boss-Position (`_spawn_score_popup()`, dieselbe Punktzahl wie der
+  Kill selbst).
 - `bomb.gd` / `bomb.tscn` — Gegner-Schuss, fällt (leicht Richtung Spieler-x zum
   Abwurfzeitpunkt), Platzhalter-Raute. Layer 16 (enemy_shots) / Maske 9
   (player + player_shots — Laser können Bomben abschießen).
 - `laser.gd` (`class_name Laser`) — Platzhalter-Strich im `_draw()`
   (laser.png raus), Layer 8, Hitbox 9×18 (sichtbarer Strahl bleibt 3 px
-  schmal — großzügiger als er aussieht, Nutzer fand Treffen zu schwer). Seit
+  schmal — großzügiger als er aussieht, Nutzer fand Treffen zu schwer;
+  Sichtlänge seit der siebten Playtest-Runde auf 2/3 gekürzt,
+  `BEAM_LEN`/`BEAM_HEAD_LEN`, die Hitbox selbst unangetastet). Seit
   2026-09-13 flasht `modulate` loopend zwischen Weiß und `accent_color`
   (`ACCENT_NORMAL` Türkis normal, `ACCENT_HYPER` Rot bei Hyper-Ammo — siehe
   „Vierte Playtest-Runde" und `ship.gd::activate_hyper_ammo()`), statt
-  statisch reinweiß zu sein.
+  statisch reinweiß zu sein. `ship.gd::FIRE_COOLDOWN = 0.15` s (siebte
+  Playtest-Runde) begrenzt zusätzlich zur Slot-Kapazität, wie schnell
+  `shoot()` überhaupt erneut feuern darf.
 - `bonus_item.gd` / `bonus_item.tscn` — Bonus-Sammelobjekt, fällt langsam,
   schwingt seit 2026-09-13 selbstständig über die **gesamte** Bildschirmbreite
   (`_base_x`/`_amplitude` aus der eigenen Viewport-Breite berechnet, nicht mehr
