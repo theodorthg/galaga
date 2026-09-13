@@ -73,6 +73,16 @@ func _ready() -> void:
 	for key in LOOPING_KEYS:
 		_wanted[key] = false
 		var p: AudioStreamPlayer = _players[key]
+		# Every LOOPING_KEYS track is meant to keep looping for as long as a
+		# menu screen is shown — but EVERY menu screen (Pause, Settings,
+		# Summary, Game Over, ...) runs with get_tree().paused = true, and a
+		# node's default process_mode (PAUSABLE, inherited) means its own
+		# "finished" signal simply stops firing once the tree is paused — the
+		# audio itself keeps playing through to the end once, then just goes
+		# silent instead of looping (user report: "pause music doesn't loop
+		# while the menu is open"). ALWAYS keeps this one node's bookkeeping
+		# running regardless of pause state, without affecting anything else.
+		p.process_mode = Node.PROCESS_MODE_ALWAYS
 		p.finished.connect(func() -> void:
 			if _wanted.get(key, false):
 				p.play())

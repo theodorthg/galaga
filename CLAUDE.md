@@ -1394,6 +1394,94 @@ mehr, Schiffs-Explosion als visuelle Komponente, Extra-Leben-Default auf 5000.**
   angeglichen, damit ein frisches Spiel für beide Mechaniken dieselbe
   Punkteschwelle verwendet, wie vom Nutzer gewünscht.
 
+**Fünfzehnte Playtest-Runde (2026-09-14): Titel-Musik ergänzt, Pause-/
+Auswertungs-Musik loopt jetzt wirklich trotz Pause, Neustart-Bestätigung vor
+„Start-Menü", versehentliche Wellen-Ankündigung entfernt, Explosion mit
+NEAREST-Filter, Rekonstruktion wartet auf den vollen Zerstörungs-Sound.**
+- **Titel-Bildschirm bekommt jetzt auch `menu-music`**: in der Vierzehnten
+  Playtest-Runde bewusst außen vor gelassen (nicht vom Nutzer verlangt) —
+  jetzt explizit nachgefordert. `menus.gd::MENU_MUSIC_SCREENS` bekommt
+  `"title"` dazu (`"splash"` bleibt weiterhin bewusst still). Per Live-Test
+  verifiziert (`menus.show_title()` → `_active_menu_music == "menu-music"`,
+  `Snd.is_playing("menu-music") == true`).
+- **Echter Bug behoben: `menu-music`/`scoring-board-music` loopten nicht,
+  solange ein Menü offen war** (Nutzer-Report — betraf dadurch indirekt auch
+  Punkt 2, siehe unten). Ursache: `sound_manager.gd`s Loop-Mechanismus hängt
+  komplett am `finished`-Signal des jeweiligen `AudioStreamPlayer` (manueller
+  Re-`play()`, da ein reiner WAV/OGG-Import nicht selbst loopt) — dieses
+  Signal ist an den `_process`-Zyklus des Nodes gekoppelt und feuert bei
+  Godots Default-`process_mode` (`PAUSABLE`, vererbt) nicht mehr, sobald
+  `get_tree().paused = true` ist. Genau das ist aber der Zustand während
+  JEDES Menüs (Pause, Einstellungen, Auswertung, Game Over, …) — der Clip
+  lief dadurch exakt einmal bis zum Ende durch und verstummte dann, statt zu
+  loopen. Fix: `p.process_mode = Node.PROCESS_MODE_ALWAYS` für beide
+  `LOOPING_KEYS`-Player in `sound_manager.gd::_ready()` — nur diese zwei
+  Knoten laufen jetzt unabhängig vom Pause-Zustand weiter, sonst nichts am
+  Pause-Verhalten geändert. Per Live-Test verifiziert: Wiedergabeposition
+  über den Clip hinaus geseekt (`AudioStreamPlayer.seek()`), Baum bewusst
+  pausiert gehalten — Position sprang zuverlässig zurück auf einen kleinen
+  Wert (Loop hat gegriffen), `get_tree().paused` blieb dabei durchgehend
+  `true`.
+- **Game-Over-Bildschirm „ohne" `scoring-board-music`**: derselbe Bug wie
+  oben, nicht ein fehlender Verdrahtungspunkt — `"gameover"` stand schon
+  vorher korrekt in `SCORE_MUSIC_SCREENS`. Mit dem Loop-Fix oben automatisch
+  miterledigt. Per Live-Test verifiziert (`menus.show_game_over(...)` →
+  `_active_menu_music == "scoring-board-music"`,
+  `Snd.is_playing("scoring-board-music") == true`).
+- **„Start-Menü" aus der Pause fragt jetzt nach** (Nutzer-Selbstkorrektur:
+  „Ich weiß nicht, was ich mir dabei gedacht habe. Aber ich meinte wohl eher
+  sowas wie 'Neustart'.") — neuer Screen `"confirm_title"`
+  (`_build_confirm_title()`, identisches Ja/Nein-Muster wie
+  `_build_confirm_reset()`), Pause-Screen-Button ruft jetzt `_swap
+  ("confirm_title")` statt direkt `to_title.emit()`. „Nein" geht zurück zu
+  Pause (immer von dort erreichbar, kein `_return_to`-Tracking nötig), „Ja"
+  verlässt wie bisher zum Titel. Per Live-Test verifiziert: Klick auf
+  „Start-Menü" zeigt `confirm_title`, „Nein" zeigt wieder `pause`, ein
+  zweiter Anlauf mit „Ja" bringt `game._state` tatsächlich auf `TITLE`.
+- **Versehentliche `enemy-wave1`-Ankündigung beim normalen Stage-Start
+  entfernt** (Selbstkorrektur des Nutzers: „Wohl mein Fehler beim
+  Prompten.") — `game.gd::_start_ready()` rief bislang zusätzlich zum
+  korrekten `level-cleared`/`stage`-Paar auch `_snd.play("enemy-wave1")` auf,
+  und zwar bei JEDEM Levelwechsel, nicht nur bei einer echten
+  Mehrfach-Wellen-Ankündigung. Der Aufruf war schlicht fehlplatziert — der
+  Sound-Key selbst bleibt für sein eigentliches Vorhaben aufgehoben, siehe
+  „Offen" Punkt 11 unten (Bonuslevel-Feature). Fix: Aufruf ersatzlos
+  gestrichen. Statisch verifiziert (keine `enemy-wave1`-Fundstelle mehr in
+  `game.gd`).
+- **Explosion bekommt `TEXTURE_FILTER_NEAREST`** gegen den vom Nutzer
+  gemeldeten „unschönen weißen Rand" — das Projekt hat keinen
+  Default-Filter-Override, Godots Standard ist Linear, was den harten
+  Alpha-Rand jedes Explosions-Frames gegen die volltransparente (schwarze,
+  Alpha 0) Umgebung verwaschen kann und beim Herunterskalieren als heller
+  Saum sichtbar wird — derselbe Mechanismus, der pixelgenaue Sprites
+  grundsätzlich NEAREST statt Linear wollen. `ship_explosion.gd::_ready()`
+  setzt jetzt explizit `texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST`,
+  wie es jeder andere Sprite hier bei nativer Auflösung ohnehin implizit
+  bekommt. Hinweis zur Verifikation: ausführliche Untersuchung (PIL-
+  Alpha-Compositing, Rohpixel-Prüfung der transparenten Bereiche,
+  In-Game-Screenshot-Zoom) konnte den exakten gemeldeten Saum auf dem
+  Test-Desktop nicht reproduzieren — die Frames selbst rendern dort schon
+  vorher sauber. Der Fix ist trotzdem der richtige, standardmäßige und
+  risikoarme Schritt gegen genau dieses bekannte Artefakt und bleibt daher
+  drin, auch ohne 1:1-Reproduktion.
+- **Rekonstruktion wartet jetzt zusätzlich auf den vollen
+  `ship-destroyed`-Sound**, nicht nur auf die Explosions-Animation — die
+  Boom-Animation ist mit 4 Frames bei 10 fps nur ~0,4 s lang, `ship-
+  destroyed.ogg` (per `ffprobe` gemessen) dagegen 2,93 s: das Schiff begann
+  bislang schon nach 0,4 s mit der Rekonstruktion, während der eigentliche
+  Zerstörungssound im Hintergrund noch weiterlief — hörbar unpassend, wenn
+  das „neue" Schiff schon wieder da ist. `game.gd::_play_explosion(at)`
+  wartet nach dem `explosion_done`-Signal jetzt zusätzlich in einer
+  `while _snd.is_playing("ship-destroyed"): await get_tree().process_frame`-
+  Schleife. Per Live-Test verifiziert (Zerstörung ausgelöst, Schiff
+  unmittelbar danach unsichtbar/`_alive=false`; kompletter Zyklus lief ohne
+  Hänger durch und das Schiff war am Ende wieder sichtbar/`_alive=true` —
+  exakte Sekundenbruchteil-Messung der Wartezeit selbst war über die
+  MCP-Tool-Rundreisen hinweg wegen des bekannten Hintergrund-Zeitdrifts
+  zwischen getrennten Aufrufen nicht zuverlässig möglich, der Code-Pfad
+  selbst ist aber eindeutig: der Loop kann nicht vor Sound-Ende verlassen
+  werden).
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,
@@ -1857,8 +1945,10 @@ und „Boss-Capture" weiter oben für Details.
    konkretes weiteres Detail vom Nutzer genannt — als vorerst abgeschlossen
    zu betrachten, bis neues Feedback kommt.
 9. **`ship-warp-drive.gif` / `hyper-ammo.gif` / `cyclone-ammo.gif`** —
-   vorhanden (siehe „Ship-Reconstruct-Intro/Respawn..." weiter oben für Maße),
-   Einsatzzweck noch offen, Nutzer will sich das später überlegen. **Wichtig:
+   vorhanden (siehe „Ship-Reconstruct-Intro/Respawn..." weiter oben für Maße).
+   `ship-warp-drive.gif`s Einsatzzweck ist seit 2026-09-14 geklärt: Übergang
+   vom Bonuslevel zurück in die nächste normale Stage, siehe Punkt 11 unten.
+   `hyper-ammo.gif`/`cyclone-ammo.gif` weiterhin ohne konkreten Plan. **Wichtig:
    nicht verwechseln** mit der am 2026-09-13 neu eingebauten
    Gameplay-Mechanik „Hyper-Ammo" (zwei eng nebeneinanderliegende Laserstrahlen
    nach `achievement_00`-Pickup, `ship.gd::activate_hyper_ammo()`) — die nutzt
@@ -1868,6 +1958,35 @@ und „Boss-Capture" weiter oben für Details.
     nächste Runde nach Prüfung des aktuellen Stands durch den Nutzer. Die
     Ziel-Seite hat seit 2026-09-12 schon eine Icon-Legende (Punkt 3 oben), die
     beiden Steuerungs-Seiten sind weiterhin reiner Text.
+11. **Bonuslevel mit mehreren Gegner-Wellen** (Nutzervorschlag 2026-09-14,
+    noch NICHT umgesetzt — nur vorgemerkt) — statt der normalen 40er-Formation
+    fliegen mehrere Wellen (Vorschlag: 3) von Gegnern nacheinander ein, jede
+    Welle eine einfache, gerade Kette (schlicht übereinander aufgereiht, kein
+    Formations-Slot-Raster) von oben nach unten. Jede Welle unterscheidet
+    sich von der vorigen in Sprite/-Typ, Start-x-Position (oben) UND
+    Bewegungs-Zielpunkt — wechselt also jedes Mal komplett, nicht nur das
+    Aussehen. Auftakt: alle N Stages (Nutzervorschlag: N=3), N soll als
+    eigene Einstellung wählbar sein (analog zu `boss_interval`/`win_score` —
+    eigener Eintrag in `GameSettings`, eigener Stepper in `menus.gd`).
+    Vorgesehene Bausteine, die schon vorhanden/vorbereitet sind:
+    - `enemy-wave1.ogg` (Sound-Key existiert bereits, aktuell unbenutzt seit
+      der versehentlichen Verdrahtung an den normalen Stage-Start in der
+      dreizehnten Playtest-Runde — siehe „Vierzehnte Playtest-Runde" — wurde
+      dort wieder entfernt, genau für DIESEN Zweck aufgehoben): soll pro
+      Welle (nicht nur einmal pro Bonuslevel) erneut abgespielt werden, wenn
+      die jeweils nächste Welle wirklich angekündigt wird.
+    - `ship-warp-drive.gif` (19 Frames, 100×100, bislang ungenutzt): Übergang
+      NACH einem abgeschlossenen Bonuslevel, auf dem Weg zur nächsten
+      normalen Stage — analog zu `ship_reconstruct.gd`s Aufbau (einmalige
+      `AnimatedSprite2D`-Animation, Frames extrahieren, Signal, self-free).
+    - Zentrales „Bonus-Level"-Banner beim Start, kurz eingeblendet (gleicher
+      Mechanismus wie `hud.gd::flash_banner()`, das schon „STAGE n"/„BEREIT"/
+      „LAP!" kann).
+    Noch zu klären, bevor das umgesetzt wird: welche Gegner-Sprites pro Welle
+    (eigene Auswahl oder aus dem bestehenden Zako/Goei/Boss-Pool?), ob es
+    während des Bonuslevels Gegnerfeuer/Sturzflüge gibt oder die Ketten nur
+    geradeaus durchfliegen, Punktevergabe-Schema, und ob ein verpasster/nicht
+    abgeschlossener Bonuslevel-Durchlauf irgendeine Konsequenz hat.
 
 ## Aseprite MCP Pro
 

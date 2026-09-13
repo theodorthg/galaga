@@ -16,6 +16,12 @@ const DISPLAY_SCALE := 0.5  # peak frame's bloom lands close to the ship's own o
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_PAUSABLE
 	scale = Vector2.ONE * DISPLAY_SCALE
+	# Without this, the project's default LINEAR texture filter blends each
+	# frame's hard alpha edge against its fully-transparent (black, alpha 0)
+	# surroundings, which reads as a faint light/white fringe around the boom
+	# once scaled down (user report) — pixel art wants NEAREST, same as every
+	# other sprite here already gets implicitly right at native resolution.
+	texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 	var frames := SpriteFrames.new()
 	frames.add_animation("boom")
 	frames.set_animation_speed("boom", FPS)

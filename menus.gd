@@ -83,6 +83,7 @@ func _ready() -> void:
 	_screens["splash"] = _build_splash()
 	_screens["title"] = _build_title()
 	_screens["pause"] = _build_pause()
+	_screens["confirm_title"] = _build_confirm_title()
 	_screens["settings"] = _build_settings()
 	_screens["confirm_reset"] = _build_confirm_reset()
 	_screens["sound"] = _build_sound()
@@ -108,7 +109,7 @@ func hide_all() -> void:
 ## playing (_active_menu_music) and only stops/starts anything when the
 ## wanted track actually changes, never on a same-track no-op swap.
 ## "title"/"splash" fall through to the empty-string case (silence).
-const MENU_MUSIC_SCREENS := ["pause", "settings", "confirm_reset", "sound", "highscores", "help"]
+const MENU_MUSIC_SCREENS := ["title", "pause", "settings", "confirm_reset", "confirm_title", "sound", "highscores", "help"]
 const SCORE_MUSIC_SCREENS := ["summary", "gameover"]
 var _active_menu_music := ""  # "" | "menu-music" | "scoring-board-music"
 
@@ -396,9 +397,36 @@ func _build_pause() -> Control:
 	box.add_child(_button("Einstellungen", func(): _open_settings("pause")))
 	box.add_child(_button("Highscores", func(): show_highscores("pause")))
 	box.add_child(_button("Hilfe", func(): _open_help("pause")))
-	box.add_child(_button("Start-Menü", func(): to_title.emit()))
+	box.add_child(_button("Start-Menü", func(): _swap("confirm_title")))
 	if not IS_WEB:
 		box.add_child(_button("Beenden", func(): get_tree().quit()))
+	return s
+
+## Confirmation gate for "Start-Menü" from the pause screen (user request: a
+## misclick shouldn't silently abandon the run mid-game — realized only after
+## shipping the button that "Start-Menü" from inside an active run is really
+## "restart", not a harmless navigation). Same Ja/Nein pattern as
+## _build_confirm_reset() below. Only ever reachable from "pause", so "Nein"
+## can go straight back there rather than tracking a _return_to.
+func _build_confirm_title() -> Control:
+	var s := _screen()
+	var box := _box(s)
+	box.add_child(_title_label("Neu starten?", 26))
+	box.add_child(_spacer(6))
+	var msg := _title_label("Wirklich zum Start-Menü?\nDer aktuelle Lauf geht verloren.", 18)
+	msg.autowrap_mode = TextServer.AUTOWRAP_WORD
+	box.add_child(msg)
+	box.add_child(_spacer(10))
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
+	var no_btn := _button("Nein", func(): _swap("pause"))
+	no_btn.custom_minimum_size = Vector2(130, TOUCH_H)
+	var yes_btn := _button("Ja", func(): to_title.emit())
+	yes_btn.custom_minimum_size = Vector2(130, TOUCH_H)
+	row.add_child(no_btn)
+	row.add_child(yes_btn)
+	box.add_child(row)
 	return s
 
 # ---------------------------------------------------------------- settings

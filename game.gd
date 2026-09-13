@@ -248,6 +248,12 @@ func _play_explosion(at: Vector2) -> void:
 	add_child(e)
 	e.global_position = at
 	await e.explosion_done
+	# The "ship-destroyed" SFX (started by ship.gd::_destroy() right before
+	# this got called) runs longer than the ~0.4s boom animation — waiting on
+	# the animation alone let the reconstruct start while the ship's own
+	# death sound was still playing underneath it (user report).
+	while _snd and _snd.is_playing("ship-destroyed"):
+		await get_tree().process_frame
 
 ## Where the ship reappears — always horizontally centered (respawn() does
 ## the same), at whatever y the ship scene was authored with.
@@ -292,8 +298,6 @@ func _start_ready() -> void:
 		return
 	_hud.hide_banner()
 	_state = ENTERING
-	if _snd:
-		_snd.play("enemy-wave1")
 	_director.start_stage(_stage)
 
 func _on_stage_populated() -> void:
