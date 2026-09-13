@@ -1165,6 +1165,128 @@ statt fester Zeit, Highscores auch aus dem Pausenmenü erreichbar.**
   übergeordnete CLAUDE.md — den falschen traf): `_return_to` korrekt
   `"pause"`, Bildschirm nach dem Swap tatsächlich wieder „PAUSE".
 
+**Dreizehnte Playtest-Runde (2026-09-13): kompletter Sound-Austausch —
+zweite, größere Sammlung benannter Clips, neue Musik-Zustandsmaschine
+(Pause/Einstellungen, Auswertung, Level-1-Intro mit Skip), drei neue
+Abschuss-Sounds, Traktorstrahl-Fang-Sound, Stage-geschafft/Lap-voll-Sounds.**
+- **Kompletter Ordnertausch**: `assets/sounds/` (die alten, synthetischen
+  SFX-Rips aus der „Erste echte Assets"-Runde) → `assets/sounds_old/`
+  (`git mv`, bleibt erhalten), eine zweite, deutlich größere vom Nutzer
+  zusammengestellte Sammlung benannter `.ogg`-Clips
+  (`~/Downloads/Galaga-Recherche/sounds/`, 12 Dateien) kopiert nach
+  `assets/sounds/`. Einzige Korrektur dabei: `bonus-stage-clearedogg.ogg`
+  (Tippfehler-Duplikat der Endung) → `bonus-stage-cleared.ogg` umbenannt.
+  `sound_manager.gd`s Konvention „Key = Dateiname" (`res://assets/sounds/
+  <key>.ogg`) wurde dabei konsequent durchgezogen: `player_boom` → Key +
+  Dateiname `ship-destroyed` (ship.gd angepasst), das bisherige
+  Sammel-`hit` komplett aufgeteilt in drei neue, gezieltere Keys (siehe
+  unten) statt eines Alt-Keys mit neuer Datei. `CALIB_VERSION` 2→3 (verwirft
+  alte gespeicherte %-Werte, da mehrere Keys umbenannt/neu sind). Vier
+  bestehende Keys (`music`, `dive`, `extra`, `stage`) bekamen diesmal KEINE
+  neue Datei — sie bleiben stumm, bis der Nutzer passende Clips nachliefert
+  (exakt das in `sound_manager.gd`s eigenem Header dokumentierte
+  Graceful-Degradation-Verhalten: „a missing file just makes that key
+  silent"), ihre alte `base_db`-Kalibrierung blieb deshalb unangetastet. Alle
+  neuen Keys bekamen `base_db=0.0` (neutral) — der Nutzer bat ausdrücklich
+  darum, die Feinkalibrierung der Lautstärken auf eine spätere Runde zu
+  verschieben, nachdem er die Clips im Spiel gehört hat; dafür bekam trotzdem
+  **jeder** neue Sound sofort einen eigenen Lautstärke-Regler in der
+  Sound-Unterseite (Nutzer-Zusatz), rein datengetrieben über
+  `SoundManager.ORDER`/`SOUNDS` wie schon die alten 7 — keine Handarbeit in
+  `menus.gd` pro Sound nötig.
+- **Sound-Unterseite jetzt scrollbar + Zeilenumbruch-Labels**: von 7 auf 16
+  Regler gewachsen, passte nicht mehr auf einmal in die 960er-Design-Canvas.
+  `_build_sound()`: Box auf 460px verbreitert (wie `_build_help()`), die
+  Regler-Liste steckt jetzt in einem `ScrollContainer` (560px hoch, „Fertig"
+  bleibt außerhalb, immer sichtbar). `_sound_row()`s Namens-Label hat jetzt
+  `autowrap_mode = AUTOWRAP_WORD` + `SIZE_EXPAND_FILL` statt einer festen
+  140px-Mindestbreite — längere neue Namen wie „Boss (mit Schiff)
+  abgeschossen" brechen sauber auf zwei Zeilen um, statt über den Panelrand
+  hinauszulaufen (mehrere davon deutlich länger als die alten 7 kurzen
+  Namen wie „Schuss"/„Treffer"). Per Live-Screenshot verifiziert (bis ganz
+  unten gescrollt, alle 16 Zeilen sauber lesbar, kein Überlapp).
+- **Neue Musik-Zustandsmaschine** (`sound_manager.gd` + `menus.gd`):
+  `LOOPING_KEYS` (`music`, `pause-menu-music`, `scoring-board-music`)
+  generalisiert den bisherigen, hart auf `"music"` verdrahteten
+  Auto-Loop-Mechanismus (ein `_wanted`-Dictionary statt einer einzelnen
+  `_music_wanted`-Bool-Variable) — `play()`/`stop()`/`preview()` behandeln
+  jeden Key aus dieser Liste gleich (Sound-Unterseiten-Vorhören einer
+  Loop-Spur toggled jetzt an/aus statt neu zu starten). Neue
+  `is_playing(key)`. `menus.gd::_apply_screen_music(screen_name)` ist der
+  EINZIGE Ort, der entscheidet, welche der beiden Menü-Musiken läuft —
+  aufgerufen aus `_swap()` (jeder Screen-Wechsel) UND aus `hide_all()`
+  (deckt auch die Direkt-Aufrufer in `game.gd` ab, die `hide_all()` ohne
+  `_swap()` nutzen: `_resume()`, `_new_run()`, `_revive_after_win_edit()`).
+  `MENU_MUSIC_SCREENS` (`pause`, `settings`, `confirm_reset`, `sound`,
+  `highscores`) → `pause-menu-music` (Nutzerwunsch: „gehört zum
+  Pause-Menü... auch für Einstellungs-Menü", Highscores als Fallback-Vorschlag
+  des Nutzers selbst, „da habe ich keine Musik"). `SCORE_MUSIC_SCREENS`
+  (`summary`, `gameover`) → `scoring-board-music` (Nutzerwunsch: „Musik für
+  den Screen... mit der Übersicht der gemachten Punkte", ausdrücklich NICHT
+  das separate Highscore-Board — `gameover` absichtlich mit reingenommen,
+  da es direkt auf `summary` folgt und ein Musikbruch zwischen beiden
+  Screens unnötig hart gewirkt hätte). Alles andere (`title`, `splash`,
+  `help`) läuft still — für „Hilfe" nicht vom Nutzer erwähnt, deshalb bewusst
+  auf „still" belassen statt geraten (Pause-Musik pausiert also kurz, wenn
+  man aus der Pause die Hilfe öffnet — als möglicher Feinschliff vorgemerkt,
+  falls das störend auffällt). Beide Musiken loopen (Nutzer-Zusatz: „Auch
+  scoring-board-music muss loopen"). Per Live-Test jede Übergangskombination
+  einzeln durchgeklickt (Titel→Einstellungen→Sound→Zurücksetzen→Titel,
+  Pause→Highscores→zurück, Summary→Gameover→Titel) — jeweils genau die
+  erwartete Musik an/aus.
+- **Level-1-Intro-Musik mit Sperre + Skip** (`start-first-level-music`,
+  einmalig, NICHT loopend): `game.gd::_new_run()` startet sie zusammen mit
+  der (weiterhin stummen) `music`; `_intro_gate_active` merkt sich, dass
+  gerade eine Sperre aktiv ist. `_start_ready()` lässt den Einflug (Wechsel
+  zu ENTERING) nach dem üblichen Banner-Timer zusätzlich so lange stehen,
+  bis der Clip fertig gespielt hat (`while _intro_gate_active and
+  _snd.is_playing(...): await get_tree().process_frame` — reine Polling-
+  Schleife, kein Timer/Signal-Racing nötig, da `is_playing()` ohnehin jeden
+  Frame neu geprüft wird). `_unhandled_input()` beendet die Sperre sofort bei
+  Linksklick ODER Touch-Tap (bewusst NICHT bei Tastendruck — exakte
+  Nutzervorgabe „Maus/tappt"), stoppt den Clip dabei aktiv. Gilt nur für
+  Stage 1 eines NEUEN Spiels (`_new_run()` läuft nur dort), nie bei Stage 2+
+  oder einem Respawn. **Beim ersten Testlauf einen echten Timing-Bug bei mir
+  selbst gefunden**: naive Verifikation über zwei getrennte MCP-Tool-Aufrufe
+  mit dazwischenliegendem `sleep` täuschte ein sofortiges Durchrutschen vor —
+  tatsächlich lag das an der immer wieder dokumentierten Zeit-Drift zwischen
+  Tool-Aufrufen (die reale Rechenzeit zwischen zwei Anfragen reicht locker,
+  um unbeaufsichtigt bis zum Game Over zu spielen). Sauber verifiziert über
+  `Time.get_ticks_msec()`-Zeitstempel direkt im Spiel (Sperre hielt exakt bis
+  zum natürlichen Ende der 6,9-Sekunden-Datei) sowie direkte
+  `_unhandled_input()`-Aufrufe mit synthetischen Maus-/Touch-/Tastatur-Events
+  (Maus und Touch brechen sofort ab, Taste tut nichts).
+- **Drei Abschuss-Sounds statt einem** (`enemy.gd::_explode()`): ein Boss,
+  der gerade ein Schiff trägt, bekommt `boss-killed`; ein Treffer während
+  `DIVING`/`RETURNING` (nicht-Boss) bekommt `enemy-death2`; alles andere
+  `enemy-death1` (ersetzt das alte Sammel-`hit`). **Echter Bug beim ersten
+  Anlauf gefunden und sofort gefixt**: der Diving-Check las `_state`
+  NACHDEM `_explode()` es schon auf `LOCKING` gesetzt hatte — fiel dadurch
+  IMMER auf den „sonst"-Zweig zurück, ein Sturzflug-Kill klang nie anders
+  als ein normaler. Fix: der Zustand wird jetzt in einer lokalen `was_diving`
+  VOR der `LOCKING`-Zuweisung eingefroren. Per Live-Test mit allen drei
+  Kombinationen verifiziert (IN_FORMATION → `enemy-death1`, künstlich auf
+  `DIVING` gesetzt → `enemy-death2`, `_carrying_captive=true` → `boss-killed`,
+  jeweils exakt einer der drei Sounds aktiv, nie mehr als einer).
+- **Traktorstrahl-Fang-Sound** (`beam-sound`): schließt die in „Offen" Punkt 7
+  vermerkte Lücke „kein eigener Schiff-gefangen-Alarm" — `enemy.gd`s
+  `beam.caught`-Signal-Handler (derselbe, der `_carrying_captive` setzt und
+  die Passagier-Grafik spawnt) spielt ihn jetzt mit. Per Live-Test mit
+  direkt emittiertem `caught`-Signal verifiziert.
+- **Zwei neue Event-Sounds ohne Vorgänger**: `level-cleared` (in
+  `game.gd::_process()`, im selben Moment wie das bisher stille
+  `_stage += 1` beim tatsächlichen Stage-Clear) und `bonus-stage-cleared`
+  (in `_on_bonus_collected()`, genau wenn `_hud.add_bonus_icon(...)` `true`
+  liefert — ersetzt dort das generische `extra` nur für DIESEN speziellen
+  Pickup, ein normaler Zwischen-Pickup bleibt weiterhin am stillen `extra`
+  hängen). `enemy-wave1` läuft, sobald der Einflug tatsächlich beginnt
+  (`_state = ENTERING` in `_start_ready()`) — die Lesart „eine Welle von
+  Gegnern kündigt sich an" als die ganze einfliegende Formation, nicht ein
+  einzelner sturzfliegender Gegner (der weiterhin am stillen `dive` hängt).
+  Alle drei per Live-Test verifiziert (`_process()` direkt mit geleerter
+  `enemy`-Gruppe aufgerufen → `level-cleared` + `_stage` 1→2; sieben
+  simulierte Bonus-Pickups → erst still, beim 7. `bonus-stage-cleared`).
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,
@@ -1323,13 +1445,20 @@ StageDirector, Ship, HUD-CanvasLayer.
   Playtest-Runde) liefert den voraussichtlichen Platz für den Run-Summary-Screen,
   ohne schon einzutragen.
 - `sound_manager.gd` (Autoload `Snd`, `project.godot [autoload]`) — ein
-  `AudioStreamPlayer` je Key, Clip `res://assets/sounds/<key>.wav` (fällt auf
-  `.ogg` zurück; fehlt die Datei → still). Pro-Sound-Lautstärke 0–100 in
-  `user://settings.cfg [sound]` + `calib_version`, `_BASE_DB`-Kalibrierung je
-  Sound. Musik-Loop manuell über `finished` (WAV-Import loopt nicht von selbst).
-  Keys: `music shoot hit dive player_boom extra stage`. **Aktuell
-  Platzhalter-WAVs** aus `gen_sounds.py` (synthetische
-  Blips) — bei echten Audios einfach die Dateien in `assets/sounds/` ersetzen.
+  `AudioStreamPlayer` je Key, Key = Dateiname (`res://assets/sounds/<key>`,
+  `EXTS` probiert `.wav` vor `.ogg`; fehlt die Datei in beiden Formaten →
+  still, absichtlich — siehe „Dreizehnte Playtest-Runde"). Pro-Sound-Lautstärke 0–100 in
+  `user://settings.cfg [sound]` + `calib_version`, `base_db`-Kalibrierung je
+  Sound. Seit der dreizehnten Playtest-Runde können mehrere Keys gleichzeitig
+  loopen (`LOOPING_KEYS`, `_wanted`-Dictionary statt einer einzelnen Bool) —
+  vorher nur `music` als Sonderfall. Aktuelle Keys (16, siehe `ORDER`):
+  `music pause-menu-music scoring-board-music start-first-level-music shoot
+  enemy-death1 enemy-death2 dive enemy-wave1 beam-sound boss-killed
+  ship-destroyed extra bonus-stage-cleared level-cleared stage` — `music`,
+  `dive`, `extra`, `stage` sind aktuell OHNE Clip (still, bis der Nutzer
+  passende Dateien nachliefert), die übrigen 12 sind die zweite,
+  nutzerkuratierte Clip-Sammlung vom 2026-09-13 (`assets/sounds/`; die erste,
+  vom 2026-09-11, liegt als `assets/sounds_old/` daneben).
 
 ### Geräte-Layout (Phase 3)
 

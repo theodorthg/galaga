@@ -99,6 +99,33 @@ func hide_all() -> void:
 	for s in _screens.values():
 		s.hide()
 	_glass.visible = false
+	_apply_screen_music("")  # no screen visible -> both menu-music loops off
+
+## Screen -> which looping music track (see sound_manager.gd's LOOPING_KEYS)
+## should be playing while it's shown — a single choke point so every _swap()
+## (and hide_all() above, for direct callers like game.gd's _resume()/
+## _new_run() that bypass _swap) gets this right without having to remember
+## to call Snd themselves. "help"/"title"/"splash" fall through to the else
+## branch (silence) — not explicitly requested by the user, so left as the
+## simplest default rather than guessed at.
+const MENU_MUSIC_SCREENS := ["pause", "settings", "confirm_reset", "sound", "highscores"]
+const SCORE_MUSIC_SCREENS := ["summary", "gameover"]
+
+func _apply_screen_music(screen_name: String) -> void:
+	var snd := get_node_or_null("/root/Snd")
+	if not snd:
+		return
+	if screen_name in MENU_MUSIC_SCREENS:
+		if not snd.is_playing("pause-menu-music"):
+			snd.play("pause-menu-music")
+		snd.stop("scoring-board-music")
+	elif screen_name in SCORE_MUSIC_SCREENS:
+		if not snd.is_playing("scoring-board-music"):
+			snd.play("scoring-board-music")
+		snd.stop("pause-menu-music")
+	else:
+		snd.stop("pause-menu-music")
+		snd.stop("scoring-board-music")
 
 func is_open() -> bool:
 	for s in _screens.values():
@@ -179,6 +206,7 @@ func _swap(name: String) -> void:
 	hide_all()
 	_screens[name].show()
 	_glass.visible = true
+	_apply_screen_music(name)
 
 ## Full-rect click-blocker (mouse_filter=STOP keeps clicks from reaching the
 ## game underneath) containing a centered, bordered panel — the frosted glass
@@ -550,11 +578,26 @@ func _step_diff(d: int) -> void:
 func _build_sound() -> Control:
 	var s := _screen()
 	var box := _box(s)
+	# Widened past the standard 340px (like _build_help()) — several of the
+	# 2026-09-13 sound batch's German names ("Pause-/Einstellungsmusik" etc.)
+	# are longer than the old 7 keys' names and need room to wrap onto two
+	# lines (see _sound_row()'s autowrap) instead of overflowing the panel.
+	box.custom_minimum_size = Vector2(460, 0)
 	box.add_child(_title_label("Sound", 30))
 	box.add_child(_spacer(6))
+	# Scrollable — 16 rows (was 7) no longer fit the 960 design canvas at once
+	# alongside the title/Fertig button.
+	var scroll := ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(0, 560)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	var list := VBoxContainer.new()
+	list.add_theme_constant_override("separation", 10)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(list)
+	box.add_child(scroll)
 	var snd := get_node_or_null("/root/Snd")
 	for key in (snd.ORDER if snd else []):
-		box.add_child(_sound_row(key, snd))
+		list.add_child(_sound_row(key, snd))
 	box.add_child(_spacer(8))
 	box.add_child(_button("Fertig", func(): _swap("settings")))
 	return s
@@ -564,14 +607,15 @@ func _sound_row(key: String, snd) -> HBoxContainer:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 10)
 	var name_l := _title_label(snd.SOUNDS[key][0], 18)
-	name_l.custom_minimum_size = Vector2(140, 0)
 	name_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	name_l.autowrap_mode = TextServer.AUTOWRAP_WORD
+	name_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var sl := HSlider.new()
 	sl.min_value = 0
 	sl.max_value = 100
 	sl.step = 5
 	sl.value = snd.get_volume(key)
-	sl.custom_minimum_size = Vector2(180, TOUCH_H)
+	sl.custom_minimum_size = Vector2(160, TOUCH_H)
 	var val := _title_label("%d%%" % int(sl.value), 17, ACCENT)
 	val.custom_minimum_size = Vector2(48, 0)
 	sl.value_changed.connect(func(v):

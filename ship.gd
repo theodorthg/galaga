@@ -186,7 +186,7 @@ func _destroy() -> void:
 	set_deferred("monitoring", false)
 	_revert_twin()  # twin bonus doesn't survive a hit, matches the arcade original
 	if _snd:
-		_snd.play("player_boom")
+		_snd.play("ship-destroyed")
 	died.emit()
 
 func respawn() -> void:

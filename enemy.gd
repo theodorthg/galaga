@@ -175,7 +175,9 @@ func _begin_capture_beam() -> void:
 	# twin-ship reward if _carrying_captive is already true by then.
 	beam.caught.connect(func():
 		_carrying_captive = true
-		_spawn_captive_visual())
+		_spawn_captive_visual()
+		if _snd:
+			_snd.play("beam-sound"))
 	await get_tree().create_timer(CAPTURE_BEAM_TOTAL).timeout
 	if not is_instance_valid(self):
 		return
@@ -309,6 +311,14 @@ func _on_area_entered(area: Area2D) -> void:
 func _explode() -> void:
 	if _state == LOCKING:
 		return
+	# Captured BEFORE _state flips to LOCKING below — the sound-selection
+	# check further down needs to know whether this kill happened mid-attack,
+	# and "was this enemy DIVING/RETURNING the instant it died" is exactly
+	# what _state stops telling you one line later (real bug caught live
+	# during testing: reading _state after the LOCKING assignment always fell
+	# through to the "else" branch, since LOCKING is neither DIVING nor
+	# RETURNING).
+	var was_diving := _state == DIVING or _state == RETURNING
 	set_physics_process(false)
 	_state = LOCKING  # inert
 	if _formation:
@@ -319,7 +329,18 @@ func _explode() -> void:
 	# plain Boss kills.
 	killed.emit(int(EnemyKinds.DATA[kind]["points"]), kind, _variant_idx, _carrying_captive)
 	if _snd:
-		_snd.play("hit")
+		# Three distinct kill sounds (2026-09-13, replacing the one generic
+		# "hit"): a Boss shot down WHILE carrying a captured ship gets its own
+		# fanfare (checked first — only ever true for a Boss, and mutually
+		# exclusive with the other two), otherwise a plain in-formation kill
+		# vs. one caught mid-attack (DIVING/RETURNING) get different sounds —
+		# the user specifically wanted a diving kill to sound distinct.
+		if _carrying_captive:
+			_snd.play("boss-killed")
+		elif was_diving:
+			_snd.play("enemy-death2")
+		else:
+			_snd.play("enemy-death1")
 	if _carrying_captive:
 		_carrying_captive = false
 		if _captive_glow_tween:

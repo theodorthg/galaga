@@ -49,6 +49,10 @@ var _bonus_t := 0.0
 var _boss_interval := 0
 var _next_boss_score := 0
 var _win_score := 0
+## Gates the stage-1 fly-in on start-first-level-music actually finishing (or
+## being skipped by a click/tap) — see _new_run(), _unhandled_input(), and
+## _start_ready(). Never set for stage 2+ (only _new_run() sets it).
+var _intro_gate_active := false
 # Run-summary tracking (menus.gd::show_run_summary(), see _on_ship_died() /
 # _check_win()) — reset once per run in _new_run().
 var _rescues := 0
@@ -212,6 +216,12 @@ func _new_run() -> void:
 	get_tree().paused = false
 	if _snd:
 		_snd.play("music")
+		# One-shot intro, stage 1 of a fresh game only (user request) — gates
+		# the fly-in in _start_ready() below until it finishes or the player
+		# clicks/taps to skip (see _unhandled_input()).
+		if _snd.has_clip("start-first-level-music"):
+			_snd.play("start-first-level-music")
+			_intro_gate_active = true
 	_ship.visible = false
 	_ship._alive = false  # blocks shoot() during the materialize animation below
 	_ship.set_deferred("monitoring", false)
@@ -260,8 +270,20 @@ func _start_ready() -> void:
 	await get_tree().create_timer(Hud.BANNER_TOTAL).timeout
 	if not is_instance_valid(self) or _state != READY:
 		return
+	# Stage-1-of-a-fresh-run intro gate (user request): don't start the fly-in
+	# until start-first-level-music has actually finished, or the player
+	# skipped it early via _unhandled_input(). A no-op whenever the intro
+	# either already finished during the banner's own BANNER_TOTAL wait above,
+	# was skipped, or never started (stage 2+, or no clip supplied).
+	while _intro_gate_active and _snd and _snd.is_playing("start-first-level-music"):
+		await get_tree().process_frame
+	_intro_gate_active = false
+	if not is_instance_valid(self) or _state != READY:
+		return
 	_hud.hide_banner()
 	_state = ENTERING
+	if _snd:
+		_snd.play("enemy-wave1")
 	_director.start_stage(_stage)
 
 func _on_stage_populated() -> void:
@@ -415,6 +437,14 @@ func _input(event: InputEvent) -> void:
 		get_tree().call_group("touch_layout_listeners", "apply_touch_layout")
 
 func _unhandled_input(event: InputEvent) -> void:
+	# Skip the stage-1 intro music early (user request: mouse click or tap,
+	# not e.g. any keypress) — _start_ready() below is polling is_playing()
+	# for this same clip, so stopping it here is all skipping needs to do.
+	if _intro_gate_active and ((event is InputEventMouseButton and event.pressed)
+			or (event is InputEventScreenTouch and event.pressed)):
+		_intro_gate_active = false
+		if _snd:
+			_snd.stop("start-first-level-music")
 	if event.is_action_pressed("pause"):
 		if _paused:
 			_resume()
@@ -442,6 +472,8 @@ func _process(delta: float) -> void:
 		# banner, which reads as unfair once the stage is actually cleared.
 		for n in get_tree().get_nodes_in_group("enemy_shots"):
 			n.queue_free()
+		if _snd:
+			_snd.play("level-cleared")
 		_stage += 1
 		_ship.deactivate_hyper_ammo()  # Hyper-Ammo only lasts "for the rest of this stage"
 		_start_ready()
@@ -472,7 +504,8 @@ func _on_bonus_collected(points: int, icon: Texture2D, icon_index: int, at_posit
 	_achievements_collected += 1
 	var total := points
 	_score += points
-	if _hud.add_bonus_icon(icon, icon_index):
+	var lap_done := _hud.add_bonus_icon(icon, icon_index)
+	if lap_done:
 		total += BONUS_LAP_POINTS
 		_score += BONUS_LAP_POINTS
 		_hud.flash_banner("LAP!")
@@ -485,7 +518,7 @@ func _on_bonus_collected(points: int, icon: Texture2D, icon_index: int, at_posit
 	if icon_index == 0:
 		_ship.activate_hyper_ammo()
 	if _snd:
-		_snd.play("extra")
+		_snd.play("bonus-stage-cleared" if lap_done else "extra")
 
 ## Small "+points" floating text at the exact catch point — bonus_item pickups
 ## only, deliberately not used for enemy kills.
