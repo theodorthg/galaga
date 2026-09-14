@@ -17,11 +17,13 @@ extends Area2D
 
 signal killed(points: int)
 
-const SPEED := 260.0
+const DEFAULT_SPEED := 260.0
 
 var kind := EnemyKinds.ZAKO
+var speed := DEFAULT_SPEED
 var _path: Curve2D
 var _path_dist := 0.0
+var _dead := false  # guards against a double kill (see _explode() below)
 
 @onready var _col: CollisionShape2D = $CollisionShape2D
 @onready var _sprite: Sprite2D = $Sprite2D
@@ -29,8 +31,8 @@ var _path_dist := 0.0
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_PAUSABLE
-	# Shared with ship_warp.gd purely so game.gd::_clear_board() can sweep this
-	# away too if the player quits to the title screen mid-transition.
+	# Shared with bonus_item.gd/etc. purely so game.gd::_clear_board() can sweep
+	# this away too if the player quits to the title screen mid-wave.
 	add_to_group("bonus_transient")
 	# game.gd polls this group emptying out as its "wave cleared" signal —
 	# queue_free() (below, on kill or reaching the bottom of the path) drops
@@ -39,9 +41,13 @@ func _ready() -> void:
 	add_to_group("bonus_wave_active")
 	area_entered.connect(_on_area_entered)
 
-func setup(p_kind: int, curve: Curve2D, texture_path: String, tex_scale: float) -> void:
+## p_speed lets game.gd vary pace per wave/member (2026-09-14 user request:
+## "etwas Challenge" — a Bonus Level felt too uniform/predictable at one flat
+## speed) — defaults to DEFAULT_SPEED so nothing else calling setup() breaks.
+func setup(p_kind: int, curve: Curve2D, texture_path: String, tex_scale: float, p_speed := DEFAULT_SPEED) -> void:
 	kind = p_kind
 	_path = curve
+	speed = p_speed
 	var circ := CircleShape2D.new()
 	circ.radius = float(EnemyKinds.DATA[kind]["half"])
 	_col.shape = circ
@@ -51,7 +57,7 @@ func setup(p_kind: int, curve: Curve2D, texture_path: String, tex_scale: float) 
 
 func _physics_process(delta: float) -> void:
 	var length := _path.get_baked_length()
-	_path_dist += SPEED * delta
+	_path_dist += speed * delta
 	var d: float = min(_path_dist, length)
 	var pos := _path.sample_baked(d)
 	var ahead := _path.sample_baked(min(d + 8.0, length))
@@ -67,6 +73,17 @@ func _on_area_entered(area: Area2D) -> void:
 		_explode()
 
 func _explode() -> void:
+	# Two lasers (e.g. Hyper-Ammo's twin beams, 14px apart — easily both inside
+	# this enemy's hitbox at once) can each trigger _on_area_entered() in the
+	# same physics frame, before set_physics_process(false) below has any
+	# chance to matter — without this guard that meant a DOUBLE (sometimes
+	# triple) killed.emit() per enemy, which is exactly how the end-of-level
+	# tally could read "23/18" despite shooting down all 18 and nothing more
+	# (user report). enemy.gd has the same class of guard (`if _state ==
+	# LOCKING: return`) for the same reason.
+	if _dead:
+		return
+	_dead = true
 	set_physics_process(false)
 	killed.emit(int(EnemyKinds.DATA[kind]["points"]))
 	if _snd:

@@ -86,7 +86,7 @@ func setup(p_kind: int, p_formation: Formation, p_slot: int, p_curve: Curve2D, s
 	set_physics_process(false)
 
 	if start_delay > 0.0:
-		await get_tree().create_timer(start_delay).timeout
+		await get_tree().create_timer(start_delay, false).timeout
 	if not is_instance_valid(self):
 		return
 	visible = true
@@ -178,7 +178,7 @@ func _begin_capture_beam() -> void:
 		_spawn_captive_visual()
 		if _snd:
 			_snd.play("beam-sound"))
-	await get_tree().create_timer(CAPTURE_BEAM_TOTAL).timeout
+	await get_tree().create_timer(CAPTURE_BEAM_TOTAL, false).timeout
 	if not is_instance_valid(self):
 		return
 	_begin_return()

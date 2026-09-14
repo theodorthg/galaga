@@ -31,7 +31,6 @@ const BONUS_INTERVAL_MAX := 16.0
 const RESCUE_ICON := preload("res://assets/graphics/ship_captured.png")
 
 const BONUS_ENEMY_SCENE := preload("res://bonus_enemy.tscn")
-const SHIP_WARP_SCENE := preload("res://ship_warp.tscn")
 ## Bonus Level (GameSettings.bonus_level_interval — user proposal 2026-09-14,
 ## corrected 2026-09-14 after a first playtest): instead of the normal 40-slot
 ## formation, WAVE_COUNT flights of ENEMIES_PER_WAVE enemies each fly in from
@@ -50,9 +49,16 @@ const BONUS_ENEMIES_PER_WAVE := 6
 ## Time between launching each chain member onto the shared track — creates
 ## the queued "chain" by staggering LAUNCH TIME, not by offsetting each
 ## member's own geometry (the previous, sideways-crossing design's approach).
-## ~70px of visual gap at bonus_enemy.gd's own 260px/s travel speed.
+## ~70px of visual gap at bonus_enemy.gd's own default 260px/s travel speed.
 const BONUS_LAUNCH_GAP := 0.27
 const BONUS_WAVE_PAUSE := 1.2
+## Escalating base speed per wave + a per-member random jitter on top (user
+## request 2026-09-14: the first playtest felt too uniform/predictable for a
+## "Challenge") — each wave is a bit faster than the last, and no two members
+## of the same wave travel at quite the same speed, so the queue doesn't read
+## as a perfectly even, fully predictable conveyor belt.
+const BONUS_WAVE_SPEEDS := [230.0, 290.0, 350.0]
+const BONUS_SPEED_JITTER := 0.18  # ± fraction of the wave's base speed
 
 @onready var _formation: Formation = $Formation
 @onready var _director: StageDirector = $StageDirector
@@ -73,6 +79,7 @@ var _snd: Node
 var _bonus_t := 0.0
 var _bonus_hits := 0
 var _bonus_total := 0
+var _bonus_points := 0
 var _boss_interval := 0
 var _next_boss_score := 0
 var _win_score := 0
@@ -325,7 +332,7 @@ func _start_ready() -> void:
 		_hud.flash_banner("BONUS LEVEL")
 		if _snd:
 			_snd.play("stage")
-		await get_tree().create_timer(Hud.BANNER_TOTAL).timeout
+		await get_tree().create_timer(Hud.BANNER_TOTAL, false).timeout
 		if not is_instance_valid(self) or _state != READY:
 			return
 		if not await _wait_sound_then_gap("stage"):
@@ -340,7 +347,7 @@ func _start_ready() -> void:
 	# stage jingle stays silent instead of playing on top of it.
 	if _snd and not _intro_gate_active:
 		_snd.play("stage")
-	await get_tree().create_timer(Hud.BANNER_TOTAL).timeout
+	await get_tree().create_timer(Hud.BANNER_TOTAL, false).timeout
 	if not is_instance_valid(self) or _state != READY:
 		return
 	# Stage-1-of-a-fresh-run intro gate (user request): don't start the fly-in
@@ -358,33 +365,35 @@ func _start_ready() -> void:
 # --- Bonus Level -----------------------------------------------------
 ## Fires each wave in turn (enemy-wave1.ogg re-announces every single one,
 ## per the user's plan for this sound key — see CLAUDE.md item 11), waits for
-## all of a wave's enemies to resolve before starting the next, then plays
-## the warp transition and moves on to the next normal stage. Aborts cleanly
-## if the run leaves BONUS meanwhile (pause doesn't count — the tree itself
-## freezes then; this only guards against title/game-over).
+## all of a wave's enemies to resolve before starting the next, then moves on
+## to the next normal stage. Aborts cleanly if the run leaves BONUS meanwhile
+## (pause doesn't count — the tree itself freezes then; this only guards
+## against title/game-over).
 func _start_bonus_level() -> void:
 	_bonus_hits = 0
 	_bonus_total = BONUS_WAVE_COUNT * BONUS_ENEMIES_PER_WAVE
+	_bonus_points = 0
 	var vp := get_viewport_rect().size
 	# Three separate flights, one after another, each its own vertical column
 	# at a different x ("von unterschiedlichen Stellen aus") — never a Boss
 	# (see the class doc above). Only two non-Boss kinds exist, so consecutive
 	# flights alternate ZAKO/GOEI/ZAKO — a deliberate, documented choice (see
-	# CLAUDE.md), not an oversight.
+	# CLAUDE.md), not an oversight. Speed escalates wave to wave (see
+	# BONUS_WAVE_SPEEDS) for a bit of ramping challenge.
 	var wave_defs := [
-		{"kind": EnemyKinds.ZAKO, "x": vp.x * 0.25},
-		{"kind": EnemyKinds.GOEI, "x": vp.x * 0.75},
-		{"kind": EnemyKinds.ZAKO, "x": vp.x * 0.50},
+		{"kind": EnemyKinds.ZAKO, "x": vp.x * 0.25, "speed": BONUS_WAVE_SPEEDS[0]},
+		{"kind": EnemyKinds.GOEI, "x": vp.x * 0.75, "speed": BONUS_WAVE_SPEEDS[1]},
+		{"kind": EnemyKinds.ZAKO, "x": vp.x * 0.50, "speed": BONUS_WAVE_SPEEDS[2]},
 	]
 	for wd in wave_defs:
 		if _state != BONUS:
 			return
-		await _run_bonus_wave(wd["kind"], wd["x"])
+		await _run_bonus_wave(wd["kind"], wd["x"], wd["speed"])
 	if _state != BONUS:
 		return
 	_finish_bonus_level()
 
-func _run_bonus_wave(kind: int, column_x: float) -> void:
+func _run_bonus_wave(kind: int, column_x: float, base_speed: float) -> void:
 	if _snd:
 		_snd.play("enemy-wave1")
 	var vis := EnemyKinds.pick_visual(kind, _stage)
@@ -403,8 +412,12 @@ func _run_bonus_wave(kind: int, column_x: float) -> void:
 		var e := BONUS_ENEMY_SCENE.instantiate()
 		add_child(e)
 		e.killed.connect(_on_bonus_enemy_killed)
-		e.setup(kind, curve, tex, float(vis["scale"]))
-		await get_tree().create_timer(BONUS_LAUNCH_GAP).timeout
+		# Per-member jitter on top of the wave's base speed (user request: a
+		# perfectly even, single-speed queue felt too predictable) — no two
+		# members of the same wave move at quite the same pace.
+		var spd := base_speed * randf_range(1.0 - BONUS_SPEED_JITTER, 1.0 + BONUS_SPEED_JITTER)
+		e.setup(kind, curve, tex, float(vis["scale"]), spd)
+		await get_tree().create_timer(BONUS_LAUNCH_GAP, false).timeout
 	# Every chain member frees itself on death or on reaching the bottom of the
 	# track (bonus_enemy.gd) and, doing so, automatically drops out of this
 	# group — waiting for the group to empty out is therefore the whole "wave
@@ -422,30 +435,34 @@ func _run_bonus_wave(kind: int, column_x: float) -> void:
 		await get_tree().process_frame
 		if _state != BONUS:
 			return
-	await get_tree().create_timer(BONUS_WAVE_PAUSE).timeout
+	await get_tree().create_timer(BONUS_WAVE_PAUSE, false).timeout
 
 func _on_bonus_enemy_killed(points: int) -> void:
 	_bonus_hits += 1
 	if _ship._hyper_ammo:
 		points *= 2
+	_bonus_points += points
 	_score += points
 	_hud.set_score(_score)
 
+## No ship-warp transition here any more (2026-09-14 user report: the warp
+## animation "looks bad" both for a twin ship and for a single ship) — the
+## ship never actually left the screen during a Bonus Level, so there's
+## nothing to materialize; just show the banner and go straight to the next
+## stage's "STAGE n" sequence.
 func _finish_bonus_level() -> void:
 	var perfect := _bonus_hits == _bonus_total
-	_hud.flash_banner("PERFECT!" if perfect else "BONUS: %d/%d" % [_bonus_hits, _bonus_total])
+	# A raw "N/18" hit count could read wrong even when every enemy WAS shot
+	# down (a since-fixed bug briefly double-counted some kills, e.g. "23/18"
+	# — user report) — showing the points actually earned instead sidesteps
+	# that confusion entirely and is more meaningful anyway (user request).
+	_hud.flash_banner(("PERFECT! +%d" % _bonus_points) if perfect else ("BONUS: +%d" % _bonus_points))
 	if _snd:
 		_snd.play("bonus-stage-cleared" if perfect else "level-cleared")
-	await get_tree().create_timer(Hud.BANNER_TOTAL).timeout
+	await get_tree().create_timer(Hud.BANNER_TOTAL, false).timeout
 	if not is_instance_valid(self) or _state != BONUS:
 		return
 	_hud.hide_banner()
-	var warp := SHIP_WARP_SCENE.instantiate()
-	add_child(warp)
-	warp.global_position = _ship.global_position
-	await warp.warp_done
-	if not is_instance_valid(self) or _state != BONUS:
-		return
 	_stage += 1
 	_start_ready()
 
@@ -456,7 +473,7 @@ func _wait_sound_then_gap(key: String) -> bool:
 		await get_tree().process_frame
 		if not is_instance_valid(self) or _state != READY:
 			return false
-	await get_tree().create_timer(STAGE_JINGLE_GAP).timeout
+	await get_tree().create_timer(STAGE_JINGLE_GAP, false).timeout
 	return is_instance_valid(self) and _state == READY
 
 func _on_stage_populated() -> void:
@@ -575,6 +592,13 @@ func _on_ship_rescued(at_position: Vector2) -> void:
 		_snd.play("extra")
 
 func _on_ship_died(show_explosion: bool) -> void:
+	# Stop the dive/capture lottery for the whole death sequence (explosion +
+	# reconstruct/respawn) — enemies previously kept diving, throwing bombs,
+	# and making noise the entire time despite the player having no ship to
+	# react with or shoot back with, which read as confusing (user report).
+	# Resumed via _director.resume_attacks() once the new ship is actually up
+	# (see below) — not called at all if the run ends in game-over instead.
+	_director.stop_attacks()
 	# Captured BEFORE anything below runs — _ship.position doesn't change
 	# again until respawn()/_ship_spawn_pos() later, so this is still exactly
 	# where it was hit. A capture (show_explosion == false) skips this: not a
@@ -587,8 +611,7 @@ func _on_ship_died(show_explosion: bool) -> void:
 	# negative and misreport as "one ship left" on the next run's display.
 	if _lives <= 0:
 		_state = GAME_OVER
-		_director.stop_attacks()
-		await get_tree().create_timer(GAME_OVER_DELAY).timeout
+		await get_tree().create_timer(GAME_OVER_DELAY, false).timeout
 		if not is_instance_valid(self) or _state != GAME_OVER:
 			return
 		_hud.set_playing(false)
@@ -603,6 +626,7 @@ func _on_ship_died(show_explosion: bool) -> void:
 		if _pending_twin:
 			_pending_twin = false
 			_ship.become_twin()
+		_director.resume_attacks()
 
 # --- input --------------------------------------------------------
 func _input(event: InputEvent) -> void:

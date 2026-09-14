@@ -96,7 +96,7 @@ func _run_stage(stage: int, run_id: int) -> void:
 			if idx >= total:
 				break
 			_spawn(idx, curve, k * LAUNCH_GAP, stage)
-		await get_tree().create_timer(GROUP_GAP).timeout
+		await get_tree().create_timer(GROUP_GAP, false).timeout
 		if not is_instance_valid(self) or run_id != _run_id:
 			return
 
@@ -128,6 +128,14 @@ func begin_attacks() -> void:
 
 func stop_attacks() -> void:
 	_attacks_on = false
+
+## Re-enables the dive/capture timers after a temporary freeze (ship.gd death
+## sequence, see game.gd::_on_ship_died()) WITHOUT resetting their countdowns
+## to a fresh "first dive" wait like begin_attacks() does — the player just
+## lost a ship, that's penalty enough; the attack cadence picks up exactly
+## where stop_attacks() left it instead of restarting the whole rhythm.
+func resume_attacks() -> void:
+	_attacks_on = true
 
 func _process(delta: float) -> void:
 	if not _attacks_on:
@@ -191,6 +199,13 @@ func _try_capture_dive() -> void:
 ## Returns true if a Boss actually started a capture attempt just now.
 func _attempt_capture_dive() -> bool:
 	if _capture_done_this_stage:
+		return false
+	# Never send a Boss after a ship that isn't actually there — mid-explosion
+	# or mid-reconstruct (ship.gd's _alive == false), there's nothing to catch,
+	# and a capture attempt right then reads as a Boss "capturing" a ship the
+	# player only just lost (user report: this condition wasn't checked at all).
+	var player := get_tree().get_first_node_in_group("player")
+	if player == null or not player._alive:
 		return false
 	var divers := 0
 	var bosses: Array = []

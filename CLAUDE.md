@@ -1778,6 +1778,126 @@ Bosse)."
   Fix im Test: `paused = false` direkt nach dem Splash-Disconnect setzen —
   genau das, was `_new_run()` im echten Spielablauf ohnehin schon tut.
 
+**Einundzwanzigste Playtest-Runde (2026-09-14): Pause pausiert jetzt wirklich
+alles, Bonuslevel-Doppelzählung + Warp-Animation behoben, Bonuslevel-Tempo
+variiert, Boss-Fang während Schiffsverlust unterbunden, Gegner-Aktivität
+pausiert während Explosion/Wiederaufbau.** Sechs Punkte aus einem Nutzer-Test
+direkt nach der Zwanzigsten Runde.
+- **1. Echter Pause-Bug gefunden**: `get_tree().create_timer()` läuft laut
+  Godot-Doku standardmäßig mit `process_always=true` weiter — **auch wenn der
+  Baum pausiert ist**. Praktisch jeder Spielablauf-Timer in `game.gd`
+  (Banner-Wartezeiten, Jingle-Gaps, Bonuslevel-Launch-/Wellen-Pausen,
+  Game-Over-Delay), in `enemy.gd` (Einflug-Staffelung, Traktorstrahl-Dauer)
+  und in `stage_director.gd` (Einflug-Gruppen-Abstand) benutzte das bisher
+  ungeprüft — die eigentliche Spielobjekt-Bewegung fror zwar korrekt ein
+  (`PROCESS_MODE_PAUSABLE`), aber die STEUERLOGIK drumherum (wann die nächste
+  Welle startet, wann der Traktorstrahl loslässt, wann die nächste
+  Einflug-Gruppe kommt) lief im Hintergrund einfach weiter — bei Pause direkt
+  zu Beginn eines Bonuslevels am auffälligsten (neue Gegner erschienen
+  während der Pause), aber laut Nutzer „auch schon bei anderen Leveln"
+  aufgefallen. Fix: alle zehn `await get_tree().create_timer(...)`-Aufrufe in
+  `game.gd`/`enemy.gd`/`stage_director.gd` (außerhalb des `godot_mcp`-Addons)
+  bekommen jetzt explizit `process_always=false`
+  (`create_timer(X, false).timeout`) — genau das macht sie pause-abhängig.
+  Verifiziert per Headless-Test: ein 0,3-s-Timer mit `false` feuert
+  nachweislich NICHT innerhalb von 0,9 echten Sekunden bei pausiertem Baum,
+  feuert aber zuverlässig kurz nach dem Entpausieren.
+- **2. „23/18"-Anzeige am Bonuslevel-Ende**: `bonus_enemy.gd::_explode()`
+  hatte (anders als `enemy.gd::_explode()`, das extra `if _state == LOCKING:
+  return` dafür hat) **keine** Sperre gegen einen zweiten Treffer im selben
+  Frame — trifft z. B. Hyper-Ammos Doppelstrahl (nur 14 px auseinander)
+  denselben Gegner gleichzeitig, feuerte `_on_area_entered()` zweimal,
+  `killed` wurde zweimal (manchmal öfter) emittiert, `_bonus_hits` zählte über
+  die tatsächliche Gegnerzahl hinaus — obwohl wirklich alle 18 abgeschossen
+  wurden (Nutzer: „ohne Ausnahme"). Fix: neue `_dead`-Sperre am Anfang von
+  `_explode()`, exakt nach demselben Muster wie in `enemy.gd`. **Zusätzlich**
+  (Nutzerwunsch, unabhängig vom Bugfix): die Abschluss-Anzeige zeigt jetzt
+  die tatsächlich erzielte Punktzahl („PERFECT! +1080" / „BONUS: +720") statt
+  eines N/M-Verhältnisses — weniger verwirrend und aussagekräftiger. Neues
+  `_bonus_points`-Feld in `game.gd`, einmal pro Bonuslevel zurückgesetzt.
+  Per Headless-Test verifiziert: `_explode()` dreimal hintereinander
+  aufgerufen (simuliert einen Mehrfachtreffer) → `killed` genau einmal
+  emittiert; ein kompletter Level-Durchlauf zeigte „PERFECT! +1080" statt
+  eines Verhältnisses.
+- **3. Bonuslevel-Tempo variiert jetzt für etwas Herausforderung**: bisher
+  flogen alle 18 Gegner mit exakt derselben, konstanten Geschwindigkeit
+  (260 px/s) — fühlte sich zu gleichförmig/vorhersagbar an (Nutzerwunsch:
+  „etwas Challenge"). `bonus_enemy.gd::setup()` nimmt jetzt einen optionalen
+  `p_speed`-Parameter (Default bleibt 260, falls von woanders ohne
+  Geschwindigkeitsangabe aufgerufen). `game.gd::BONUS_WAVE_SPEEDS = [230, 290,
+  350]` lässt die drei Wellen nacheinander schneller werden, zusätzlich
+  bekommt jedes einzelne Kettenmitglied per `BONUS_SPEED_JITTER = 0.18` eine
+  zufällige ±18-%-Abweichung vom Wellentempo — die Kette läuft dadurch nicht
+  mehr wie ein perfekt gleichmäßiges Förderband. Per Headless-Test
+  verifiziert: `setup()` mit einer expliziten Geschwindigkeit übernimmt und
+  speichert sie korrekt in `speed`.
+- **4. Warp-Animation komplett entfernt** (Nutzerwunsch: „sieht für ein
+  Doppelschiff nicht gut aus, und eigentlich auch nicht für ein einzelnes
+  Schiff... Kommando zurück"): `ship_warp.gd`/`.tscn` und die 19 extrahierten
+  `assets/graphics/warp_f00..18.png` (+ `.import`) sind komplett gelöscht
+  (unbenutzter Code/Assets, siehe Projekt-Regel „wenn sicher ungenutzt,
+  komplett löschen" — nicht nur auskommentiert). Das Ausgangs-GIF
+  `ship-warp-drive.gif` bleibt unangetastet liegen (Nutzer-Rohmaterial, kein
+  von mir generiertes Zwischenprodukt). `game.gd::_finish_bonus_level()`
+  zeigt jetzt nur noch das Banner, wartet `Hud.BANNER_TOTAL`, blendet es aus
+  und geht direkt in `_start_ready()` der nächsten Stage — das Schiff war ja
+  die ganze Zeit sichtbar auf dem Schirm, es gibt nichts zu „materialisieren".
+  `_selftest.gd`s Skript-Parse-Liste um `ship_warp.gd` bereinigt. Per
+  Headless-Test verifiziert: `ResourceLoader.exists(...)` bestätigt, dass
+  weder `ship_warp.gd`/`.tscn` noch `warp_f00.png` noch existieren.
+- **5. Boss-Fang während Schiffsverlust unterbunden** (Nutzer: „da scheint
+  noch eine Bedingung nicht abgefangen zu sein" — korrekt, gab es nicht):
+  `stage_director.gd::_attempt_capture_dive()` prüfte bisher nur
+  „schon ein Fang pro Stage passiert" und „trägt schon ein Boss ein
+  Schiff", nie aber, ob überhaupt ein lebendiges Schiff da ist. Fix: neue
+  Prüfung `get_tree().get_first_node_in_group("player")`/`player._alive` ganz
+  am Anfang der Funktion — kein neuer Fangversuch, solange das Schiff gerade
+  explodiert/wiederaufgebaut wird. Zusätzlich, als zweite Absicherung gegen
+  den selteneren Fall, dass ein Schiff durch etwas ANDERES (Bombe, Rammen)
+  stirbt, während ein Traktorstrahl schon unterwegs ist:
+  `capture_beam.gd::_on_area_entered()` prüft jetzt zusätzlich `area._alive`,
+  bevor es einen Fang zählt. Per Headless-Test verifiziert:
+  `_attempt_capture_dive()` liefert `false`, sobald `ship._alive = false`
+  gesetzt ist, unabhängig von allen anderen Bedingungen.
+- **6. Gegner-Aktivität pausiert jetzt während Explosion + Wiederaufbau**
+  (Nutzer: „sollten die Sounds und Aktionen von Gegnern auf dem Screen auch
+  aufhören... führt sonst zu Verwirrung"): `game.gd::_on_ship_died()` rief
+  `_director.stop_attacks()` bisher nur im Game-Over-Zweig auf — im normalen
+  „noch Leben übrig, respawnen"-Zweig lief die Sturzflug-/Bomben-/
+  Fangversuch-Lotterie des `StageDirector` einfach unbeeindruckt weiter,
+  während der Spieler mangels Schiff weder ausweichen noch zurückschießen
+  konnte. Fix: `_director.stop_attacks()` läuft jetzt ganz am Anfang der
+  Funktion, für BEIDE Zweige (Game-Over und Respawn). Neue
+  `stage_director.gd::resume_attacks()` (Gegenstück zu `stop_attacks()`) setzt
+  nur `_attacks_on = true` zurück, OHNE wie `begin_attacks()` die Countdowns
+  auf einen frischen „erster Sturzflug"-Wert zurückzusetzen — der Spieler hat
+  gerade ein Schiff verloren, das reicht als Strafe, die Kadenz soll da
+  weitermachen, wo sie stand, nicht neu anfangen. Aufgerufen in `game.gd`
+  direkt nach einem erfolgreichen `_ship.respawn()`. Bewusst NICHT umgesetzt:
+  ein vollständiges Einfrieren bereits laufender Sturzflüge/Bomben/Strahlen
+  während der Explosions-/Wiederaufbau-Animation selbst — ein Versuch,
+  dafür `get_tree().paused` zu missbrauchen, hätte sofort mit Punkt 1 dieser
+  Runde kollidiert (`ship_reconstruct.gd`/`ship_explosion.gd` laufen ebenfalls
+  `PROCESS_MODE_PAUSABLE` — ein pausierter Baum hätte auch DIESE Animationen
+  eingefroren und `_on_ship_died()` dauerhaft zum Hängen gebracht, da es auf
+  genau deren Fertig-Signale wartet). Stattdessen bewusst auf „keine NEUEN
+  Aktionen mehr" beschränkt — bereits im Sturzflug befindliche Gegner
+  fliegen ihre Bewegung zu Ende (können dem jetzt unsichtbaren/inaktiven
+  Schiff aber ohnehin nichts anhaben, `ship.gd`s Kollisions-Handler ignoriert
+  Treffer sowieso, solange `_alive == false`). Per Headless-Test verifiziert:
+  `resume_attacks()` setzt `_attacks_on` auf `true`, lässt einen manuell
+  gesetzten Countdown-Wert aber unangetastet (anders als `begin_attacks()`).
+- **Verifikation insgesamt**: weiterhin kein Live-MCP-Zugriff möglich (Editor
+  nicht offen, aber auch keine Bestätigung, dass die parallele Session ihn
+  freigegeben hätte — sicherheitshalber weiter headless). Zwei
+  Wegwerf-`SceneTree`-Skripte gegen das echte `game.tscn`: eines deckte alle
+  sechs Punkte einzeln ab (Pause-Timer-Verhalten, Mehrfachtreffer-Sperre,
+  einstellbare Geschwindigkeit, Datei-Löschungen, Boss-Fang-Sperre,
+  `stop_attacks()`/`resume_attacks()`), alle 10 Prüfungen grün; das zweite
+  fuhr einen kompletten Bonuslevel-Durchlauf Ende-zu-Ende (alle 18 Gegner
+  automatisch beim Erscheinen abgeschossen) und bestätigte die neue
+  Punkte-Anzeige im Banner-Text direkt. Beide Skripte danach gelöscht.
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,
@@ -2242,8 +2362,12 @@ und „Boss-Capture" weiter oben für Details.
    zu betrachten, bis neues Feedback kommt.
 9. **`ship-warp-drive.gif` / `hyper-ammo.gif` / `cyclone-ammo.gif`** —
    vorhanden (siehe „Ship-Reconstruct-Intro/Respawn..." weiter oben für Maße).
-   `ship-warp-drive.gif`s Einsatzzweck ist seit 2026-09-14 geklärt: Übergang
-   vom Bonuslevel zurück in die nächste normale Stage, siehe Punkt 11 unten.
+   `ship-warp-drive.gif` war 2026-09-14 kurz als Übergangs-Animation vom
+   Bonuslevel zur nächsten Stage eingebaut (`ship_warp.gd`/`.tscn`), aber
+   noch am selben Tag nach Nutzer-Feedback („sieht für ein Doppelschiff nicht
+   gut aus, und eigentlich auch nicht für ein einzelnes Schiff") wieder
+   entfernt — siehe „Einundzwanzigste Playtest-Runde" unten. Einsatzzweck
+   damit wieder offen, die GIF-Datei selbst liegt weiter unangetastet bereit.
    `hyper-ammo.gif`/`cyclone-ammo.gif` weiterhin ohne konkreten Plan. **Wichtig:
    nicht verwechseln** mit der am 2026-09-13 neu eingebauten
    Gameplay-Mechanik „Hyper-Ammo" (zwei eng nebeneinanderliegende Laserstrahlen

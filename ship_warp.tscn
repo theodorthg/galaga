@@ -1,6 +1,0 @@
-[gd_scene load_steps=2 format=3 uid="uid://dshipwarpgalaga"]
-
-[ext_resource type="Script" path="res://ship_warp.gd" id="1_warp"]
-
-[node name="ShipWarp" type="AnimatedSprite2D"]
-script = ExtResource("1_warp")
