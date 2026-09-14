@@ -1990,6 +1990,72 @@ jetzt ein Leben, Doppelschiff verdoppelt die Gegner-Spalten.**
   Doppelschiff spawnt exakt 6 Gegner auf einer Spalte, dieselbe Welle mit
   aktivem Doppelschiff spawnt exakt 12 auf zwei unterschiedlichen Spalten.
 
+**Vierundzwanzigste Playtest-Runde (2026-09-15): Bonuslevel bricht bei
+Schiffsverlust ab, Sound-Menü spielt keine Hintergrundmusik mehr und
+Sound-Vorhören unterbricht sich jetzt gegenseitig statt zu überlappen.**
+- **1. Bonuslevel bricht jetzt ab, sobald ein Schiff verloren geht**
+  (Nutzerwunsch — gilt bewusst NUR für das Bonuslevel, keine normale Stage
+  hat sich je so verhalten). Neues `game.gd`-Feld `_bonus_abort`: wird in
+  `_on_ship_died()` ganz am Anfang gesetzt, falls `_state == BONUS` gerade
+  gilt (VOR jeder anderen Aktion, extra dokumentiert als eigener `was_bonus`-
+  Merker, da `_state` selbst absichtlich NICHT sofort verändert wird — das
+  hätte `_process()`s normale Stage-Clear-Prüfung mitten in der Explosions-/
+  Wiederaufbau-Animation fälschlich auslösen können, weil die „enemy"/
+  „bonus_item"-Gruppen in einem Bonuslevel ohnehin schon leer sind).
+  `_start_bonus_level()`/`_run_bonus_wave()` prüfen ab jetzt zusätzlich zu
+  `_state != BONUS` auch `_bonus_abort` an jeder ihrer bestehenden
+  Abbruchstellen und hören dadurch von selbst auf, ohne dass sie ihrerseits
+  `_finish_bonus_level()` aufrufen (das würde ja ein „ganz normal
+  abgeschlossen"-Banner zeigen). Sobald das neue Schiff nach Explosion +
+  Wiederaufbau tatsächlich wieder da ist, ruft `_on_ship_died()` stattdessen
+  `_finish_bonus_level_early()` auf — dieselbe Banner-/Warte-/Stage-Wechsel-
+  Logik wie `_finish_bonus_level()`, zeigt aber IMMER die erreichte
+  Punktzahl (nie „PERFECT!", da der Durchlauf ja unterbrochen wurde, nicht
+  regulär beendet). Per Headless-Test verifiziert: eine laufende Welle
+  (bereits mit Gegnern gespawnt) wird beim simulierten Schiffsverlust
+  abgebrochen, verbliebene Gegner werden entfernt, die Stage-Zahl erhöht
+  sich trotzdem, und das Banner zeigt exakt die vorher simulierten
+  130 Punkte statt eines abgeschlossenen Levels.
+- **2. Sound-Menü spielt keine Menü-Musik mehr** (Nutzer-Selbstkorrektur:
+  „ein Fehler meinerseits" — beim ursprünglichen Entwurf der Musik-
+  Zustandsmaschine in der Dreizehnten/Vierzehnten Playtest-Runde wurde
+  `"sound"` versehentlich mit in `MENU_MUSIC_SCREENS` aufgenommen, obwohl der
+  ganze Zweck dieses Screens — einzelne Sounds vorhören — durch eine
+  mitlaufende Hintergrundmusik konterkariert wird). `"sound"` ist jetzt aus
+  `menus.gd::MENU_MUSIC_SCREENS` entfernt — Betreten des Sound-Screens
+  stoppt die Menü-Musik sofort (über den schon bestehenden
+  `_apply_screen_music()`-Mechanismus, kein neuer Code nötig), Verlassen
+  zurück zu „Einstellungen" (weiterhin in der Liste) startet sie normal
+  wieder.
+- **3. Vorhören unterbricht sich jetzt gegenseitig statt zu überlappen**
+  (zweiter, verwandter Fehler, den derselbe Loop-Mechanismus verursacht
+  hatte): `sound_manager.gd::preview()` behandelte einen Loop-Track
+  (`menu-music`/`scoring-board-music`) beim Vorhören als AN/AUS-Schalter
+  (spielt er gerade, stoppen; sonst starten) — unabhängig von jedem anderen
+  gerade laufenden Vorhör-Sound. Zusammen mit Punkt 2 führte das dazu, dass
+  z. B. das Verstellen des „Menu music"-Reglers die im Hintergrund laufende
+  Musik kurz an-/abschaltete, UND mehrere normale (nicht-loopende) Vorhör-
+  Sounds sich gegenseitig überlappen konnten, wenn man schnell hintereinander
+  an mehreren Reglern zog. Fix: neue, komplett getrennte Methode
+  `SoundManager.preview_exclusive(key)` — ob ein Sound normalerweise loopt,
+  spielt beim Vorhören keine Rolle mehr; sie merkt sich nur den zuletzt
+  vorgehörten Key (`_previewing`) und stoppt IMMER zuerst den vorherigen,
+  bevor sie den neuen einmalig abspielt (kein automatisches Wiederholen,
+  umgeht `_wanted`/`LOOPING_KEYS` bewusst komplett). `menus.gd::_sound_row()`
+  ruft das jetzt beim Loslassen eines Reglers auf statt der alten `preview()`.
+  Zusätzlich stoppt `menus.gd::hide_all()` jetzt IMMER einen noch laufenden
+  Vorhör-Sound (`SoundManager.stop_preview()`) — ein einziger, robuster
+  Ort, der sowohl den „Fertig"-Button (über `_swap()`s eigenen `hide_all()`-
+  Aufruf) als auch `game.gd`s direkte Aufrufer (`_resume()`, `_new_run()`,
+  `_revive_after_win_edit()`) abdeckt, damit ein Vorhör-Sound niemals bis
+  ins eigentliche Spiel hineinklingt. Die alte, jetzt ungenutzte `preview()`-
+  Methode wurde komplett entfernt statt nur unbenutzt liegen gelassen. Per
+  Headless-Test verifiziert: Menü-Musik läuft auf „Pause", verstummt beim
+  Wechsel zu „Sound", läuft wieder beim Zurückwechseln zu „Einstellungen";
+  `preview_exclusive("shoot")` läuft, `preview_exclusive("extra")` direkt
+  danach stoppt „shoot" zuverlässig und spielt „extra"; `hide_all()` stoppt
+  einen noch laufenden Vorhör-Sound zuverlässig.
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,

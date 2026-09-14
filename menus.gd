@@ -100,6 +100,14 @@ func hide_all() -> void:
 	for s in _screens.values():
 		s.hide()
 	_glass.visible = false
+	# Whatever the Sound screen was auditioning (SoundManager.preview_exclusive())
+	# must not keep playing once it's no longer visible — covers the "Done"
+	# button (via _swap()'s own hide_all() call) AND game.gd's direct callers
+	# (_resume(), _new_run(), _revive_after_win_edit()) that could otherwise
+	# leave a preview running right into actual gameplay (user request 2026-09-15).
+	var snd := get_node_or_null("/root/Snd")
+	if snd:
+		snd.stop_preview()
 
 ## Screen -> which looping music track (see sound_manager.gd's LOOPING_KEYS)
 ## should be playing while it's shown. "menu-music" is genuinely the SAME
@@ -108,8 +116,13 @@ func hide_all() -> void:
 ## moved to a different one of those screens — so this tracks what's ALREADY
 ## playing (_active_menu_music) and only stops/starts anything when the
 ## wanted track actually changes, never on a same-track no-op swap.
-## "title"/"splash" fall through to the empty-string case (silence).
-const MENU_MUSIC_SCREENS := ["title", "pause", "settings", "confirm_reset", "confirm_title", "sound", "highscores", "help"]
+## "title"/"splash" fall through to the empty-string case (silence). "sound"
+## is deliberately NOT in this list (user request 2026-09-15) — the whole
+## point of that screen is auditioning individual sounds via
+## SoundManager.preview_exclusive(), which ambient menu-music playing
+## underneath would interfere with. Leaving "sound" for any other menu screen
+## resumes menu-music normally (all of those ARE in this list).
+const MENU_MUSIC_SCREENS := ["title", "pause", "settings", "confirm_reset", "confirm_title", "highscores", "help"]
 const SCORE_MUSIC_SCREENS := ["summary", "gameover"]
 var _active_menu_music := ""  # "" | "menu-music" | "scoring-board-music"
 
@@ -672,7 +685,7 @@ func _sound_row(key: String, snd) -> HBoxContainer:
 		val.text = "%d%%" % int(v)
 		snd.set_volume(key, int(v)))
 	sl.drag_ended.connect(func(changed):
-		if changed: snd.preview(key))
+		if changed: snd.preview_exclusive(key))
 	row.add_child(name_l)
 	row.add_child(sl)
 	row.add_child(val)

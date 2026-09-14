@@ -92,6 +92,14 @@ var _bonus_t := 0.0
 var _bonus_hits := 0
 var _bonus_total := 0
 var _bonus_points := 0
+## Set by _on_ship_died() when a ship is lost DURING a Bonus Level (user
+## request 2026-09-15: only the Bonus Level should end early like this, no
+## other stage ever has) — checked by _start_bonus_level()/_run_bonus_wave()
+## instead of relying on _state alone, since flipping _state away from BONUS
+## immediately would make _process()'s normal FORMATION stage-clear check
+## misfire while the ship is still mid-explosion/reconstruct (a Bonus Level's
+## "enemy"/"bonus_item" groups are already trivially empty). Reset per level.
+var _bonus_abort := false
 var _boss_interval := 0
 var _next_boss_score := 0
 var _win_score := 0
@@ -390,6 +398,7 @@ func _start_bonus_level() -> void:
 	# adds to this as each wave actually spawns.
 	_bonus_total = 0
 	_bonus_points = 0
+	_bonus_abort = false
 	var vp := get_viewport_rect().size
 	# Three separate flights, one after another, each its own vertical column
 	# at a different x ("von unterschiedlichen Stellen aus") — never a Boss
@@ -403,10 +412,10 @@ func _start_bonus_level() -> void:
 		{"kind": EnemyKinds.ZAKO, "x": vp.x * 0.50, "speed": BONUS_WAVE_SPEEDS[2]},
 	]
 	for wd in wave_defs:
-		if _state != BONUS:
+		if _state != BONUS or _bonus_abort:
 			return
 		await _run_bonus_wave(wd["kind"], wd["x"], wd["speed"])
-	if _state != BONUS:
+	if _state != BONUS or _bonus_abort:
 		return
 	_finish_bonus_level()
 
@@ -434,7 +443,7 @@ func _run_bonus_wave(kind: int, column_x: float, base_speed: float) -> void:
 		curves.append(curve)
 	_bonus_total += BONUS_ENEMIES_PER_WAVE * columns.size()
 	for i in BONUS_ENEMIES_PER_WAVE:
-		if _state != BONUS:
+		if _state != BONUS or _bonus_abort:
 			return
 		for curve in curves:
 			var e := BONUS_ENEMY_SCENE.instantiate()
@@ -461,7 +470,7 @@ func _run_bonus_wave(kind: int, column_x: float, base_speed: float) -> void:
 	# notices a wave got cleared" bug the user reported.
 	while not get_tree().get_nodes_in_group("bonus_wave_active").is_empty():
 		await get_tree().process_frame
-		if _state != BONUS:
+		if _state != BONUS or _bonus_abort:
 			return
 	await get_tree().create_timer(BONUS_WAVE_PAUSE, false).timeout
 
@@ -487,6 +496,22 @@ func _finish_bonus_level() -> void:
 	_hud.flash_banner(("PERFECT! +%d" % _bonus_points) if perfect else ("BONUS: +%d" % _bonus_points))
 	if _snd:
 		_snd.play("bonus-stage-cleared" if perfect else "level-cleared")
+	await get_tree().create_timer(Hud.BANNER_TOTAL, false).timeout
+	if not is_instance_valid(self) or _state != BONUS:
+		return
+	_hud.hide_banner()
+	_stage += 1
+	_start_ready()
+
+## Called from _on_ship_died() once a ship lost mid-Bonus-Level has actually
+## respawned — the same banner+wait+next-stage tail as _finish_bonus_level()
+## above, except it never shows "PERFECT!" (the level was cut short, not
+## completed on its own terms) and doesn't wait on the by-then-already-stopped
+## wave coroutine (_bonus_abort took care of that in _on_ship_died()).
+func _finish_bonus_level_early() -> void:
+	_hud.flash_banner("BONUS: +%d" % _bonus_points)
+	if _snd:
+		_snd.play("level-cleared")
 	await get_tree().create_timer(Hud.BANNER_TOTAL, false).timeout
 	if not is_instance_valid(self) or _state != BONUS:
 		return
@@ -627,6 +652,16 @@ func _on_ship_died(show_explosion: bool) -> void:
 	# Resumed via _director.resume_attacks() once the new ship is actually up
 	# (see below) — not called at all if the run ends in game-over instead.
 	_director.stop_attacks()
+	# Losing a ship DURING a Bonus Level ends just that level, not the whole
+	# stage cycle (user request 2026-09-15) — no other stage has ever cut
+	# short like this on a lost ship. Flagged here (not via _state directly,
+	# see _bonus_abort's own doc comment for why) and acted on further down,
+	# once the ship has actually respawned.
+	var was_bonus := _state == BONUS
+	if was_bonus:
+		_bonus_abort = true
+		for n in get_tree().get_nodes_in_group("bonus_wave_active"):
+			n.queue_free()
 	# Captured BEFORE anything below runs — _ship.position doesn't change
 	# again until respawn()/_ship_spawn_pos() later, so this is still exactly
 	# where it was hit. A capture (show_explosion == false) skips this: not a
@@ -655,6 +690,8 @@ func _on_ship_died(show_explosion: bool) -> void:
 			_pending_twin = false
 			_ship.become_twin()
 		_director.resume_attacks()
+		if was_bonus:
+			await _finish_bonus_level_early()
 
 # --- input --------------------------------------------------------
 func _input(event: InputEvent) -> void:

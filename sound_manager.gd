@@ -58,6 +58,9 @@ var _wanted := {}  # key (from LOOPING_KEYS) -> bool, "should keep looping"
 
 var _players := {}
 var _vol := {}
+## Currently-auditioned key in the Sound settings screen (menus.gd's
+## _sound_row()), or "" — see preview_exclusive()/stop_preview() below.
+var _previewing := ""
 
 func _ready() -> void:
 	_load()
@@ -126,14 +129,34 @@ func set_volume(key: String, pct: int) -> void:
 	_apply(key)
 	_save()
 
-func preview(key: String) -> void:
-	if key in LOOPING_KEYS:
-		if is_playing(key):
-			stop(key)
-		else:
-			play(key)
-	else:
-		play(key)
+## Used ONLY by the Sound settings screen's sliders (menus.gd::_sound_row()) —
+## deliberately separate from play()/stop()/LOOPING_KEYS's looping bookkeeping:
+## auditioning a sound has nothing to do with whether it's normally a looping
+## background track (menu-music, scoring-board-music) — that distinction must
+## not matter while auditioning (user request 2026-09-15: previously, toggling
+## a LOOPING_KEYS preview on/off while it was ALSO the screen's own ambient
+## music produced confusing starts/stops, and unrelated one-shot previews
+## could overlap each other with nothing to cut them off). Only ever one
+## preview plays at a time — starting a new one always cuts off whatever
+## was previewing before, looping or not, and it never auto-repeats (bypasses
+## _wanted entirely, unlike play()).
+func preview_exclusive(key: String) -> void:
+	stop_preview()
+	var p = _players.get(key)
+	if p and p.stream:
+		p.play()
+		_previewing = key
+
+## Called whenever the Sound screen closes (menus.gd::hide_all()) so a still-
+## playing preview never bleeds into whatever comes next (resumed menu music,
+## or actual gameplay).
+func stop_preview() -> void:
+	if _previewing == "":
+		return
+	var p = _players.get(_previewing)
+	if p:
+		p.stop()
+	_previewing = ""
 
 func _apply(key: String) -> void:
 	var p = _players.get(key)
