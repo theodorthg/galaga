@@ -10,10 +10,13 @@ extends Area2D
 ## counter (see the comment in game.gd::_run_bonus_wave() for why a counter
 ## driven by a signal-connected lambda was the actual bug behind "the game
 ## never notices a cleared wave").
-## Deliberately NOT in the "enemy" group: ship.gd's own collision handler only
-## reacts to that group, so a Bonus Level is pure shooting-gallery scoring —
-## no dive, no bomb, no way to lose a life, matching the classic arcade
-## "challenging stage" this is modeled on.
+## Not in the "enemy" group (that's the main formation's own machinery — dive/
+## bomb/capture, none of which applies here) — but ship.gd DOES still react to
+## the "bonus_wave_active" group below for ramming: flying straight through a
+## chain member costs a life exactly like ramming a diving formation enemy
+## (user report 2026-09-15: passing through untouched felt wrong). No bombs,
+## no dives, no capture — just the classic arcade "challenging stage" shooting
+## gallery, plus that one piece of life risk.
 
 signal killed(points: int)
 

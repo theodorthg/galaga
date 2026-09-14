@@ -211,6 +211,13 @@ func _on_area_entered(area: Area2D) -> void:
 		_destroy(not is_capture)
 	elif area.is_in_group("enemy") and area.is_active_diver():
 		_destroy(true)
+	elif area.is_in_group("bonus_wave_active"):
+		# Bonus Level chain members never dive/bomb, but flying straight
+		# through the ship untouched felt wrong (user report) — ramming one
+		# now costs a life exactly like ramming a diving formation enemy. The
+		# enemy itself isn't destroyed by this (matches the main formation:
+		# ramming an enemy there doesn't kill it either, only the ship).
+		_destroy(true)
 
 func _destroy(show_explosion := true) -> void:
 	_alive = false

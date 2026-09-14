@@ -1955,6 +1955,41 @@ und ich kann niemals ein Doppelschiff bekommen."
   den die vorige Runde kaputt gemacht hatte, funktioniert jetzt wieder end
   to end.
 
+**Dreiundzwanzigste Playtest-Runde (2026-09-15): Rammen im Bonuslevel kostet
+jetzt ein Leben, Doppelschiff verdoppelt die Gegner-Spalten.**
+- **1. „Werde im Bonuslevel durch Feindberührung gar nicht zerstört"**:
+  bewusst, aber ab jetzt überholt — die Neunzehnte Runde hatte „kein
+  Lebensrisiko" als Design-Entscheidung getroffen (`bonus_enemy.gd` absichtlich
+  nicht in der Gruppe `"enemy"`, die `ship.gd`s Kollisions-Handler dafür
+  abfragt). Nutzer-Feedback: einfach ungehindert hindurchfliegen zu können
+  fühlte sich falsch an. Fix: `ship.gd::_on_area_entered()` bekommt einen
+  dritten Zweig — `area.is_in_group("bonus_wave_active")` (dieselbe Gruppe,
+  der jeder `bonus_enemy` schon für das Wellen-Ende-Tracking beitritt) löst
+  jetzt `_destroy(true)` aus, genau wie das Rammen eines stürzenden
+  Formations-Gegners. Der Bonus-Gegner selbst wird dabei NICHT zerstört —
+  entspricht dem bestehenden Verhalten der normalen Formation (Rammen tötet
+  dort auch nur das Schiff, nie den Gegner). Weiterhin kein Gegnerfeuer, kein
+  Sturzflug, kein Boss — nur dieses eine Stück Risiko kommt dazu. Per echtem
+  Area2D-Kollisionstest verifiziert (Bonus-Gegner künstlich dauerhaft auf die
+  Schiffsposition gezwungen, da `bonus_enemy.gd`s `_physics_process()` die
+  Position ohnehin jeden Frame aus der Bahnkurve neu setzt — eine einmalige
+  Platzierung hätte die Kollision nicht zuverlässig ausgelöst).
+- **2. Doppelschiff verdoppelt jetzt die Gegner-Spalten im Bonuslevel**
+  (Nutzerwunsch: zwei Kanonen an nur einer Spalte fühlte sich verschenkt an).
+  `game.gd::_run_bonus_wave()` prüft jetzt zu Beginn JEDER Welle (nicht
+  einmalig für das ganze Level — ein Treffer kann das Doppelschiff-Bonus
+  jetzt ja mitten im Level wieder aufheben, siehe Punkt 1 oben) `ship._twin`
+  und spawnt bei aktivem Doppelschiff zwei parallele Spalten
+  (`BONUS_TWIN_ROW_GAP = 70px` auseinander, angelehnt an `ship.gd`s eigenen
+  `TWIN_OFFSET * 2 = 68px` — jede Spalte landet dadurch ungefähr direkt unter
+  einer der beiden Kanonen) statt einer, mit doppelter Gegnerzahl (12 statt 6
+  pro Welle). `_bonus_total` (für die „PERFECT!"-Prüfung am Levelende) wird
+  seitdem nicht mehr einmalig zu Levelbeginn festgelegt, sondern läuft pro
+  Welle mit — sonst hätte ein Doppelschiff-Wechsel mitten im Level die
+  Endsumme falsch gemacht. Per Headless-Test verifiziert: eine Welle ohne
+  Doppelschiff spawnt exakt 6 Gegner auf einer Spalte, dieselbe Welle mit
+  aktivem Doppelschiff spawnt exakt 12 auf zwei unterschiedlichen Spalten.
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,

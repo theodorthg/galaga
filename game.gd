@@ -32,16 +32,18 @@ const RESCUE_ICON := preload("res://assets/graphics/ship_captured.png")
 
 const BONUS_ENEMY_SCENE := preload("res://bonus_enemy.tscn")
 ## Bonus Level (GameSettings.bonus_level_interval — user proposal 2026-09-14,
-## corrected 2026-09-14 after a first playtest): instead of the normal 40-slot
-## formation, WAVE_COUNT flights of ENEMIES_PER_WAVE enemies each fly in from
-## above and queue up nose-to-tail on ONE dead-straight vertical track — not a
-## formation sliding sideways across the screen — so the player can plant the
-## ship under that column and shoot the whole flight from one spot, without
-## having to track a moving line. No dive/bomb/capture, no way to lose a life
-## (bonus_enemy.gd isn't in the "enemy" group ship.gd reacts to) — pure
-## shooting-gallery scoring, modeled on the arcade "challenging stage". No
-## Boss ever appears here (user spec: a capture attempt would defeat the
-## "no life risk" point of a Bonus Level) — EnemyKinds only has two other
+## corrected 2026-09-14/2026-09-15 after real playtests): instead of the
+## normal 40-slot formation, WAVE_COUNT flights of ENEMIES_PER_WAVE enemies
+## each fly in from above and queue up nose-to-tail on ONE dead-straight
+## vertical track — not a formation sliding sideways across the screen — so
+## the player can plant the ship under that column and shoot the whole flight
+## from one spot, without having to track a moving line. No dive/bomb/capture
+## (bonus_enemy.gd isn't in the "enemy" group, so none of the main formation's
+## attack machinery applies) — BUT ramming one still costs a life exactly like
+## ramming a diving formation enemy does (ship.gd checks the "bonus_wave_active"
+## group directly for that) — flying straight through untouched felt wrong
+## (user report). No Boss ever appears here (user spec: a capture attempt
+## would defeat the point of a Bonus Level) — EnemyKinds only has two other
 ## kinds, so the 3 flights alternate ZAKO/GOEI/ZAKO, each at a different
 ## column x ("von unterschiedlichen Stellen aus").
 const BONUS_WAVE_COUNT := 3
@@ -59,6 +61,16 @@ const BONUS_WAVE_PAUSE := 1.2
 ## as a perfectly even, fully predictable conveyor belt.
 const BONUS_WAVE_SPEEDS := [230.0, 290.0, 350.0]
 const BONUS_SPEED_JITTER := 0.18  # ± fraction of the wave's base speed
+## With the Twin-ship bonus active (ship.gd::_twin, two guns firing at once),
+## each wave spawns TWO parallel columns instead of one, offset this far apart
+## — user request 2026-09-15: two guns with only one column to shoot at felt
+## wasted. Roughly matches ship.gd's own TWIN_OFFSET*2 (34*2=68), so each
+## column lands close to directly under one of the twin ship's two guns.
+## Checked fresh at the START of every wave (not once for the whole level) —
+## ramming a bonus_enemy now costs a life same as any other hit, which can
+## revert the Twin bonus mid-level, so a later wave should stop doubling if
+## that happens.
+const BONUS_TWIN_ROW_GAP := 70.0
 
 @onready var _formation: Formation = $Formation
 @onready var _director: StageDirector = $StageDirector
@@ -371,7 +383,12 @@ func _start_ready() -> void:
 ## against title/game-over).
 func _start_bonus_level() -> void:
 	_bonus_hits = 0
-	_bonus_total = BONUS_WAVE_COUNT * BONUS_ENEMIES_PER_WAVE
+	# Not a fixed BONUS_WAVE_COUNT * BONUS_ENEMIES_PER_WAVE any more — a Twin
+	# ship doubles a wave's actual enemy count (see _run_bonus_wave()), and
+	# since ramming a bonus_enemy can now cost a life (and with it the Twin
+	# bonus) mid-level, the total isn't knowable up front. _run_bonus_wave()
+	# adds to this as each wave actually spawns.
+	_bonus_total = 0
 	_bonus_points = 0
 	var vp := get_viewport_rect().size
 	# Three separate flights, one after another, each its own vertical column
@@ -402,21 +419,32 @@ func _run_bonus_wave(kind: int, column_x: float, base_speed: float) -> void:
 	# Dead straight, top to bottom — "eine quasi senkrechte Linie, die man von
 	# einem Punkt aus abschießen kann" (user spec). No horizontal drift at all:
 	# the player parks under column_x once and never has to re-track a moving
-	# line.
-	var curve := Curve2D.new()
-	curve.add_point(Vector2(column_x, -60.0))
-	curve.add_point(Vector2(column_x, vp.y + 60.0))
+	# line. Twin ship (two guns) gets a second parallel column instead of one
+	# (user request) — checked fresh per wave since a ram can revert the Twin
+	# bonus mid-level.
+	var twin: bool = is_instance_valid(_ship) and _ship._twin
+	var columns: Array[float] = [column_x]
+	if twin:
+		columns = [column_x - BONUS_TWIN_ROW_GAP * 0.5, column_x + BONUS_TWIN_ROW_GAP * 0.5]
+	var curves: Array[Curve2D] = []
+	for col_x in columns:
+		var curve := Curve2D.new()
+		curve.add_point(Vector2(col_x, -60.0))
+		curve.add_point(Vector2(col_x, vp.y + 60.0))
+		curves.append(curve)
+	_bonus_total += BONUS_ENEMIES_PER_WAVE * columns.size()
 	for i in BONUS_ENEMIES_PER_WAVE:
 		if _state != BONUS:
 			return
-		var e := BONUS_ENEMY_SCENE.instantiate()
-		add_child(e)
-		e.killed.connect(_on_bonus_enemy_killed)
-		# Per-member jitter on top of the wave's base speed (user request: a
-		# perfectly even, single-speed queue felt too predictable) — no two
-		# members of the same wave move at quite the same pace.
-		var spd := base_speed * randf_range(1.0 - BONUS_SPEED_JITTER, 1.0 + BONUS_SPEED_JITTER)
-		e.setup(kind, curve, tex, float(vis["scale"]), spd)
+		for curve in curves:
+			var e := BONUS_ENEMY_SCENE.instantiate()
+			add_child(e)
+			e.killed.connect(_on_bonus_enemy_killed)
+			# Per-member jitter on top of the wave's base speed (user request: a
+			# perfectly even, single-speed queue felt too predictable) — no two
+			# members of the same wave move at quite the same pace.
+			var spd := base_speed * randf_range(1.0 - BONUS_SPEED_JITTER, 1.0 + BONUS_SPEED_JITTER)
+			e.setup(kind, curve, tex, float(vis["scale"]), spd)
 		await get_tree().create_timer(BONUS_LAUNCH_GAP, false).timeout
 	# Every chain member frees itself on death or on reaching the bottom of the
 	# track (bonus_enemy.gd) and, doing so, automatically drops out of this
