@@ -1,23 +1,27 @@
 extends Area2D
 
 ## One enemy in a Bonus Level chain (see game.gd::_start_bonus_level()) — flies
-## a straight line from its own start point to its own end point (a wave's
-## enemies share the same line, offset vertically at spawn so they read as a
-## single stacked chain moving together) and frees itself at the far end.
+## straight down a single shared vertical track from just above the screen to
+## just below it, then frees itself. A wave's members are launched one after
+## another with a short delay (game.gd's BONUS_LAUNCH_GAP), not spawned all at
+## once, so they queue up nose-to-tail on the SAME line instead of moving as a
+## rigid offset block — game.gd waits for the "bonus_wave_active" group below
+## to empty as its "wave cleared" signal, rather than tracking a per-wave
+## counter (see the comment in game.gd::_run_bonus_wave() for why a counter
+## driven by a signal-connected lambda was the actual bug behind "the game
+## never notices a cleared wave").
 ## Deliberately NOT in the "enemy" group: ship.gd's own collision handler only
 ## reacts to that group, so a Bonus Level is pure shooting-gallery scoring —
 ## no dive, no bomb, no way to lose a life, matching the classic arcade
 ## "challenging stage" this is modeled on.
 
 signal killed(points: int)
-signal resolved
 
 const SPEED := 260.0
 
 var kind := EnemyKinds.ZAKO
 var _path: Curve2D
 var _path_dist := 0.0
-var _resolved := false
 
 @onready var _col: CollisionShape2D = $CollisionShape2D
 @onready var _sprite: Sprite2D = $Sprite2D
@@ -25,12 +29,15 @@ var _resolved := false
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_PAUSABLE
-	# Not "enemy" (see class doc above) — "bonus_transient" instead, purely so
-	# game.gd::_clear_board() can sweep away an in-progress Bonus Level if the
-	# player quits to the title screen mid-wave (shared with ship_warp.gd).
+	# Shared with ship_warp.gd purely so game.gd::_clear_board() can sweep this
+	# away too if the player quits to the title screen mid-transition.
 	add_to_group("bonus_transient")
+	# game.gd polls this group emptying out as its "wave cleared" signal —
+	# queue_free() (below, on kill or reaching the bottom of the path) drops
+	# group membership automatically, so no explicit "I'm done" signal/counter
+	# is needed at all.
+	add_to_group("bonus_wave_active")
 	area_entered.connect(_on_area_entered)
-	tree_exiting.connect(_finish)
 
 func setup(p_kind: int, curve: Curve2D, texture_path: String, tex_scale: float) -> void:
 	kind = p_kind
@@ -52,7 +59,6 @@ func _physics_process(delta: float) -> void:
 	if ahead != pos:
 		rotation = (ahead - pos).angle() - PI / 2.0
 	if _path_dist >= length:
-		_finish()
 		queue_free()
 
 func _on_area_entered(area: Area2D) -> void:
@@ -65,16 +71,9 @@ func _explode() -> void:
 	killed.emit(int(EnemyKinds.DATA[kind]["points"]))
 	if _snd:
 		_snd.play("enemy-death1")
-	_finish()
 	var t := create_tween()
 	t.set_parallel(true)
 	t.tween_property(self, "scale", scale * 1.9, 0.16)
 	t.tween_property(self, "modulate:a", 0.0, 0.16)
 	await t.finished
 	queue_free()
-
-func _finish() -> void:
-	if _resolved:
-		return
-	_resolved = true
-	resolved.emit()

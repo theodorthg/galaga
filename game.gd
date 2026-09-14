@@ -32,18 +32,26 @@ const RESCUE_ICON := preload("res://assets/graphics/ship_captured.png")
 
 const BONUS_ENEMY_SCENE := preload("res://bonus_enemy.tscn")
 const SHIP_WARP_SCENE := preload("res://ship_warp.tscn")
-## Bonus Level (GameSettings.bonus_level_interval — user proposal 2026-09-14):
-## instead of the normal 40-slot formation, WAVE_COUNT straight chains of
-## ENEMIES_PER_WAVE enemies each cross the screen once, no dive/bomb/capture,
-## no way to lose a life (bonus_enemy.gd isn't in the "enemy" group ship.gd
-## reacts to) — pure shooting-gallery scoring, modeled on the arcade
-## "challenging stage". CHAIN_GAP offsets each enemy's start/end point
-## vertically by the same amount, which keeps them moving in lockstep on
-## parallel lines — reads as one stacked chain entering and crossing together
-## rather than a synchronized time-delay trick.
+## Bonus Level (GameSettings.bonus_level_interval — user proposal 2026-09-14,
+## corrected 2026-09-14 after a first playtest): instead of the normal 40-slot
+## formation, WAVE_COUNT flights of ENEMIES_PER_WAVE enemies each fly in from
+## above and queue up nose-to-tail on ONE dead-straight vertical track — not a
+## formation sliding sideways across the screen — so the player can plant the
+## ship under that column and shoot the whole flight from one spot, without
+## having to track a moving line. No dive/bomb/capture, no way to lose a life
+## (bonus_enemy.gd isn't in the "enemy" group ship.gd reacts to) — pure
+## shooting-gallery scoring, modeled on the arcade "challenging stage". No
+## Boss ever appears here (user spec: a capture attempt would defeat the
+## "no life risk" point of a Bonus Level) — EnemyKinds only has two other
+## kinds, so the 3 flights alternate ZAKO/GOEI/ZAKO, each at a different
+## column x ("von unterschiedlichen Stellen aus").
 const BONUS_WAVE_COUNT := 3
 const BONUS_ENEMIES_PER_WAVE := 6
-const BONUS_CHAIN_GAP := 70.0
+## Time between launching each chain member onto the shared track — creates
+## the queued "chain" by staggering LAUNCH TIME, not by offsetting each
+## member's own geometry (the previous, sideways-crossing design's approach).
+## ~70px of visual gap at bonus_enemy.gd's own 260px/s travel speed.
+const BONUS_LAUNCH_GAP := 0.27
 const BONUS_WAVE_PAUSE := 1.2
 
 @onready var _formation: Formation = $Formation
@@ -358,39 +366,59 @@ func _start_bonus_level() -> void:
 	_bonus_hits = 0
 	_bonus_total = BONUS_WAVE_COUNT * BONUS_ENEMIES_PER_WAVE
 	var vp := get_viewport_rect().size
-	# Three lanes, alternating enemy sprite/entry side/exit side each time, so
-	# no two waves look or move the same way (user spec). Boss last — biggest,
-	# most points, comes straight down the middle.
+	# Three separate flights, one after another, each its own vertical column
+	# at a different x ("von unterschiedlichen Stellen aus") — never a Boss
+	# (see the class doc above). Only two non-Boss kinds exist, so consecutive
+	# flights alternate ZAKO/GOEI/ZAKO — a deliberate, documented choice (see
+	# CLAUDE.md), not an oversight.
 	var wave_defs := [
-		{"kind": EnemyKinds.ZAKO, "start": Vector2(vp.x * 0.18, -40.0), "end": Vector2(vp.x * 0.82, vp.y + 60.0)},
-		{"kind": EnemyKinds.GOEI, "start": Vector2(vp.x * 0.82, -40.0), "end": Vector2(vp.x * 0.18, vp.y + 60.0)},
-		{"kind": EnemyKinds.BOSS, "start": Vector2(vp.x * 0.5, -40.0), "end": Vector2(vp.x * 0.5, vp.y + 60.0)},
+		{"kind": EnemyKinds.ZAKO, "x": vp.x * 0.25},
+		{"kind": EnemyKinds.GOEI, "x": vp.x * 0.75},
+		{"kind": EnemyKinds.ZAKO, "x": vp.x * 0.50},
 	]
 	for wd in wave_defs:
 		if _state != BONUS:
 			return
-		await _run_bonus_wave(wd["kind"], wd["start"], wd["end"])
+		await _run_bonus_wave(wd["kind"], wd["x"])
 	if _state != BONUS:
 		return
 	_finish_bonus_level()
 
-func _run_bonus_wave(kind: int, start: Vector2, end: Vector2) -> void:
+func _run_bonus_wave(kind: int, column_x: float) -> void:
 	if _snd:
 		_snd.play("enemy-wave1")
 	var vis := EnemyKinds.pick_visual(kind, _stage)
 	var tex: String = vis["frames"][0] if vis.get("frames", []).size() == 2 else vis["texture"]
-	var pending := BONUS_ENEMIES_PER_WAVE
+	var vp := get_viewport_rect().size
+	# Dead straight, top to bottom — "eine quasi senkrechte Linie, die man von
+	# einem Punkt aus abschießen kann" (user spec). No horizontal drift at all:
+	# the player parks under column_x once and never has to re-track a moving
+	# line.
+	var curve := Curve2D.new()
+	curve.add_point(Vector2(column_x, -60.0))
+	curve.add_point(Vector2(column_x, vp.y + 60.0))
 	for i in BONUS_ENEMIES_PER_WAVE:
-		var off := Vector2(0.0, -float(i) * BONUS_CHAIN_GAP)
-		var curve := Curve2D.new()
-		curve.add_point(start + off)
-		curve.add_point(end + off)
+		if _state != BONUS:
+			return
 		var e := BONUS_ENEMY_SCENE.instantiate()
 		add_child(e)
-		e.resolved.connect(func(): pending -= 1)
 		e.killed.connect(_on_bonus_enemy_killed)
 		e.setup(kind, curve, tex, float(vis["scale"]))
-	while pending > 0:
+		await get_tree().create_timer(BONUS_LAUNCH_GAP).timeout
+	# Every chain member frees itself on death or on reaching the bottom of the
+	# track (bonus_enemy.gd) and, doing so, automatically drops out of this
+	# group — waiting for the group to empty out is therefore the whole "wave
+	# cleared" check.
+	#
+	# The PREVIOUS version instead counted a plain `var pending := 6` down
+	# inside a per-enemy signal-connected lambda (`e.resolved.connect(func():
+	# pending -= 1)`). That never worked: GDScript lambdas capture value-type
+	# locals like int BY VALUE — `pending -= 1` only ever mutated the lambda's
+	# own private copy, never the outer `pending` this loop actually checked.
+	# `pending` therefore never reached 0, the wave (and the whole Bonus Level)
+	# hung forever after the last enemy died — exactly the "game logic never
+	# notices a wave got cleared" bug the user reported.
+	while not get_tree().get_nodes_in_group("bonus_wave_active").is_empty():
 		await get_tree().process_frame
 		if _state != BONUS:
 			return

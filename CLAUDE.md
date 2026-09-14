@@ -1681,6 +1681,102 @@ Rest lebt direkt in `game.gd`.
   (`create_timer()`/`is_playing()` verhalten sich headless korrekt, echte
   Millisekunden vergehen wie erwartet). Bestätigt nebenbei, dass auch die
   „Achtzehnte Playtest-Runde"s Jingle-Gap-Logik strukturell in Ordnung ist.
+  **Trotzdem: gleich beim ersten echten Spieltest stellte sich heraus, dass
+  das Bonuslevel so nicht funktionierte — siehe „Zwanzigste Playtest-Runde"
+  unten. Der eigene Headless-Test hatte den eigentlichen Bug nicht gefangen,
+  weil er `resolved` selbst per `e._explode()` auslöste (der Signal-Pfad, in
+  dem der Zähler kaputt war, wurde also nie unter realen Bedingungen
+  durchlaufen) — eine Lehre für künftige Tests dieser Art: das Verhalten
+  eines Signal-Handlers isoliert nachzustellen beweist nicht, dass der
+  Signal-Pfad selbst funktioniert.**
+
+**Zwanzigste Playtest-Runde (2026-09-14): Bonuslevel komplett redesignt —
+echter Hänger-Bug behoben, Bewegung jetzt vertikale Spalte statt
+Seitwärts-Formation, kein Boss mehr.** Nutzer-Report nach dem ersten
+tatsächlichen Spieltest der Neunzehnten Runde: „1. Die Spielelogik bekommt
+nicht mit, wenn eine Formation komplett abgeräumt wurde. 2. Die Formation
+soll sich nicht als Ganzes seitwärts bewegen, sondern von oben eingeflogen
+kommen und eine quasi senkrechte Linie bilden, die man dann von einem Punkt
+aus abschießen kann. 3. Und das dann nacheinander insgesamt 3 Mal von
+unterschiedlichen Stellen aus und mit unterschiedlichen Gegnern (keine
+Bosse)."
+- **Echter Bug gefunden (Punkt 1)**: `game.gd::_run_bonus_wave()` zählte die
+  verbleibenden Gegner einer Welle über `var pending := 6` herunter, verändert
+  aus einer PRO-GEGNER an `resolved` angehängten Lambda-Closure
+  (`e.resolved.connect(func(): pending -= 1)`). Das funktioniert in GDScript
+  grundsätzlich nicht: Closures fangen wertartige lokale Variablen (`int`,
+  `bool`, `float`, …) BEI ERSTELLUNG als eigene Kopie ein — `pending -= 1`
+  innerhalb der Lambda hat nur die private Kopie der Lambda verändert, nie
+  die äußere `pending`-Variable, die die `while pending > 0`-Schleife
+  tatsächlich abfragte. `pending` blieb also für immer bei 6 stehen, die
+  Schleife (und damit das ganze Bonuslevel) hing nach dem letzten Kill für
+  immer fest — exakt der gemeldete „Spielelogik merkt nichts"-Bug. Fix:
+  komplett andere Technik, kein Zähler mehr nötig — jeder `bonus_enemy` tritt
+  jetzt zusätzlich zu `"bonus_transient"` der Gruppe `"bonus_wave_active"`
+  bei (`bonus_enemy.gd::_ready()`); da sich jeder Gegner beim Tod ODER am
+  Bahnende ohnehin selbst per `queue_free()` entfernt (und damit automatisch
+  aus jeder Gruppe fällt), reicht `while not get_tree().get_nodes_in_group
+  ("bonus_wave_active").is_empty(): await get_tree().process_frame` als
+  „Welle fertig"-Check — kein Signal, kein Zähler, keine Closure-Falle mehr
+  möglich. Das dabei entfernte `resolved`-Signal/`_finish()`/
+  `tree_exiting`-Verdrahtung in `bonus_enemy.gd` war nur noch für den alten,
+  kaputten Zähler da und ist komplett raus.
+- **Bewegung komplett redesignt (Punkte 2+3)**: statt zwei parallelen
+  Diagonal-„Ketten", die als starrer Block quer über den Bildschirm fahren
+  (altes Design der Neunzehnten Runde), fliegt jetzt jede der 3 Wellen als
+  KETTE VON 6 GEGNERN NACHEINANDER auf EINER einzigen, schnurgeraden
+  senkrechten Spur von oben (knapp über dem Bildschirm) nach unten (knapp
+  unter dem Bildschirm) — `game.gd::_run_bonus_wave(kind, column_x)` baut
+  dafür nur noch eine simple 2-Punkte-`Curve2D` (`(column_x, -60)` →
+  `(column_x, vp.y+60)`, exakt senkrecht). Die „Kette" entsteht nicht mehr
+  durch geometrischen Versatz (Start/Endpunkt um `BONUS_CHAIN_GAP`
+  verschieben, wie in der Neunzehnten Runde), sondern durch zeitversetztes
+  LAUNCHEN: alle 6 Gegner benutzen dieselbe Spur, werden aber im Abstand von
+  `BONUS_LAUNCH_GAP` (0,27 s, ~70 px Sichtabstand bei den 260 px/s
+  Reisegeschwindigkeit aus `bonus_enemy.gd`) nacheinander erzeugt — der
+  erste ist beim Start des zweiten schon ein Stück die Spur entlang
+  gewandert, genau wie eine Schlange, die nacheinander an einer Stelle
+  vorbeikommt (dieselbe Technik, mit der auch `stage_director.gd`s
+  normaler Formations-Einflug seine Gruppen staffelt). Der Spieler muss sich
+  während einer Welle also gar nicht bewegen — einmal unter `column_x`
+  postieren und durchgehend feuern reicht, exakt der Nutzer-Wunsch „von
+  einem Punkt aus abschießen". **Kein Boss mehr**: `EnemyKinds` hat nur zwei
+  Nicht-Boss-Sorten (ZAKO/GOEI), die 3 Wellen wechseln sich also bewusst
+  ZAKO→GOEI→ZAKO ab (kein Kind zweimal hintereinander) — dokumentierte
+  Design-Entscheidung, kein Versehen: „unterschiedliche Gegner" mit nur 2
+  verfügbaren Nicht-Boss-Sorten kann nicht 3 komplett unterschiedliche Typen
+  bedeuten, ohne einen doppelt zu belegen. Die 3 Spalten liegen bei 25 %/
+  75 %/50 % der Bildschirmbreite ("von unterschiedlichen Stellen aus").
+- **Verifikation**: Editor weiterhin nicht verfügbar (kein `ps aux`-Treffer,
+  aber auch keine Rückmeldung, dass die Pac-Man-Session den Editor
+  freigegeben hätte — sicherheitshalber weiter headless getestet). Zwei
+  Wegwerf-`SceneTree`-Skripte gegen das echte `game.tscn`: eines ließ eine
+  einzelne Welle OHNE jeden Eingriff komplett natürlich auslaufen (alle 6
+  Gegner laufen die Spur bis ans Ende durch und geben sich per `queue_free()`
+  frei) — lief in ca. 6,7 echten Sekunden sauber durch und bestätigte damit
+  direkt, dass der Hänger behoben ist. Das zweite (ausführlichere) prüfte
+  zusätzlich per `SceneTree.node_added`-Hook (auf das Skript-Attachment
+  gefiltert, da die Gruppenzugehörigkeit zum Zeitpunkt von `node_added` noch
+  nicht gesetzt ist) alle 6 Positionen einer Welle (alle exakt auf derselben
+  Spalten-x), dann den kompletten Ablauf aller 3 Wellen (18 Gegner
+  gesamt, 3 unterschiedliche Spalten, kein einziger Boss, mindestens 2
+  unterschiedliche Gegnerarten, `_bonus_hits == 18` am Ende). Alle 8 Checks
+  grün. **Stolperfalle beim Testen selbst** (zweimal, beide selbst
+  gefunden und behoben, kein Bug im Spiel): (1) `game.gd::_ready()` lässt
+  den `SceneTree` für den Splash-Screen pausiert (`get_tree().paused = true`)
+  und verbindet `_menus.splash_done` einmalig mit `_enter_title()` — da diese
+  neue Testreihe durch die vielen echten Warte-Timer (Launch-Gaps) mehrere
+  echte Sekunden braucht, konnte der echte 3-Sekunden-Splash-Timer
+  zwischenzeitlich auslösen und mitten im Test `_enter_title()` (räumt das
+  Spielfeld komplett leer) auslösen — im Test vorher explizit
+  `splash_done.disconnect(_enter_title)`. (2) Direkt danach hing ein Test
+  komplett fest, weil der `SceneTree` durch denselben Splash-Setup-Schritt
+  weiterhin `paused = true` war und nie (wie es `_new_run()` im echten Spiel
+  immer tut) auf `false` gesetzt wurde — `bonus_enemy.gd` läuft mit
+  `PROCESS_MODE_PAUSABLE`, seine `_physics_process()` (und damit jede
+  Bewegung) lief bei pausiertem Baum also nie, die Welle konnte nie enden.
+  Fix im Test: `paused = false` direkt nach dem Splash-Disconnect setzen —
+  genau das, was `_new_run()` im echten Spielablauf ohnehin schon tut.
 
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
@@ -2159,9 +2255,13 @@ und „Boss-Capture" weiter oben für Details.
     Ziel-Seite hat seit 2026-09-12 schon eine Icon-Legende (Punkt 3 oben), die
     beiden Steuerungs-Seiten sind weiterhin reiner Text.
 11. **Bonuslevel mit mehreren Gegner-Wellen** — erledigt, siehe „Neunzehnte
-    Playtest-Runde" unten für den vollen Stand und die dabei selbst
+    Playtest-Runde" für den ursprünglichen Stand und die dabei selbst
     getroffenen Design-Entscheidungen (Gegnerfeuer, Punkte, Konsequenz eines
-    verpassten Durchlaufs — alles bewusst entschieden, nicht mehr offen).
+    verpassten Durchlaufs), UND „Zwanzigste Playtest-Runde" für den nach dem
+    ersten echten Spieltest korrigierten, aktuell gültigen Stand (echter
+    Hänger-Bug behoben, Bewegung jetzt senkrechte Spalte statt Seitwärts-
+    Formation, kein Boss mehr) — beides zusammen ergibt den vollen,
+    aktuellen Stand, nicht mehr offen.
 12. **Lautstärke-Defaults nachziehen** (Nutzer, 2026-09-14, vorgemerkt): die
     15 Sound-Defaults/`base_db` in `sound_manager.gd::SOUNDS` sind seit dem
     Sound-Austausch (dreizehnte Runde) neutrale Platzhalter (`base_db` 0.0,
