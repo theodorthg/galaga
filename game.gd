@@ -276,12 +276,24 @@ func _resume() -> void:
 	get_tree().paused = false
 
 # --- stage flow -----------------------------------------------------
+## Breathing room between the jingles of a stage change: level-cleared ->
+## (gap) -> "STAGE n" banner + stage jingle -> (gap) -> fly-in. Before this,
+## level-cleared and the stage jingle started in the same frame and talked
+## over each other, and the fly-in began while the jingle was still playing
+## (user report: "Abstand viel zu klein").
+const STAGE_JINGLE_GAP := 0.5
+
 func _start_ready() -> void:
 	_state = READY
 	_director.stop_attacks()
 	_hud.set_stage(_stage)
+	if not await _wait_sound_then_gap("level-cleared"):
+		return
 	_hud.flash_banner("STAGE %d" % _stage)
-	if _snd:
+	# Stage 1 of a fresh run has its own, much longer intro (6.9 s,
+	# start-first-level-music) — that IS the fanfare there, so the 2.6 s
+	# stage jingle stays silent instead of playing on top of it.
+	if _snd and not _intro_gate_active:
 		_snd.play("stage")
 	await get_tree().create_timer(Hud.BANNER_TOTAL).timeout
 	if not is_instance_valid(self) or _state != READY:
@@ -291,14 +303,22 @@ func _start_ready() -> void:
 	# skipped it early via _unhandled_input(). A no-op whenever the intro
 	# either already finished during the banner's own BANNER_TOTAL wait above,
 	# was skipped, or never started (stage 2+, or no clip supplied).
-	while _intro_gate_active and _snd and _snd.is_playing("start-first-level-music"):
-		await get_tree().process_frame
-	_intro_gate_active = false
-	if not is_instance_valid(self) or _state != READY:
+	if not await _wait_sound_then_gap("start-first-level-music" if _intro_gate_active else "stage"):
 		return
+	_intro_gate_active = false
 	_hud.hide_banner()
 	_state = ENTERING
 	_director.start_stage(_stage)
+
+## Waits until `key` has stopped playing (skips the wait if it isn't), then
+## STAGE_JINGLE_GAP more. False if the run left READY meanwhile (menu, title).
+func _wait_sound_then_gap(key: String) -> bool:
+	while _snd and _snd.is_playing(key):
+		await get_tree().process_frame
+		if not is_instance_valid(self) or _state != READY:
+			return false
+	await get_tree().create_timer(STAGE_JINGLE_GAP).timeout
+	return is_instance_valid(self) and _state == READY
 
 func _on_stage_populated() -> void:
 	if _state == ENTERING:

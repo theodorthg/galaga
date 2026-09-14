@@ -16,8 +16,11 @@ const TWIN_OFFSET := 34.0
 const SINGLE_HALF_WIDTH := 34.0
 ## Two beams close together instead of one, while Hyper-Ammo is active (see
 ## activate_hyper_ammo()) — much narrower than TWIN_OFFSET, which represents a
-## whole second ship rather than a tighter spread from the same gun.
-const HYPER_OFFSET := 10.0
+## whole second ship rather than a tighter spread from the same gun. 14 px
+## between the beam centres + the 9 px hitbox each = ~23 px of coverage per
+## salvo vs. 9 px for a single beam (was 10 px / ~19 px — user asked for a
+## clearly better hit chance than the plain laser, not just a visual double).
+const HYPER_OFFSET := 14.0
 ## The main thruster's flame can reach up to its own max_length below the ship
 ## at full power (plus the GPU particle trail) — far enough to dip into the
 ## HUD's bottom-center bonus-icon row (hud.gd) on a tall/thin canvas. Shifting
@@ -156,7 +159,12 @@ func _unhandled_input(event: InputEvent) -> void:
 func shoot() -> void:
 	if _fire_cooldown_t > 0.0:
 		return
-	if get_tree().get_nodes_in_group("player_lasers").size() >= _max_lasers:
+	# The cap counts SALVOS, not beams: a Hyper-Ammo shot puts two lasers in
+	# flight at once, so counting beams against max_shots meant one salvo
+	# filled a 2-shot cap and the "bonus" fired at HALF the normal rate — a
+	# downgrade (user report). Twin ships already double _max_lasers itself.
+	var cap := _max_lasers * (2 if _hyper_ammo else 1)
+	if get_tree().get_nodes_in_group("player_lasers").size() >= cap:
 		return
 	_fire_cooldown_t = FIRE_COOLDOWN
 	for gun_x in ([-TWIN_OFFSET, TWIN_OFFSET] if _twin else [0.0]):

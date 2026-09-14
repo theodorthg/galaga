@@ -1564,6 +1564,34 @@ das sind historische Beschreibungen, nicht der aktuelle Stand. Mapping:
   Sichtprüfung der 7 gerenderten Hilfe-PNGs; kein Live-MCP-Test, da parallel
   die Pac-Man-Session einen Editor offen hatte (siehe sechzehnte Runde).
 
+**Achtzehnte Playtest-Runde (2026-09-14): Hyper-Ammo feuert wieder in
+voller Kadenz + breiter, Jingle-Abstände beim Stage-Wechsel.** (Nutzer-
+Auftrag unter Zeitdruck — „das Limit schlägt gleich zu" — daher Punkte 1+2
+sofort, Bonuslevel danach, Lautstärke-Defaults nur vorgemerkt, siehe
+„Offen" 12.)
+- **Hyper-Ammo schoss nur einmal statt mit der eingestellten Kadenz** (Nutzer-
+  Report: „sogar ein Nachteil"). Ursache: `ship.gd::shoot()` deckelte die
+  Laser IN DER LUFT gegen `_max_lasers` (= „Max. Schüsse") — ein
+  Hyper-Salvo sind aber zwei Laser, bei Default 2 füllte also EIN Schuss
+  den Deckel, die halbe Feuerrate. Fix: der Deckel zählt Salven, nicht
+  Strahlen (`cap = _max_lasers * (2 if _hyper_ammo else 1)`; Zwilling
+  verdoppelt `_max_lasers` ohnehin schon selbst). Außerdem `HYPER_OFFSET`
+  10 → 14 px: Abdeckung pro Salve ~23 px statt ~19 px (Hitbox 9 px je
+  Strahl) — auf Nachfrage geprüft, ob die Doppelbreite wirklich spürbar mehr
+  Trefferchance bringt als der 9-px-Einzelstrahl.
+- **Stage-Wechsel-Jingles überlappten**: `level-cleared` (1,4 s) und der
+  `stage`-Jingle (2,6 s) starteten im selben Frame, der Einflug begann,
+  während der Jingle noch lief. Neu in `game.gd::_start_ready()`:
+  level-cleared ausklingen lassen → `STAGE_JINGLE_GAP` (0,5 s) → Banner +
+  `stage` → Banner-Zeit → Jingle ausklingen lassen → Gap → Einflug
+  (`_wait_sound_then_gap()`, bricht sauber ab, wenn der Run READY verlässt).
+  **Stage 1** eines neuen Spiels: die 6,9-s-Intro-Musik IST dort die
+  Fanfare — der `stage`-Jingle bleibt stumm statt darüber zu spielen, der
+  Einflug wartet wie bisher auf das Intro-Ende (oder den Klick/Tap-Skip),
+  plus dieselbe Gap. Beides nur per `_selftest.gd` (Parse) geprüft — kein
+  Live-Test möglich (Pac-Man-Session hält den Editor/MCP), beim nächsten
+  Playtest bitte gegenhören.
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,
@@ -2041,7 +2069,8 @@ und „Boss-Capture" weiter oben für Details.
     Ziel-Seite hat seit 2026-09-12 schon eine Icon-Legende (Punkt 3 oben), die
     beiden Steuerungs-Seiten sind weiterhin reiner Text.
 11. **Bonuslevel mit mehreren Gegner-Wellen** (Nutzervorschlag 2026-09-14,
-    noch NICHT umgesetzt — nur vorgemerkt) — statt der normalen 40er-Formation
+    Umsetzung am 2026-09-14 vom Nutzer freigegeben — „auch gleich ans Werk";
+    Stand siehe unterste Playtest-Runde) — statt der normalen 40er-Formation
     fliegen mehrere Wellen (Vorschlag: 3) von Gegnern nacheinander ein, jede
     Welle eine einfache, gerade Kette (schlicht übereinander aufgereiht, kein
     Formations-Slot-Raster) von oben nach unten. Jede Welle unterscheidet
@@ -2069,6 +2098,14 @@ und „Boss-Capture" weiter oben für Details.
     während des Bonuslevels Gegnerfeuer/Sturzflüge gibt oder die Ketten nur
     geradeaus durchfliegen, Punktevergabe-Schema, und ob ein verpasster/nicht
     abgeschlossener Bonuslevel-Durchlauf irgendeine Konsequenz hat.
+12. **Lautstärke-Defaults nachziehen** (Nutzer, 2026-09-14, vorgemerkt): die
+    15 Sound-Defaults/`base_db` in `sound_manager.gd::SOUNDS` sind seit dem
+    Sound-Austausch (dreizehnte Runde) neutrale Platzhalter (`base_db` 0.0,
+    Prozentwerte geraten) — nach dem Hören im Spiel gehören sie kalibriert
+    (Pegel messen, `base_db` je Clip, sinnvolle Default-%), danach
+    `CALIB_VERSION` hochzählen, damit alte gespeicherte Werte verworfen
+    werden. Gehört zum angekündigten „Sound-Finetuning" (Pausen zwischen
+    Sounds usw.) als eigene Runde.
 
 ## Aseprite MCP Pro
 
