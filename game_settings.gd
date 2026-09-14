@@ -8,15 +8,16 @@ const CFG_PATH := "user://settings.cfg"
 
 const DEF := {
 	"lives": 3,          # LIVES_MIN..LIVES_MAX
-	"extra_life": 5000,  # 0 = off, sonst EXTRA_STEP..EXTRA_MAX in EXTRA_STEP-Schritten —
-	                     # an boss_interval's eigenen Default (auch 5000) angeglichen,
-	                     # damit ein frisches Spiel dieselbe Punkteschwelle für beides nutzt
-	                     # (user request 2026-09-13)
+	"extra_life": 5000,  # 0 = off, sonst EXTRA_STEP..EXTRA_MAX in EXTRA_STEP-Schritten
+	                     # (user request 2026-09-13; bewusst NICHT mehr an boss_interval
+	                     # gekoppelt, seit der auf 10000 hochging — 2026-09-14)
 	"difficulty": 1,     # 0 easy, 1 normal, 2 hard
 	"max_shots": 2,      # MAX_SHOTS_MIN..MAX_SHOTS_MAX, gleichzeitig fliegende Laser
-	"boss_interval": 5000, # 0 = off, sonst BOSS_INTERVAL_STEP..BOSS_INTERVAL_MAX in
+	"boss_interval": 10000, # 0 = off, sonst BOSS_INTERVAL_STEP..BOSS_INTERVAL_MAX in
 	                        # BOSS_INTERVAL_STEP-Schritten — garantierter Boss-Capture-
-	                        # Versuch alle N Punkte, zusätzlich zur Zufallschance pro Stage
+	                        # Versuch alle N Punkte, zusätzlich zur Zufallschance; beide
+	                        # Wege zusammen max. EIN Fang pro Stage (stage_director.gd)
+	                        # — 5000 → 10000 am 2026-09-14 (fühlte sich zu häufig an)
 	"win_score": 100000,    # 0 = aus (endlos wie bisher), sonst WIN_SCORE_STEP..
 	                        # WIN_SCORE_MAX — Zielscore für ein "gewonnenes" Spiel
 	                        # (eigener Eintrag in derselben Hall of Fame)

@@ -472,7 +472,7 @@ func _reset_defaults() -> void:
 	if _return_to != "pause" and _return_to != "summary":
 		_cfg.lives = 3
 	_cfg.extra_life = 5000
-	_cfg.boss_interval = 5000
+	_cfg.boss_interval = 10000
 	_cfg.win_score = 0
 	_cfg.max_shots = 2
 	_cfg.difficulty = 1

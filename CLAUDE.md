@@ -1482,6 +1482,48 @@ NEAREST-Filter, Rekonstruktion wartet auf den vollen Zerstörungs-Sound.**
   selbst ist aber eindeutig: der Loop kann nicht vor Sound-Ende verlassen
   werden).
 
+**Sechzehnte Playtest-Runde (2026-09-14): max. ein Boss-Fang pro Stage,
+Boss-Default 10000.**
+- **Nutzer-Report: Boss-Fänge kamen zu oft, teils zwei Bosse mit geklauten
+  Schiffen in derselben Stage → Reserve leer.** Ursache: die beiden
+  Auslöser in `stage_director.gd` (Zufall 33 % alle 5–9 s + „sticky"
+  Punkteschwelle, vierte Runde) hatten als einzige Bremse „kein neuer Fang,
+  solange ein Boss gerade ein Schiff TRÄGT" — nach der Rettung (Boss
+  abgeschossen) war der Weg in derselben Stage sofort wieder frei, und jeder
+  Fang kostet ein Leben. Fix: `_capture_done_this_stage`-Flag, in
+  `start_stage()` zurückgesetzt, in `_attempt_capture_dive()` als erste
+  Prüfung — deckelt BEIDE Wege auf genau einen Fangversuch pro Stage. Eine
+  überschrittene Punkteschwelle (`_forced_pending`) verfällt dabei nicht,
+  sie wartet einfach auf die nächste Stage. Bewusst NICHT umgesetzt (nach
+  Rücksprache): die alternative Idee „Boss verfolgt unerbittlich, aber mit
+  sichtbarem Timer + Gegenwehr" — die würde die in der dritten/siebten Runde
+  ausdrücklich gewollte Unausweichlichkeit (Homing schneller als das Schiff,
+  Boss dabei unverwundbar, damit die Zwillingsjäger-Belohnung zuverlässig
+  erreichbar ist) wieder kippen; falls sich der Fang nach der Deckelung
+  weiterhin unfair anfühlt, als eigene Runde vorgemerkt.
+- **Hinweis zur Häufigkeit**: mit dem Deckel bestimmt praktisch der
+  Zufallspfad die gefühlte Rate — in einer 30–60-s-Stage wird mehrfach mit
+  33 % gewürfelt, statistisch kommt also fast jede Stage ein Boss. Die
+  Punkteschwelle ist damit nur noch eine Untergrenze, die selten greift.
+  `CAPTURE_CHANCE` auf Nutzerwunsch vorerst bei 33 % belassen — erste
+  Stellschraube, falls es immer noch zu oft ist.
+- **„Boss alle X Punkte" Default 5000 → 10000** (`GameSettings.DEF`,
+  `menus.gd::_reset_defaults()`) — fühlte sich sonst nicht fair an.
+  `extra_life` bleibt bewusst bei 5000 (die Kopplung an den Boss-Default aus
+  der vierzehnten Runde ist damit wieder aufgehoben, siehe Kommentar in
+  `game_settings.gd`). Eine Stage bringt grob 2900 Punkte (20×50 + 16×80 +
+  4×150, ohne Boni), 10000 ≈ alle 3–4 Stages.
+- **Verifikation diesmal headless statt per `godot-mcp-pro`**: parallel lief
+  die Pac-Man-Session des Nutzers mit eigenem, offenem Editor — zwei
+  Editoren + ein MCP-Server hätten die Live-Befehle an den falschen Editor
+  geschickt (und ein `stop_scene` hätte die fremde Session getroffen). Also
+  ein Wegwerf-`SceneTree`-Skript (`Formation` + `StageDirector` + Dummy-
+  `player`-Node, echter Einflug via `stage_populated`, dann
+  `_attempt_capture_dive()` direkt aufgerufen): 1. Versuch → `true`, 2. →
+  `false`, Zwangs-Anforderung bleibt `_forced_pending`, `start_stage(2)`
+  löscht den Deckel und behält die Anforderung. Alle 9 Checks grün,
+  `_selftest.gd` grün. Skript danach wieder gelöscht.
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,

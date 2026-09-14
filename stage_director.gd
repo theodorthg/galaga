@@ -38,6 +38,14 @@ var _atk := ATTACK_DEFAULT.duplicate()
 var _run_id := 0
 var _forced_pending := false
 var _forced_retry_t := 0.0
+# Hard cap: at most ONE capture attempt per stage, whichever trigger asks for
+# it (random roll or a "boss every N points" threshold). Without this, the
+# only brake was "no new capture while a Boss is still CARRYING a ship" —
+# the moment that Boss got shot (rescue), the next attempt could start in the
+# very same stage, and every capture costs a life (user report: two Bosses
+# with stolen ships on screen at once, reserve drained). A threshold request
+# (_forced_pending) that hits this cap simply stays pending for the next stage.
+var _capture_done_this_stage := false
 
 signal stage_populated
 signal enemy_killed(points, kind, variant_idx, was_carrying_captive)
@@ -61,6 +69,7 @@ func configure(params: Dictionary) -> void:
 # --- fly-in ------------------------------------------------------------
 func start_stage(stage: int) -> void:
 	_attacks_on = false
+	_capture_done_this_stage = false
 	_run_id += 1
 	_run_stage(stage, _run_id)
 
@@ -181,6 +190,8 @@ func _try_capture_dive() -> void:
 
 ## Returns true if a Boss actually started a capture attempt just now.
 func _attempt_capture_dive() -> bool:
+	if _capture_done_this_stage:
+		return false
 	var divers := 0
 	var bosses: Array = []
 	for e in get_tree().get_nodes_in_group("enemy"):
@@ -193,4 +204,5 @@ func _attempt_capture_dive() -> bool:
 	if divers >= int(_atk["max_divers"]) or bosses.is_empty():
 		return false
 	(bosses.pick_random() as Node).capture_dive()
+	_capture_done_this_stage = true
 	return true
