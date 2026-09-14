@@ -33,7 +33,7 @@ const BOSS_INTERVAL_MAX := 20000
 const BOSS_INTERVAL_STEP := 1000
 const WIN_SCORE_MAX := 500000
 const WIN_SCORE_STEP := 10000
-const DIFF_NAMES := ["Leicht", "Normal", "Schwer"]
+const DIFF_NAMES := ["Easy", "Normal", "Hard"]
 
 static func load_all() -> Dictionary:
 	var out := DEF.duplicate()

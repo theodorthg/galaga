@@ -18,7 +18,7 @@
   <rect x="576" y="122" width="52" height="44" rx="8" fill="#4db2ff" fill-opacity="0.22" stroke="#4db2ff" stroke-opacity="0.6" stroke-width="2"/>
   <text x="602" y="153" text-anchor="middle" font-size="26" fill="#eef4ff">| |</text>
   <g stroke="#5c6b86" stroke-width="2" fill="none"><path d="M700 210 L 615 168"/></g>
-  <text x="800" y="222" text-anchor="end" font-size="26" fill="#8fa3c8">Pause-Button</text>
+  <text x="800" y="222" text-anchor="end" font-size="26" fill="#8fa3c8">Pause button</text>
 
   <!-- drag arrow across the board -->
   <g stroke="#4db2ff" stroke-width="7" fill="none">
@@ -30,13 +30,13 @@
   <!-- ship following -->
   <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/player_trim.png" x="400" y="560" width="100" height="123"/>
 
-  <text x="450" y="852" text-anchor="middle" font-size="32" font-weight="700" fill="#eef4ff">Irgendwo ziehen — lenkt das Schiff</text>
+  <text x="450" y="852" text-anchor="middle" font-size="32" font-weight="700" fill="#eef4ff">Drag anywhere — steers the ship</text>
 
   <!-- finger-down = fire -->
   <g transform="translate(90 900)">
     <circle cx="26" cy="0" r="28" fill="#d9e6ff" fill-opacity="0.14" stroke="#d9e6ff" stroke-opacity="0.35" stroke-width="2"/>
     <circle cx="26" cy="0" r="8" fill="#eef4ff"/>
-    <text x="76" y="-6" font-size="28" font-weight="700" fill="#eef4ff">Finger halten — Dauerfeuer</text>
-    <text x="76" y="26" font-size="24" fill="#8fa3c8">loslassen stoppt sofort</text>
+    <text x="76" y="-6" font-size="28" font-weight="700" fill="#eef4ff">Hold finger — autofire</text>
+    <text x="76" y="26" font-size="24" fill="#8fa3c8">release stops instantly</text>
   </g>
 </svg>

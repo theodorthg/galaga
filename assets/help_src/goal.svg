@@ -10,22 +10,22 @@
   <rect width="900" height="980" fill="url(#bg)"/>
   <rect x="14" y="14" width="872" height="952" rx="18" fill="none" stroke="#4db2ff" stroke-opacity="0.18" stroke-width="2"/>
 
-  <text x="60" y="70" font-size="30" font-weight="700" fill="#eef4ff">Gegner &amp; Punkte</text>
+  <text x="60" y="70" font-size="30" font-weight="700" fill="#eef4ff">Enemies &amp; Points</text>
 
   <!-- Boss row -->
   <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/enemy4_trim.png" x="60" y="96" width="72" height="81"/>
-  <text x="160" y="130" font-size="30" fill="#eef4ff">Flaggschiff</text>
-  <text x="160" y="164" font-size="26" fill="#4db2ff" font-weight="700">150 Punkte</text>
+  <text x="160" y="130" font-size="30" fill="#eef4ff">Flagship</text>
+  <text x="160" y="164" font-size="26" fill="#4db2ff" font-weight="700">150 points</text>
 
   <!-- Goei row -->
   <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/enemy3_trim.png" x="60" y="196" width="72" height="71"/>
-  <text x="160" y="222" font-size="30" fill="#eef4ff">Schmetterling</text>
-  <text x="160" y="256" font-size="26" fill="#4db2ff" font-weight="700">80 Punkte</text>
+  <text x="160" y="222" font-size="30" fill="#eef4ff">Butterfly</text>
+  <text x="160" y="256" font-size="26" fill="#4db2ff" font-weight="700">80 points</text>
 
   <!-- Zako row -->
   <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/enemy2_trim.png" x="60" y="296" width="72" height="58"/>
-  <text x="160" y="322" font-size="30" fill="#eef4ff">Biene</text>
-  <text x="160" y="356" font-size="26" fill="#4db2ff" font-weight="700">50 Punkte</text>
+  <text x="160" y="322" font-size="30" fill="#eef4ff">Bee</text>
+  <text x="160" y="356" font-size="26" fill="#4db2ff" font-weight="700">50 points</text>
 
   <!-- extra formation dots to the right, suggesting the full 40-slot block -->
   <g fill="#4db2ff" fill-opacity="0.5">
@@ -37,8 +37,8 @@
   <rect x="40" y="410" width="820" height="2" fill="#4db2ff" fill-opacity="0.2"/>
 
   <!-- caption above the diving enemy, clear of the sprite and its path -->
-  <text x="790" y="450" font-size="26" fill="#8fa3c8" text-anchor="end">taucht ab,</text>
-  <text x="790" y="480" font-size="26" fill="#8fa3c8" text-anchor="end">wirft Bomben</text>
+  <text x="790" y="450" font-size="26" fill="#8fa3c8" text-anchor="end">dives down,</text>
+  <text x="790" y="480" font-size="26" fill="#8fa3c8" text-anchor="end">drops bombs</text>
 
   <!-- diving enemy with a curved path -->
   <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/enemy2_trim.png" x="668" y="500" width="60" height="48"/>
@@ -58,6 +58,6 @@
   <!-- ship -->
   <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/player_trim.png" x="360" y="760" width="120" height="148"/>
 
-  <text x="450" y="932" text-anchor="middle" font-size="28" font-weight="700" fill="#eef4ff">Ausweichen &amp; zurückschießen</text>
-  <text x="450" y="964" text-anchor="middle" font-size="24" fill="#8fa3c8">Formation komplett abgeräumt = nächste Stage</text>
+  <text x="450" y="932" text-anchor="middle" font-size="28" font-weight="700" fill="#eef4ff">Dodge &amp; shoot back</text>
+  <text x="450" y="964" text-anchor="middle" font-size="24" fill="#8fa3c8">Whole formation cleared = next stage</text>
 </svg>

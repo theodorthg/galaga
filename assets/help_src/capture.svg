@@ -20,9 +20,9 @@
   <rect x="416" y="150" width="28" height="180" fill="#c8ffe0" fill-opacity="0.5"/>
   <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/player_trim.png" x="378" y="255" width="104" height="128"/>
 
-  <text x="450" y="428" text-anchor="middle" font-size="30" font-weight="700" fill="#eef4ff">Boss fängt dein Schiff</text>
-  <text x="450" y="462" text-anchor="middle" font-size="22" fill="#8fa3c8">mit dem Traktorstrahl — ausweichen verzögert,</text>
-  <text x="450" y="490" text-anchor="middle" font-size="22" fill="#8fa3c8">verhindert es aber nicht</text>
+  <text x="450" y="428" text-anchor="middle" font-size="30" font-weight="700" fill="#eef4ff">The Boss captures your ship</text>
+  <text x="450" y="462" text-anchor="middle" font-size="22" fill="#8fa3c8">with its tractor beam — dodging delays it,</text>
+  <text x="450" y="490" text-anchor="middle" font-size="22" fill="#8fa3c8">but cannot prevent it</text>
 
   <rect x="60" y="524" width="780" height="2" fill="#4db2ff" fill-opacity="0.2"/>
 
@@ -31,7 +31,7 @@
     <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/enemy4_trim.png" x="0" y="0" width="90" height="102"/>
     <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/ship_captured.png" x="16" y="82" width="58" height="61"/>
     <rect x="42" y="150" width="6" height="60" fill="#ff4d4d"/>
-    <text x="45" y="238" text-anchor="middle" font-size="24" fill="#eef4ff">abschießen</text>
+    <text x="45" y="238" text-anchor="middle" font-size="24" fill="#eef4ff">shoot it down</text>
   </g>
 
   <g stroke="#4db2ff" stroke-width="6" fill="none">
@@ -42,11 +42,11 @@
   <g transform="translate(560 580)">
     <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/player_trim.png" x="-38" y="0" width="90" height="111"/>
     <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/player_trim.png" x="48" y="0" width="90" height="111"/>
-    <text x="45" y="150" text-anchor="middle" font-size="24" fill="#eef4ff">Zwillingsjäger</text>
+    <text x="45" y="150" text-anchor="middle" font-size="24" fill="#eef4ff">Dual fighter</text>
   </g>
 
   <rect x="60" y="846" width="780" height="2" fill="#4db2ff" fill-opacity="0.2"/>
-  <text x="450" y="896" text-anchor="middle" font-size="28" font-weight="700" fill="#eef4ff">Genau DIESEN Boss abschießen befreit dein Schiff</text>
-  <text x="450" y="936" text-anchor="middle" font-size="22" fill="#8fa3c8">Belohnung: zwei Schiffe, doppelte Feuerkraft</text>
-  <text x="450" y="964" text-anchor="middle" font-size="22" fill="#8fa3c8">bis zum nächsten Treffer</text>
+  <text x="450" y="896" text-anchor="middle" font-size="28" font-weight="700" fill="#eef4ff">Shooting down THAT Boss frees your ship</text>
+  <text x="450" y="936" text-anchor="middle" font-size="22" fill="#8fa3c8">Reward: two ships, double firepower</text>
+  <text x="450" y="964" text-anchor="middle" font-size="22" fill="#8fa3c8">until the next hit</text>
 </svg>

@@ -31,18 +31,18 @@
     <path d="M230 620 l 30 -16 l 0 32 Z"/>
     <path d="M670 620 l -30 -16 l 0 32 Z"/>
   </g>
-  <text x="450" y="674" text-anchor="middle" font-size="34" font-weight="700" fill="#eef4ff">Bewegen  =  Zielen</text>
-  <text x="450" y="710" text-anchor="middle" font-size="26" fill="#8fa3c8">das Schiff folgt dem Mauszeiger 1:1</text>
+  <text x="450" y="674" text-anchor="middle" font-size="34" font-weight="700" fill="#eef4ff">Move  =  Aim</text>
+  <text x="450" y="710" text-anchor="middle" font-size="26" fill="#8fa3c8">the ship follows the cursor 1:1</text>
 
   <!-- left click callout -->
   <g stroke="#5c6b86" stroke-width="2" fill="none">
     <path d="M110 260 L 336 300"/>
   </g>
   <circle cx="336" cy="300" r="6" fill="#4db2ff"/>
-  <text x="60" y="220" font-size="32" font-weight="700" fill="#eef4ff">Linksklick</text>
-  <text x="60" y="256" font-size="26" fill="#8fa3c8">gehalten = Dauerfeuer</text>
+  <text x="60" y="220" font-size="32" font-weight="700" fill="#eef4ff">Left click</text>
+  <text x="60" y="256" font-size="26" fill="#8fa3c8">hold = autofire</text>
 
   <!-- ship at bottom -->
   <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/player_trim.png" x="385" y="750" width="130" height="160"/>
-  <text x="450" y="944" text-anchor="middle" font-size="24" fill="#8fa3c8">Tastatur/Gamepad funktionieren gleichzeitig weiter</text>
+  <text x="450" y="944" text-anchor="middle" font-size="24" fill="#8fa3c8">keyboard/gamepad keep working alongside</text>
 </svg>

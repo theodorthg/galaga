@@ -1524,6 +1524,46 @@ Boss-Default 10000.**
   löscht den Deckel und behält die Anforderung. Alle 9 Checks grün,
   `_selftest.gd` grün. Skript danach wieder gelöscht.
 
+**Siebzehnte Playtest-Runde (2026-09-14): komplette UI-Übersetzung ins
+Englische.** Nutzerwunsch — Galaga war das einzige Projekt mit deutscher UI
+(tetris/pacman sind Englisch), die frühere „Galaga bleibt deutsch"-Ausnahme
+in der globalen CLAUDE.md ist damit gestrichen: Englisch ist ab jetzt
+Standard für JEDES Spiel hier. **Alle älteren Abschnitte dieser Datei zitieren
+noch die deutschen Bezeichnungen** („Fertig", „Weiter", „Start-Menü", „Sieg
+bei X Punkten", „BEREIT", „Standardwerte", „Eintragen", „Nochmal" …) —
+das sind historische Beschreibungen, nicht der aktuelle Stand. Mapping:
+- Buttons/Screens (`menus.gd`): Spielen→Play, Einstellungen→Settings,
+  Highscores→High Scores, Hilfe→How to Play, Beenden→Exit, Weiter→Resume
+  (Pause) bzw. Continue (Summary), Start-Menü→Main Menu, Nochmal→Play Again,
+  Eintragen→Enter, Fertig→Done, Standardwerte→Defaults, Ja/Nein→Yes/No,
+  „Neu starten?"→„Restart?", „Zurücksetzen?"→„Reset?", SIEG!→YOU WIN!.
+- Stepper: Leben→Lives, Extra-Leben→Extra life, Boss alle X Punkte→Boss every
+  X points, Sieg bei X Punkten→Win at X points, Max. Schüsse→Max. shots,
+  Schwierigkeit→Difficulty; `GameSettings.DIFF_NAMES` Leicht/Normal/Schwer→
+  Easy/Normal/Hard; Textfeld-Wert „aus"→„off" (die Eingabe akzeptiert
+  weiterhin auch „aus", damit Gewohnheit nicht zum Fehler wird).
+- Summary/Game Over: Gerettete Schiffe→Rescued ships, Gesamtpunktzahl→Total
+  score, Runden→laps, „Neuer Highscore — Platz N!"→„New high score — rank
+  N!", „N Pkt."→„N pts", Leerzustände („keine Gegner abgeschossen", „noch
+  keine Einträge") ebenfalls.
+- HUD: „BEREIT"→„READY" (`game.gd`); „STAGE n"/„LAP!"/„Laps n" waren schon
+  Englisch.
+- Sound-Unterseite: alle 15 Anzeigenamen in `sound_manager.gd::SOUNDS`
+  (Menü-Musik→Menu music, Schuss→Shot, Traktorstrahl-Fang→Tractor beam
+  capture, …). Keys/Dateinamen unverändert, `CALIB_VERSION` unverändert
+  (nur Anzeige, keine Bedeutungsänderung).
+- Hilfe: Seitentitel in `HELP_PAGES_DESKTOP/_TOUCH` (Steuerung — Tastatur→
+  Controls — Keyboard usw.) UND der eingebackene Text in allen 7
+  `assets/help_src/*.svg` (per Skript ersetzt, neu gerendert, alle 7 PNGs
+  einzeln gegengeprüft — einzige nötige Layoutkorrektur: in `bonus.svg`
+  den rechten Pfeil etwas höher gesetzt, die Spitze berührte sonst das
+  längere englische „collect").
+- Nicht angefasst: Code-Kommentare, die alte deutsche Labels zitieren (rein
+  erklärend), Persistenz-Keys, Signalnamen. Doku/Commits bleiben Deutsch.
+- Verifikation headless (`_selftest.gd` grün, Parse-Check aller Skripte) +
+  Sichtprüfung der 7 gerenderten Hilfe-PNGs; kein Live-MCP-Test, da parallel
+  die Pac-Man-Session einen Editor offen hatte (siehe sechzehnte Runde).
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,

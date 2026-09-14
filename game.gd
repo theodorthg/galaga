@@ -224,7 +224,7 @@ func _new_run() -> void:
 	_ship.visible = false
 	_ship._alive = false  # blocks shoot() during the materialize animation below
 	_ship.set_deferred("monitoring", false)
-	_hud.flash_banner("BEREIT")
+	_hud.flash_banner("READY")
 	await _play_reconstruct(_ship_spawn_pos())
 	_hud.hide_banner()
 	_ship.respawn()

@@ -43,19 +43,19 @@ const HELP_DIR := "res://assets/graphics/help/"
 # initializers need to be compile-time constant expressions, and it's not
 # worth relying on Array "+" folding there for two short lists.
 const HELP_PAGES_DESKTOP := [
-	{"file": "keyboard", "h": "Steuerung — Tastatur"},
-	{"file": "mouse", "h": "Steuerung — Maus"},
-	{"file": "goal", "h": "Ziel & Punkte"},
-	{"file": "difficulty", "h": "Schwierigkeitsstufen"},
-	{"file": "capture", "h": "Boss-Capture"},
-	{"file": "bonus", "h": "Achievements & Boni"},
+	{"file": "keyboard", "h": "Controls — Keyboard"},
+	{"file": "mouse", "h": "Controls — Mouse"},
+	{"file": "goal", "h": "Goal & Points"},
+	{"file": "difficulty", "h": "Difficulty Levels"},
+	{"file": "capture", "h": "Boss Capture"},
+	{"file": "bonus", "h": "Achievements & Bonuses"},
 ]
 const HELP_PAGES_TOUCH := [
-	{"file": "touch", "h": "Steuerung — Touch"},
-	{"file": "goal", "h": "Ziel & Punkte"},
-	{"file": "difficulty", "h": "Schwierigkeitsstufen"},
-	{"file": "capture", "h": "Boss-Capture"},
-	{"file": "bonus", "h": "Achievements & Boni"},
+	{"file": "touch", "h": "Controls — Touch"},
+	{"file": "goal", "h": "Goal & Points"},
+	{"file": "difficulty", "h": "Difficulty Levels"},
+	{"file": "capture", "h": "Boss Capture"},
+	{"file": "bonus", "h": "Achievements & Bonuses"},
 ]
 var _help_page := 0
 ## Which page set _help_pages() returns — set from game.gd (see
@@ -357,7 +357,7 @@ func _build_splash() -> Control:
 	stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	c.add_child(stack)
 
-	var lbl := _title_label("Lädt …", 16, ACCENT)
+	var lbl := _title_label("Loading …", 16, ACCENT)
 	lbl.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	stack.add_child(lbl)
 
@@ -379,12 +379,12 @@ func _build_title() -> Control:
 	var box := _box(s)
 	box.add_child(_title_label("GALAGA", 52, ACCENT))
 	box.add_child(_spacer(18))
-	box.add_child(_button("Spielen", func(): start_game.emit()))
-	box.add_child(_button("Einstellungen", func(): _open_settings("title")))
-	box.add_child(_button("Highscores", func(): show_highscores("title")))
-	box.add_child(_button("Hilfe", func(): _open_help("title")))
+	box.add_child(_button("Play", func(): start_game.emit()))
+	box.add_child(_button("Settings", func(): _open_settings("title")))
+	box.add_child(_button("High Scores", func(): show_highscores("title")))
+	box.add_child(_button("How to Play", func(): _open_help("title")))
 	if not IS_WEB:
-		box.add_child(_button("Beenden", func(): get_tree().quit()))
+		box.add_child(_button("Exit", func(): get_tree().quit()))
 	return s
 
 # ---------------------------------------------------------------- pause
@@ -393,13 +393,13 @@ func _build_pause() -> Control:
 	var box := _box(s)
 	box.add_child(_title_label("PAUSE", 40))
 	box.add_child(_spacer(14))
-	box.add_child(_button("Weiter", func(): resume_game.emit()))
-	box.add_child(_button("Einstellungen", func(): _open_settings("pause")))
-	box.add_child(_button("Highscores", func(): show_highscores("pause")))
-	box.add_child(_button("Hilfe", func(): _open_help("pause")))
-	box.add_child(_button("Start-Menü", func(): _swap("confirm_title")))
+	box.add_child(_button("Resume", func(): resume_game.emit()))
+	box.add_child(_button("Settings", func(): _open_settings("pause")))
+	box.add_child(_button("High Scores", func(): show_highscores("pause")))
+	box.add_child(_button("How to Play", func(): _open_help("pause")))
+	box.add_child(_button("Main Menu", func(): _swap("confirm_title")))
 	if not IS_WEB:
-		box.add_child(_button("Beenden", func(): get_tree().quit()))
+		box.add_child(_button("Exit", func(): get_tree().quit()))
 	return s
 
 ## Confirmation gate for "Start-Menü" from the pause screen (user request: a
@@ -411,18 +411,18 @@ func _build_pause() -> Control:
 func _build_confirm_title() -> Control:
 	var s := _screen()
 	var box := _box(s)
-	box.add_child(_title_label("Neu starten?", 26))
+	box.add_child(_title_label("Restart?", 26))
 	box.add_child(_spacer(6))
-	var msg := _title_label("Wirklich zum Start-Menü?\nDer aktuelle Lauf geht verloren.", 18)
+	var msg := _title_label("Back to the main menu?\nThe current run will be lost.", 18)
 	msg.autowrap_mode = TextServer.AUTOWRAP_WORD
 	box.add_child(msg)
 	box.add_child(_spacer(10))
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 12)
-	var no_btn := _button("Nein", func(): _swap("pause"))
+	var no_btn := _button("No", func(): _swap("pause"))
 	no_btn.custom_minimum_size = Vector2(130, TOUCH_H)
-	var yes_btn := _button("Ja", func(): to_title.emit())
+	var yes_btn := _button("Yes", func(): to_title.emit())
 	yes_btn.custom_minimum_size = Vector2(130, TOUCH_H)
 	row.add_child(no_btn)
 	row.add_child(yes_btn)
@@ -433,7 +433,7 @@ func _build_confirm_title() -> Control:
 func _build_settings() -> Control:
 	var s := _screen()
 	var box := _box(s)
-	box.add_child(_title_label("Einstellungen", 30))
+	box.add_child(_title_label("Settings", 30))
 	box.add_child(_spacer(10))
 	# GridContainer, not one HBoxContainer per row: a GridContainer sizes each
 	# COLUMN to its widest cell across every row, so </> always line up in the
@@ -446,16 +446,16 @@ func _build_settings() -> Control:
 	grid.add_theme_constant_override("h_separation", 8)
 	grid.add_theme_constant_override("v_separation", 12)
 	box.add_child(grid)
-	_lives_stepper = _add_stepper(grid, "Leben", _fmt_lives, _step_lives, _set_lives_text)
-	_add_stepper(grid, "Extra-Leben", _fmt_extra, _step_extra, _set_extra_text)
-	_add_stepper(grid, "Boss alle X Punkte", _fmt_boss_interval, _step_boss_interval, _set_boss_interval_text)
-	_add_stepper(grid, "Sieg bei X Punkten", _fmt_win_score, _step_win_score, _set_win_score_text)
-	_add_stepper(grid, "Max. Schüsse", _fmt_max_shots, _step_max_shots, _set_max_shots_text)
-	_add_stepper(grid, "Schwierigkeit", _fmt_diff, _step_diff)
+	_lives_stepper = _add_stepper(grid, "Lives", _fmt_lives, _step_lives, _set_lives_text)
+	_add_stepper(grid, "Extra life", _fmt_extra, _step_extra, _set_extra_text)
+	_add_stepper(grid, "Boss every X points", _fmt_boss_interval, _step_boss_interval, _set_boss_interval_text)
+	_add_stepper(grid, "Win at X points", _fmt_win_score, _step_win_score, _set_win_score_text)
+	_add_stepper(grid, "Max. shots", _fmt_max_shots, _step_max_shots, _set_max_shots_text)
+	_add_stepper(grid, "Difficulty", _fmt_diff, _step_diff)
 	box.add_child(_spacer(8))
-	box.add_child(_button("Standardwerte", func(): _swap("confirm_reset")))
+	box.add_child(_button("Defaults", func(): _swap("confirm_reset")))
 	box.add_child(_button("Sound", func(): _open_sound()))
-	box.add_child(_button("Fertig", func(): _close_sub()))
+	box.add_child(_button("Done", func(): _close_sub()))
 	return s
 
 ## Resets the gameplay steppers above to fixed factory defaults (user request)
@@ -484,18 +484,18 @@ func _reset_defaults() -> void:
 func _build_confirm_reset() -> Control:
 	var s := _screen()
 	var box := _box(s)
-	box.add_child(_title_label("Zurücksetzen?", 26))
+	box.add_child(_title_label("Reset?", 26))
 	box.add_child(_spacer(6))
-	var msg := _title_label("Wirklich die Einstellungen\nauf Standardwerte zurücksetzen?", 18)
+	var msg := _title_label("Really reset all settings\nto their defaults?", 18)
 	msg.autowrap_mode = TextServer.AUTOWRAP_WORD
 	box.add_child(msg)
 	box.add_child(_spacer(10))
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 12)
-	var no_btn := _button("Nein", func(): _swap("settings"))
+	var no_btn := _button("No", func(): _swap("settings"))
 	no_btn.custom_minimum_size = Vector2(130, TOUCH_H)
-	var yes_btn := _button("Ja", func(): _reset_defaults(); _swap("settings"))
+	var yes_btn := _button("Yes", func(): _reset_defaults(); _swap("settings"))
 	yes_btn.custom_minimum_size = Vector2(130, TOUCH_H)
 	row.add_child(no_btn)
 	row.add_child(yes_btn)
@@ -566,36 +566,36 @@ func _set_lives_text(t: String) -> void:
 	_cfg.lives = clampi(t.to_int(), GameSettings.LIVES_MIN, GameSettings.LIVES_MAX)
 
 func _fmt_extra() -> String:
-	return "aus" if _cfg.extra_life == 0 else str(_cfg.extra_life)
+	return "off" if _cfg.extra_life == 0 else str(_cfg.extra_life)
 func _step_extra(d: int) -> void:
 	_cfg.extra_life = clampi(_cfg.extra_life + d * GameSettings.EXTRA_STEP, 0, GameSettings.EXTRA_MAX)
 func _set_extra_text(t: String) -> void:
 	var s := t.strip_edges().to_lower()
-	if s == "" or s == "aus":
+	if s == "" or s == "off" or s == "aus":
 		_cfg.extra_life = 0
 		return
 	var n := clampi(t.to_int(), 0, GameSettings.EXTRA_MAX)
 	_cfg.extra_life = int(roundf(float(n) / GameSettings.EXTRA_STEP)) * GameSettings.EXTRA_STEP
 
 func _fmt_boss_interval() -> String:
-	return "aus" if _cfg.boss_interval == 0 else str(_cfg.boss_interval)
+	return "off" if _cfg.boss_interval == 0 else str(_cfg.boss_interval)
 func _step_boss_interval(d: int) -> void:
 	_cfg.boss_interval = clampi(_cfg.boss_interval + d * GameSettings.BOSS_INTERVAL_STEP, 0, GameSettings.BOSS_INTERVAL_MAX)
 func _set_boss_interval_text(t: String) -> void:
 	var s := t.strip_edges().to_lower()
-	if s == "" or s == "aus":
+	if s == "" or s == "off" or s == "aus":
 		_cfg.boss_interval = 0
 		return
 	var n := clampi(t.to_int(), 0, GameSettings.BOSS_INTERVAL_MAX)
 	_cfg.boss_interval = int(roundf(float(n) / GameSettings.BOSS_INTERVAL_STEP)) * GameSettings.BOSS_INTERVAL_STEP
 
 func _fmt_win_score() -> String:
-	return "aus" if _cfg.win_score == 0 else str(_cfg.win_score)
+	return "off" if _cfg.win_score == 0 else str(_cfg.win_score)
 func _step_win_score(d: int) -> void:
 	_cfg.win_score = clampi(_cfg.win_score + d * GameSettings.WIN_SCORE_STEP, 0, GameSettings.WIN_SCORE_MAX)
 func _set_win_score_text(t: String) -> void:
 	var s := t.strip_edges().to_lower()
-	if s == "" or s == "aus":
+	if s == "" or s == "off" or s == "aus":
 		_cfg.win_score = 0
 		return
 	var n := clampi(t.to_int(), 0, GameSettings.WIN_SCORE_MAX)
@@ -636,7 +636,7 @@ func _build_sound() -> Control:
 	for key in (snd.ORDER if snd else []):
 		list.add_child(_sound_row(key, snd))
 	box.add_child(_spacer(8))
-	box.add_child(_button("Fertig", func(): _swap("settings")))
+	box.add_child(_button("Done", func(): _swap("settings")))
 	return s
 
 func _sound_row(key: String, snd) -> HBoxContainer:
@@ -706,7 +706,7 @@ func _build_help() -> Control:
 	next.custom_minimum_size = Vector2(56, TOUCH_H)
 	nav.add_child(next)
 	box.add_child(nav)
-	box.add_child(_button("Fertig", func(): _swap(_return_to)))
+	box.add_child(_button("Done", func(): _swap(_return_to)))
 	return s
 
 ## Called from game.gd whenever it (re)determines whether the player is on a
@@ -780,7 +780,7 @@ func _build_gameover() -> Control:
 		if DisplayServer.has_feature(DisplayServer.FEATURE_VIRTUAL_KEYBOARD):
 			DisplayServer.virtual_keyboard_hide())
 	_name_edit.text_submitted.connect(func(_t: String): _commit_score())  # Enter/Return
-	var save_btn := _button("Eintragen", func(): _commit_score())
+	var save_btn := _button("Enter", func(): _commit_score())
 	save_btn.name = "SaveBtn"
 	var entry := HBoxContainer.new()
 	entry.name = "Entry"
@@ -802,10 +802,10 @@ func _build_gameover() -> Control:
 	box.add_child(_hof_box)
 
 	box.add_child(_spacer(8))
-	box.add_child(_button("Nochmal", func(): _maybe_auto_commit(); start_game.emit()))
-	box.add_child(_button("Start-Menü", func(): _maybe_auto_commit(); to_title.emit()))
+	box.add_child(_button("Play Again", func(): _maybe_auto_commit(); start_game.emit()))
+	box.add_child(_button("Main Menu", func(): _maybe_auto_commit(); to_title.emit()))
 	if not IS_WEB:
-		box.add_child(_button("Beenden", func(): _maybe_auto_commit(); get_tree().quit()))
+		box.add_child(_button("Exit", func(): _maybe_auto_commit(); get_tree().quit()))
 	return s
 
 ## A qualifying score that's never actually entered (player leaves the screen
@@ -860,8 +860,8 @@ func _build_summary() -> Control:
 	# of forcing a restart just to keep playing past the old target. See
 	# game.gd's _revive_after_win_edit() / _close_sub() below for the other
 	# half of this.
-	box.add_child(_button("Einstellungen", func(): _open_settings("summary")))
-	box.add_child(_button("Weiter", func(): show_game_over(_pending.score, _pending.stage, _pending.won)))
+	box.add_child(_button("Settings", func(): _open_settings("summary")))
+	box.add_child(_button("Continue", func(): show_game_over(_pending.score, _pending.stage, _pending.won)))
 	return s
 
 ## One cell of the Kills grid (see _build_summary above): a representative
@@ -877,17 +877,17 @@ func _kill_stat_col(icon: Texture2D, count: int, points: int) -> VBoxContainer:
 	icon_rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	icon_rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
 	col.add_child(icon_rect)
-	col.add_child(_title_label("%d×\n%d Pkt." % [count, points], 14))
+	col.add_child(_title_label("%d×\n%d pts" % [count, points], 14))
 	return col
 
 func _fill_summary(score: int, won: bool, rescues: int, rescue_points: int, achievements: int, laps: int, kill_stats: Array) -> void:
 	var box := _box(_screens["summary"])
-	(box.get_node("Title") as Label).text = "SIEG!" if won else "GAME OVER"
+	(box.get_node("Title") as Label).text = "YOU WIN!" if won else "GAME OVER"
 	var kills_grid := box.get_node("Kills") as GridContainer
 	for c in kills_grid.get_children():
 		c.queue_free()
 	if kill_stats.is_empty():
-		kills_grid.add_child(_title_label("— keine Gegner abgeschossen —", 15))
+		kills_grid.add_child(_title_label("— no enemies shot down —", 15))
 	else:
 		# Stable, readable order: by scoring tier, then stage-variant, with any
 		# rescue-kill bucket last (it's a Boss kill too, but a distinct enough
@@ -901,19 +901,19 @@ func _fill_summary(score: int, won: bool, rescues: int, rescue_points: int, achi
 			return a.variant_idx < b.variant_idx)
 		for e in sorted:
 			kills_grid.add_child(_kill_stat_col(e.icon, int(e.count), int(e.points)))
-	(box.get_node("Rescues") as Label).text = "Gerettete Schiffe: %d  (%d Punkte)" % [rescues, rescue_points]
-	(box.get_node("Achv") as Label).text = "Achievements: %d  (Runden: %d)" % [achievements, laps]
-	(box.get_node("Score") as Label).text = "Gesamtpunktzahl: %06d" % score
+	(box.get_node("Rescues") as Label).text = "Rescued ships: %d  (%d points)" % [rescues, rescue_points]
+	(box.get_node("Achv") as Label).text = "Achievements: %d  (laps: %d)" % [achievements, laps]
+	(box.get_node("Score") as Label).text = "Total score: %06d" % score
 	var rank_l := box.get_node("Rank") as Label
 	var rank := HallOfFame.rank_for(score)
 	rank_l.visible = rank > 0
 	if rank > 0:
-		rank_l.text = "Neuer Highscore — Platz %d!" % rank
+		rank_l.text = "New high score — rank %d!" % rank
 
 func _fill_gameover(score: int, stage: int, won := false) -> void:
 	_pending = {"score": score, "stage": stage}
 	var box := _box(_screens["gameover"])
-	(box.get_node("Title") as Label).text = "SIEG!" if won else "GAME OVER"
+	(box.get_node("Title") as Label).text = "YOU WIN!" if won else "GAME OVER"
 	(box.get_node("Sub") as Label).text = "SCORE  %06d      STAGE  %d" % [score, stage]
 	var qualifies := HallOfFame.qualifies(score)
 	box.get_node("Entry").visible = qualifies
@@ -951,7 +951,7 @@ func _render_hof_into(box: GridContainer, list: Array, highlight: int) -> void:
 	for c in box.get_children():
 		c.queue_free()
 	if list.is_empty():
-		box.add_child(_title_label("— noch keine Einträge —", 17))
+		box.add_child(_title_label("— no entries yet —", 17))
 		return
 	for i in list.size():
 		var e = list[i]
@@ -973,7 +973,7 @@ var _highscores_box: GridContainer
 func _build_highscores() -> Control:
 	var s := _screen()
 	var box := _box(s)
-	box.add_child(_title_label("Highscores", 30))
+	box.add_child(_title_label("High Scores", 30))
 	box.add_child(_spacer(10))
 	_highscores_box = GridContainer.new()
 	_highscores_box.name = "Hof"
@@ -982,7 +982,7 @@ func _build_highscores() -> Control:
 	_highscores_box.add_theme_constant_override("v_separation", 2)
 	box.add_child(_highscores_box)
 	box.add_child(_spacer(10))
-	box.add_child(_button("Fertig", func(): _swap(_return_to)))
+	box.add_child(_button("Done", func(): _swap(_return_to)))
 	return s
 
 # ---------------------------------------------------------------- misc
