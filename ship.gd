@@ -57,6 +57,11 @@ var viewport_width := 0.0
 
 var _alive := true
 var _invuln := 0.0
+## Set by enemy.gd for the whole span of a Boss capture attempt (capture_dive()
+## through _begin_capture_beam()'s timer) — see set_capture_invulnerable()
+## below for why this exists as its own flag instead of just reusing _invuln.
+var _capture_invuln := false
+var _capture_blink_t := 0.0
 var _mouse_aim := false
 var _mouse_down := false
 ## Actual finger-on-screen state — distinct from "this device supports touch
@@ -111,7 +116,14 @@ func apply_touch_layout() -> void:
 	_update_home_y.call_deferred()
 
 func _process(delta: float) -> void:
-	if _invuln > 0.0:
+	if _capture_invuln:
+		# Same blink as the post-respawn window below, just driven by a
+		# steadily-increasing clock instead of a countdown — this window has
+		# no fixed length (it lasts exactly as long as the Boss's current
+		# capture attempt takes, see set_capture_invulnerable()).
+		_capture_blink_t += delta
+		modulate.a = 0.35 + 0.4 * (0.5 + 0.5 * sin(_capture_blink_t * 32.0))
+	elif _invuln > 0.0:
 		_invuln -= delta
 		modulate.a = 0.35 + 0.4 * (0.5 + 0.5 * sin(_invuln * 32.0))
 		if _invuln <= 0.0:
@@ -186,8 +198,15 @@ func _fire_laser(x_offset: float) -> void:
 func _on_area_entered(area: Area2D) -> void:
 	if not _alive or _invuln > 0.0:
 		return
+	var is_capture := area.is_in_group("capture_beam")
+	# _capture_invuln blocks everything EXCEPT the capture beam's own contact —
+	# that contact is the capture itself (still needs to reach _destroy() below
+	# to hide the ship / trigger the respawn flow, just without an explosion).
+	# Only bombs, rams, or (in principle) some other Boss's beam get ignored
+	# during this window — see set_capture_invulnerable().
+	if _capture_invuln and not is_capture:
+		return
 	if area.is_in_group("enemy_shots"):
-		var is_capture := area.is_in_group("capture_beam")
 		area.queue_free()
 		_destroy(not is_capture)
 	elif area.is_in_group("enemy") and area.is_active_diver():
@@ -202,11 +221,36 @@ func _destroy(show_explosion := true) -> void:
 		_snd.play("ship-destroyed")
 	died.emit(show_explosion)
 
+## Called by enemy.gd for the whole duration of a Boss capture attempt (from
+## capture_dive() to just before _begin_return()) — user report/request
+## 2026-09-14: the ship dying to something ELSE (a bomb, a ram, another Boss's
+## own capture beam extending at the same time) mid-attempt made the capture
+## itself abort with no reward, since ship.gd's own collision handling and
+## capture_beam.gd's "caught" detection both fire off the very same beam-vs-
+## ship overlap — trying to tell "died to something else" apart from "this is
+## the catch itself" after the fact (e.g. checking _alive from the beam's side)
+## is a losing race: both handlers respond to the identical physics event, so
+## which one runs first isn't something to depend on (an earlier attempt at
+## exactly that check made the capture fail almost every time — see CLAUDE.md).
+## The user's own proposed fix, implemented here instead: while a capture is
+## in progress, the ship simply CANNOT be destroyed by anything else at all —
+## same blinking look as the post-respawn window (_invuln above), just for as
+## long as the capture attempt takes rather than a fixed duration.
+func set_capture_invulnerable(on: bool) -> void:
+	_capture_invuln = on
+	if not on and _invuln <= 0.0:
+		modulate.a = 1.0
+
 func respawn() -> void:
 	position.x = viewport_width * 0.5
 	_alive = true
 	visible = true
 	_invuln = RESPAWN_INVULN
+	# Safety net for the vanishingly rare case where the Boss carrying the
+	# capture attempt got freed (e.g. a quit-to-title mid-beam) before it could
+	# call set_capture_invulnerable(false) itself — a fresh ship should never
+	# start out permanently unkillable.
+	_capture_invuln = false
 	set_deferred("monitoring", true)
 
 ## Applies GameSettings.max_shots — called on every new run and again whenever

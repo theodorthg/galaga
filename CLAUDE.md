@@ -1898,6 +1898,63 @@ direkt nach der Zwanzigsten Runde.
   automatisch beim Erscheinen abgeschossen) und bestätigte die neue
   Punkte-Anzeige im Banner-Text direkt. Beide Skripte danach gelöscht.
 
+**Zweiundzwanzigste Playtest-Runde (2026-09-14): Boss-Fang-Regression aus der
+Einundzwanzigsten Runde korrigiert — Schiff jetzt während des gesamten
+Fangvorgangs unzerstörbar statt eines `_alive`-Checks im Strahl.** Nutzer-
+Report direkt nach dem letzten Fix: „Werde ich durch den Boss gefangen und
+sterbe nicht durch etwas anderes, bricht der Boss den Fangvorgang trotzdem ab
+und ich kann niemals ein Doppelschiff bekommen."
+- **Ursache der Regression**: die vorige Runde hatte
+  `capture_beam.gd::_on_area_entered()` um `and area._alive` erweitert, als
+  zweite Absicherung gegen den (echten) Randfall „Schiff stirbt durch etwas
+  anderes, während der Strahl schon unterwegs ist". Das Problem dabei: der
+  eigentliche Fang UND `ship.gd`s eigene Zerstörung reagieren auf **dasselbe**
+  physische Kollisionsereignis (Strahl berührt Schiff) — `ship.gd::
+  _on_area_entered()` setzt `_alive = false`, GENAU DASSELBE Ereignis lässt
+  auch `capture_beam.gd::_on_area_entered()` feuern. Welcher der beiden
+  Handler zuerst dran ist, ist nicht sinnvoll vorhersagbar/kontrollierbar —
+  in der Praxis lief es offenbar so, dass `_alive` beim Prüfen im Strahl
+  schon `false` war, wodurch praktisch JEDER echte Fang (nicht nur der
+  seltene Race-Fall) als „Schiff war eh schon tot" fehlinterpretiert und
+  verworfen wurde. Der `area._alive`-Check in `capture_beam.gd` ist deshalb
+  komplett zurückgenommen (Datei wieder auf den Stand vor der
+  Einundzwanzigsten Runde).
+- **Nutzervorschlag umgesetzt statt eines erneuten Nach-der-Tat-Checks**:
+  „Sobald der Boss-Fangvorgang eingeleitet ist, darf und kann das Schiff
+  nicht durch etwas anderes zerstört werden." Neues `ship.gd::
+  set_capture_invulnerable(bool)` + Feld `_capture_invuln` — von `enemy.gd`
+  gesetzt für die GESAMTE Dauer eines Fangversuchs: `true` gleich zu Beginn
+  von `capture_dive()` (Zustand CAPTURE_APPROACH), `false` erst nachdem der
+  Strahl seine volle `CAPTURE_BEAM_TOTAL`-Zeit durchlaufen hat, unmittelbar
+  bevor `_begin_return()` läuft. Während dieses Fensters ignoriert
+  `ship.gd::_on_area_entered()` jeden Treffer AUSSER dem des Strahls selbst
+  (`area.is_in_group("capture_beam")`) — der Strahl-Kontakt muss weiterhin
+  ganz normal durchgehen (`_destroy(false)`, versteckt das Schiff, löst die
+  Rettungs-/Twin-Belohnungskette aus), nur Bomben/Rammstöße/anderweitige
+  Treffer werden in diesem Fenster wirkungslos. Damit löst sich der
+  eigentliche Race auf, ohne die Reihenfolge zweier unabhängiger
+  Signal-Handler beweisen zu müssen: es gibt schlicht nichts anderes mehr,
+  das dem Schiff in diesem Fenster etwas anhaben könnte. Visuell wie
+  gewünscht: dasselbe Blinken wie beim kurzen Unverwundbarkeits-Fenster nach
+  einem Respawn (`_invuln`), nur über eine laufende Uhr statt einen
+  Countdown gesteuert, da die Fangdauer variabel ist (Anflugzeit + feste
+  Strahl-Dauer). `respawn()` setzt `_capture_invuln` sicherheitshalber immer
+  mit zurück, falls ein Boss durch einen Stage-Abbruch mitten im Fang
+  verschwindet, bevor er selbst aufräumen konnte.
+- **Verifikation**: zwei Wegwerf-Headless-Tests. Der erste testete die
+  Einzelteile direkt (ein simulierter Bomben-Treffer während
+  `_capture_invuln` wird ignoriert; ein simulierter Strahl-Treffer geht
+  trotz `_capture_invuln` durch und versteckt das Schiff korrekt mit
+  `show_explosion=false`; `respawn()` setzt die Sperre zurück; ein echter
+  `capture_dive()`-Aufruf setzt sie, `_begin_capture_beam()`s echter Timer
+  hebt sie nach Ablauf wieder auf) — 8/8 grün. Der zweite lief den
+  KOMPLETTEN Fang über echte Area2D-Physik (nicht nur direkte
+  Methodenaufrufe) — echter `capture_dive()`, echtes Homing, echter
+  Strahl-Kontakt — und bestätigte: `caught`-Signal feuert, der Boss trägt
+  danach eine Gefangene, das Schiff ist korrekt deaktiviert. Genau der Pfad,
+  den die vorige Runde kaputt gemacht hatte, funktioniert jetzt wieder end
+  to end.
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,
@@ -2394,6 +2451,17 @@ und „Boss-Capture" weiter oben für Details.
     `CALIB_VERSION` hochzählen, damit alte gespeicherte Werte verworfen
     werden. Gehört zum angekündigten „Sound-Finetuning" (Pausen zwischen
     Sounds usw.) als eigene Runde.
+13. **Landscape-Letterbox-Bilder für Geräte ohne Hochkant** (Nutzer,
+    2026-09-14, vorgemerkt): `arcade-screen1.png`/`arcade-screen2.png` (im
+    Projekt-Wurzelverzeichnis, vom Nutzer abgelegt) sind für Geräte gedacht,
+    die gar kein Hochkant-Format kennen (Nutzerbeispiel: Anbernic R552) — sie
+    sollen den linken/rechten schwarzen Rand kaschieren, der dort neben dem
+    Hochkant-Spielfeld entsteht. **`arcade-screen1.png` ist die bevorzugte
+    Wahl**, `arcade-screen2.png` die Alternative. Noch nicht eingebaut — noch
+    zu klären: wo genau im Rendering das eingehängt wird (vermutlich ein
+    Hintergrund-Layer hinter/neben dem eigentlichen `CONTENT_SCALE_ASPECT_
+    KEEP`-Letterbox-Bereich auf Nicht-Touch-Geräten mit falscher Ratio) —
+    eigene Runde, sobald der Nutzer konkret danach fragt.
 
 ## Aseprite MCP Pro
 

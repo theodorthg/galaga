@@ -139,8 +139,16 @@ func capture_dive() -> void:
 		return
 	_formation.release(self)
 	_state = CAPTURE_APPROACH
+	_set_player_capture_invuln(true)
 	if _snd:
 		_snd.play("dive")
+
+## See ship.gd::set_capture_invulnerable() for why the whole attempt (not just
+## the beam itself) needs to make the ship immune to any OTHER source of death.
+func _set_player_capture_invuln(on: bool) -> void:
+	var player := get_tree().get_first_node_in_group("player")
+	if player:
+		player.set_capture_invulnerable(on)
 
 func _home_toward_player(delta: float) -> void:
 	var player := get_tree().get_first_node_in_group("player")
@@ -181,6 +189,7 @@ func _begin_capture_beam() -> void:
 	await get_tree().create_timer(CAPTURE_BEAM_TOTAL, false).timeout
 	if not is_instance_valid(self):
 		return
+	_set_player_capture_invuln(false)
 	_begin_return()
 
 ## Smaller than the player's own Sprite2D scale (0.11) and closer to the Boss

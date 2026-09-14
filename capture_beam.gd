@@ -37,12 +37,7 @@ func _ready() -> void:
 	queue_redraw()
 
 func _on_area_entered(area: Area2D) -> void:
-	# area._alive: belt-and-suspenders against the same "captured a ship that
-	# isn't there" bug stage_director.gd's _attempt_capture_dive() now guards
-	# against at the source (see there) — covers the rarer race where the ship
-	# dies to something else (a bomb, a ram) WHILE this beam is already
-	# extending toward it.
-	if not _caught and area.is_in_group("player") and area._alive:
+	if not _caught and area.is_in_group("player"):
 		_caught = true
 		caught.emit()
 
