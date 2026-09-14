@@ -9,7 +9,7 @@ extends Node2D
 ##   GAME_OVER — lives spent; menus.gd shows the board
 ## Pause (in-game) freezes the tree and shows the pause menu.
 
-enum { TITLE, READY, ENTERING, FORMATION, GAME_OVER }
+enum { TITLE, READY, ENTERING, FORMATION, GAME_OVER, BONUS }
 
 const GAME_OVER_DELAY := 1.0
 const RECONSTRUCT_SCENE := preload("res://ship_reconstruct.tscn")
@@ -30,6 +30,22 @@ const BONUS_INTERVAL_MAX := 16.0
 ## freed captive itself, not the Boss that was carrying it.
 const RESCUE_ICON := preload("res://assets/graphics/ship_captured.png")
 
+const BONUS_ENEMY_SCENE := preload("res://bonus_enemy.tscn")
+const SHIP_WARP_SCENE := preload("res://ship_warp.tscn")
+## Bonus Level (GameSettings.bonus_level_interval — user proposal 2026-09-14):
+## instead of the normal 40-slot formation, WAVE_COUNT straight chains of
+## ENEMIES_PER_WAVE enemies each cross the screen once, no dive/bomb/capture,
+## no way to lose a life (bonus_enemy.gd isn't in the "enemy" group ship.gd
+## reacts to) — pure shooting-gallery scoring, modeled on the arcade
+## "challenging stage". CHAIN_GAP offsets each enemy's start/end point
+## vertically by the same amount, which keeps them moving in lockstep on
+## parallel lines — reads as one stacked chain entering and crossing together
+## rather than a synchronized time-delay trick.
+const BONUS_WAVE_COUNT := 3
+const BONUS_ENEMIES_PER_WAVE := 6
+const BONUS_CHAIN_GAP := 70.0
+const BONUS_WAVE_PAUSE := 1.2
+
 @onready var _formation: Formation = $Formation
 @onready var _director: StageDirector = $StageDirector
 @onready var _ship: Area2D = $Ship
@@ -47,6 +63,8 @@ var _touch := false
 var _paused := false
 var _snd: Node
 var _bonus_t := 0.0
+var _bonus_hits := 0
+var _bonus_total := 0
 var _boss_interval := 0
 var _next_boss_score := 0
 var _win_score := 0
@@ -289,6 +307,25 @@ func _start_ready() -> void:
 	_hud.set_stage(_stage)
 	if not await _wait_sound_then_gap("level-cleared"):
 		return
+	# Bonus Level: replaces the whole normal formation/fly-in for this stage
+	# number, every bonus_level_interval stages (0 = off). Checked here, not
+	# in _process()'s stage-clear block, so it also fires correctly right
+	# after a fresh _new_run() lands on stage 1 in the (silly but possible)
+	# case of interval == 1.
+	var interval := int(_cfg.get("bonus_level_interval", 0))
+	if interval > 0 and _stage % interval == 0:
+		_hud.flash_banner("BONUS LEVEL")
+		if _snd:
+			_snd.play("stage")
+		await get_tree().create_timer(Hud.BANNER_TOTAL).timeout
+		if not is_instance_valid(self) or _state != READY:
+			return
+		if not await _wait_sound_then_gap("stage"):
+			return
+		_hud.hide_banner()
+		_state = BONUS
+		_start_bonus_level()
+		return
 	_hud.flash_banner("STAGE %d" % _stage)
 	# Stage 1 of a fresh run has its own, much longer intro (6.9 s,
 	# start-first-level-music) — that IS the fanfare there, so the 2.6 s
@@ -309,6 +346,80 @@ func _start_ready() -> void:
 	_hud.hide_banner()
 	_state = ENTERING
 	_director.start_stage(_stage)
+
+# --- Bonus Level -----------------------------------------------------
+## Fires each wave in turn (enemy-wave1.ogg re-announces every single one,
+## per the user's plan for this sound key — see CLAUDE.md item 11), waits for
+## all of a wave's enemies to resolve before starting the next, then plays
+## the warp transition and moves on to the next normal stage. Aborts cleanly
+## if the run leaves BONUS meanwhile (pause doesn't count — the tree itself
+## freezes then; this only guards against title/game-over).
+func _start_bonus_level() -> void:
+	_bonus_hits = 0
+	_bonus_total = BONUS_WAVE_COUNT * BONUS_ENEMIES_PER_WAVE
+	var vp := get_viewport_rect().size
+	# Three lanes, alternating enemy sprite/entry side/exit side each time, so
+	# no two waves look or move the same way (user spec). Boss last — biggest,
+	# most points, comes straight down the middle.
+	var wave_defs := [
+		{"kind": EnemyKinds.ZAKO, "start": Vector2(vp.x * 0.18, -40.0), "end": Vector2(vp.x * 0.82, vp.y + 60.0)},
+		{"kind": EnemyKinds.GOEI, "start": Vector2(vp.x * 0.82, -40.0), "end": Vector2(vp.x * 0.18, vp.y + 60.0)},
+		{"kind": EnemyKinds.BOSS, "start": Vector2(vp.x * 0.5, -40.0), "end": Vector2(vp.x * 0.5, vp.y + 60.0)},
+	]
+	for wd in wave_defs:
+		if _state != BONUS:
+			return
+		await _run_bonus_wave(wd["kind"], wd["start"], wd["end"])
+	if _state != BONUS:
+		return
+	_finish_bonus_level()
+
+func _run_bonus_wave(kind: int, start: Vector2, end: Vector2) -> void:
+	if _snd:
+		_snd.play("enemy-wave1")
+	var vis := EnemyKinds.pick_visual(kind, _stage)
+	var tex: String = vis["frames"][0] if vis.get("frames", []).size() == 2 else vis["texture"]
+	var pending := BONUS_ENEMIES_PER_WAVE
+	for i in BONUS_ENEMIES_PER_WAVE:
+		var off := Vector2(0.0, -float(i) * BONUS_CHAIN_GAP)
+		var curve := Curve2D.new()
+		curve.add_point(start + off)
+		curve.add_point(end + off)
+		var e := BONUS_ENEMY_SCENE.instantiate()
+		add_child(e)
+		e.resolved.connect(func(): pending -= 1)
+		e.killed.connect(_on_bonus_enemy_killed)
+		e.setup(kind, curve, tex, float(vis["scale"]))
+	while pending > 0:
+		await get_tree().process_frame
+		if _state != BONUS:
+			return
+	await get_tree().create_timer(BONUS_WAVE_PAUSE).timeout
+
+func _on_bonus_enemy_killed(points: int) -> void:
+	_bonus_hits += 1
+	if _ship._hyper_ammo:
+		points *= 2
+	_score += points
+	_hud.set_score(_score)
+
+func _finish_bonus_level() -> void:
+	var perfect := _bonus_hits == _bonus_total
+	_hud.flash_banner("PERFECT!" if perfect else "BONUS: %d/%d" % [_bonus_hits, _bonus_total])
+	if _snd:
+		_snd.play("bonus-stage-cleared" if perfect else "level-cleared")
+	await get_tree().create_timer(Hud.BANNER_TOTAL).timeout
+	if not is_instance_valid(self) or _state != BONUS:
+		return
+	_hud.hide_banner()
+	var warp := SHIP_WARP_SCENE.instantiate()
+	add_child(warp)
+	warp.global_position = _ship.global_position
+	await warp.warp_done
+	if not is_instance_valid(self) or _state != BONUS:
+		return
+	_stage += 1
+	_start_ready()
 
 ## Waits until `key` has stopped playing (skips the wait if it isn't), then
 ## STAGE_JINGLE_GAP more. False if the run left READY meanwhile (menu, title).
@@ -565,7 +676,7 @@ func _spawn_score_popup(at: Vector2, text: String) -> void:
 
 # --- helpers -----------------------------------------------------
 func _clear_board() -> void:
-	for group in ["enemy", "player_lasers", "enemy_shots", "bonus_item"]:
+	for group in ["enemy", "player_lasers", "enemy_shots", "bonus_item", "bonus_transient"]:
 		for n in get_tree().get_nodes_in_group(group):
 			n.queue_free()
 	_formation.reset()

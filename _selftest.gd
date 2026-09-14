@@ -16,6 +16,8 @@ const SCRIPTS := [
 	"res://attack_paths.gd",
 	"res://stage_director.gd",
 	"res://bomb.gd",
+	"res://bonus_enemy.gd",
+	"res://ship_warp.gd",
 	"res://game.gd",
 	"res://hud.gd",
 	"res://ui_style.gd",

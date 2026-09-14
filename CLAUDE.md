@@ -1592,6 +1592,96 @@ sofort, Bonuslevel danach, Lautstärke-Defaults nur vorgemerkt, siehe
   Live-Test möglich (Pac-Man-Session hält den Editor/MCP), beim nächsten
   Playtest bitte gegenhören.
 
+**Neunzehnte Playtest-Runde (2026-09-14): Bonuslevel mit drei Gegner-Wellen.**
+Nutzervorschlag aus der vorigen Runde, noch am selben Tag freigegeben
+(„auch gleich ans Werk machen"). Neue Dateien `bonus_enemy.gd`/`.tscn`
+(ein Gegner in einer Welle) und `ship_warp.gd`/`.tscn` (Übergangs-Animation),
+Rest lebt direkt in `game.gd`.
+- **Auslöser**: neue Einstellung „Bonus level every X stages"
+  (`GameSettings.bonus_level_interval`, Default 3, 0 = aus,
+  `BONUS_LEVEL_INTERVAL_MAX` = 10, Stepper zwischen „Difficulty" und dem
+  Sound-Button in `menus.gd`, auch im „Standardwerte"-Reset). Geprüft in
+  `game.gd::_start_ready()`, direkt nach dem `level-cleared`-Ausklingen: ist
+  `_stage % interval == 0`, läuft statt der normalen Formation/Fly-in ein
+  Bonuslevel — banner „BONUS LEVEL" (gleicher `flash_banner()`-Mechanismus
+  wie „STAGE n"/„READY"/„LAP!"), dann derselbe Jingle+Gap-Ablauf wie bei
+  einer normalen Stage (Punkt „Achtzehnte Playtest-Runde" oben), dann
+  `_state = BONUS` (neuer State neben TITLE/READY/ENTERING/FORMATION/
+  GAME_OVER) statt `ENTERING`.
+- **Drei Wellen, drei unterschiedliche Bahnen** (`_start_bonus_level()`):
+  Zako von links-oben nach rechts-unten, Goei von rechts-oben nach
+  links-unten, Boss senkrecht durch die Mitte — Sprite, Start- UND Endpunkt
+  wechseln also bei jeder Welle komplett, wie vom Nutzer verlangt. Jede
+  Welle: `BONUS_ENEMIES_PER_WAVE` (6) `bonus_enemy`-Instanzen auf
+  PARALLELEN Geraden (Start- UND Endpunkt beide um `i * BONUS_CHAIN_GAP`
+  (70 px) nach oben verschoben) — das ergibt eine Kette, die als starrer
+  Block „übereinander aufgereiht" startet und gemeinsam zum Zielpunkt
+  wandert, ohne Zeitversatz-Tricks. `enemy-wave1.ogg` spielt pro Welle neu
+  (das war der ursprüngliche, für den normalen Stage-Start versehentlich
+  verdrahtete Zweck, siehe „Vierzehnte"/„Fünfzehnte Playtest-Runde" — jetzt
+  endlich am richtigen Ort). Nächste Welle startet erst, wenn alle 6 Gegner
+  der vorigen `resolved` haben (getroffen oder am Bahnende angekommen), plus
+  `BONUS_WAVE_PAUSE` (1,2 s) Luft dazwischen.
+- **Design-Entscheidungen, die die alten „noch zu klären"-Fragen beantworten**
+  (bewusst getroffen statt weiter offen gelassen, passend zum
+  Arcade-Vorbild „Challenging Stage"):
+  - **Kein Gegnerfeuer, keine Sturzflüge, kein Lebensrisiko.**
+    `bonus_enemy.gd` ist absichtlich NICHT in der Gruppe `"enemy"` —
+    `ship.gd::_on_area_entered()` reagiert nur auf genau diese Gruppe für
+    Rammschaden, ein Bonuslevel kann also grundsätzlich kein Leben kosten.
+    Die Ketten fliegen einfach geradeaus durch und lösen sich am Bahnende
+    auf, egal ob getroffen oder nicht.
+  - **Punkte**: jeder Treffer gibt `EnemyKinds.DATA[kind]["points"]` (dieselben
+    50/80/150 wie in der normalen Formation), Hyper-Ammo verdoppelt auch
+    hier. Kein separates Punkteschema — bewusst konsistent mit dem Rest des
+    Spiels statt einer neuen Zahl, die erst noch kalibriert werden müsste.
+  - **Konsequenz eines nicht perfekten Durchlaufs**: keine. Ein verpasster
+    Gegner verschwindet einfach am Bahnende, es gibt weder Strafe noch
+    Zeitdruck. Nach allen 3 Wellen zeigt der Banner „PERFECT!" (alle 18
+    getroffen, spielt `bonus-stage-cleared`) oder „BONUS: N/18" (spielt
+    `level-cleared`) — reiner Bonus-Charakter, kein Muss.
+  - Gegner-Sprites: aus dem bestehenden Zako/Goei/Boss-Pool (`EnemyKinds`,
+    `pick_visual(kind, _stage)` inkl. der ab Stage 2 üblichen Gyaraga-
+    Varianten) — keine eigene Bonuslevel-exklusive Optik, um nicht noch mehr
+    unverifizierte neue Assets ins Spiel zu bringen.
+- **Übergang zur nächsten normalen Stage**: `ship-warp-drive.gif` (19 Frames,
+  100×100, bis dahin ungenutzt) → `ship_warp.gd`/`.tscn`, exakt nach dem
+  Muster von `ship_reconstruct.gd`/`ship_explosion.gd` (SpriteFrames zur
+  Laufzeit gebaut, `warp_done`-Signal, self-`queue_free()`). Frames per
+  `PIL`/Farbschlüssel (`max(R,G,B) > 8`) freigestellt (dieselbe Technik wie
+  beim Reconstruct-Gif) nach `assets/graphics/warp_f00..18.png`. Läuft in
+  `_finish_bonus_level()` an der Schiffsposition, danach `_stage += 1` und
+  ganz normal `_start_ready()` — die nächste Stage ist wieder eine normale
+  Formation (außer der neue Interval-Wert trifft direkt wieder). **Nicht
+  live geprüft**: `ship_warp.gd::DISPLAY_SCALE = 1.2` ist eine Schätzung
+  ohne Bildvergleich gegen die echte Schiffsgröße (kein Editor/MCP-Zugriff
+  diese Runde) — beim nächsten Playtest gegenchecken.
+- **Aufräumen beim Abbruch**: `game.gd::_clear_board()` (läuft u. a. beim
+  Wechsel zum Titelbildschirm) räumt jetzt zusätzlich die neue Gruppe
+  `"bonus_transient"` leer (geteilt von `bonus_enemy.gd` UND `ship_warp.gd`)
+  — sonst blieben mitten in einem Bonuslevel gespawnte Ketten oder eine
+  laufende Warp-Animation beim Verlassen zum Start-Menü als Waisen im
+  Baum stehen.
+- **Verifikation**: kein Live-Test möglich (Pac-Man-Session hält Editor/MCP
+  diese Runde), aber ein waschechter funktionaler Headless-Test statt nur
+  Parse-Check — ein Wegwerf-`SceneTree`-Skript hat `game.tscn` komplett
+  instanziiert (echte Autoloads, echter `Ship`/`HUD`/`Menus`), den
+  Auslöse-Bedingungscheck geprüft (Stage 3 bei Intervall 3 löst aus, Stage 4
+  nicht), `_start_bonus_level()` direkt aufgerufen, die 6 Ketten-Gegner der
+  ersten Welle gezählt und ihren Abstand vermessen (exakt 70 px, wie
+  `BONUS_CHAIN_GAP`), alle 6 „erschossen" und Punktegutschrift + Zähler
+  geprüft (0→300 für 6× Zako-Kill), dann `_enter_title()` mitten in der
+  Welle aufgerufen und bestätigt, dass keine Knoten übrig bleiben. Alle 8
+  Prüfungen grün. Dabei außerdem geklärt, warum ein früherer Testversuch mit
+  reinem Frame-Zählen (`await process_frame` in einer Schleife) hängen
+  blieb: in einem headless `SceneTree`-Skript laufen Frames ungebremst
+  extrem schnell durch, Sekunden an simulierter Wartezeit (Banner-/
+  Jingle-Timer) brauchen also viel mehr als ein paar hundert Iterationen —
+  kein Bug im Spiel selbst, per separatem Audio-Timing-Test bestätigt
+  (`create_timer()`/`is_playing()` verhalten sich headless korrekt, echte
+  Millisekunden vergehen wie erwartet). Bestätigt nebenbei, dass auch die
+  „Achtzehnte Playtest-Runde"s Jingle-Gap-Logik strukturell in Ordnung ist.
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,
@@ -2068,36 +2158,10 @@ und „Boss-Capture" weiter oben für Details.
     nächste Runde nach Prüfung des aktuellen Stands durch den Nutzer. Die
     Ziel-Seite hat seit 2026-09-12 schon eine Icon-Legende (Punkt 3 oben), die
     beiden Steuerungs-Seiten sind weiterhin reiner Text.
-11. **Bonuslevel mit mehreren Gegner-Wellen** (Nutzervorschlag 2026-09-14,
-    Umsetzung am 2026-09-14 vom Nutzer freigegeben — „auch gleich ans Werk";
-    Stand siehe unterste Playtest-Runde) — statt der normalen 40er-Formation
-    fliegen mehrere Wellen (Vorschlag: 3) von Gegnern nacheinander ein, jede
-    Welle eine einfache, gerade Kette (schlicht übereinander aufgereiht, kein
-    Formations-Slot-Raster) von oben nach unten. Jede Welle unterscheidet
-    sich von der vorigen in Sprite/-Typ, Start-x-Position (oben) UND
-    Bewegungs-Zielpunkt — wechselt also jedes Mal komplett, nicht nur das
-    Aussehen. Auftakt: alle N Stages (Nutzervorschlag: N=3), N soll als
-    eigene Einstellung wählbar sein (analog zu `boss_interval`/`win_score` —
-    eigener Eintrag in `GameSettings`, eigener Stepper in `menus.gd`).
-    Vorgesehene Bausteine, die schon vorhanden/vorbereitet sind:
-    - `enemy-wave1.ogg` (Sound-Key existiert bereits, aktuell unbenutzt seit
-      der versehentlichen Verdrahtung an den normalen Stage-Start in der
-      dreizehnten Playtest-Runde — siehe „Vierzehnte Playtest-Runde" — wurde
-      dort wieder entfernt, genau für DIESEN Zweck aufgehoben): soll pro
-      Welle (nicht nur einmal pro Bonuslevel) erneut abgespielt werden, wenn
-      die jeweils nächste Welle wirklich angekündigt wird.
-    - `ship-warp-drive.gif` (19 Frames, 100×100, bislang ungenutzt): Übergang
-      NACH einem abgeschlossenen Bonuslevel, auf dem Weg zur nächsten
-      normalen Stage — analog zu `ship_reconstruct.gd`s Aufbau (einmalige
-      `AnimatedSprite2D`-Animation, Frames extrahieren, Signal, self-free).
-    - Zentrales „Bonus-Level"-Banner beim Start, kurz eingeblendet (gleicher
-      Mechanismus wie `hud.gd::flash_banner()`, das schon „STAGE n"/„BEREIT"/
-      „LAP!" kann).
-    Noch zu klären, bevor das umgesetzt wird: welche Gegner-Sprites pro Welle
-    (eigene Auswahl oder aus dem bestehenden Zako/Goei/Boss-Pool?), ob es
-    während des Bonuslevels Gegnerfeuer/Sturzflüge gibt oder die Ketten nur
-    geradeaus durchfliegen, Punktevergabe-Schema, und ob ein verpasster/nicht
-    abgeschlossener Bonuslevel-Durchlauf irgendeine Konsequenz hat.
+11. **Bonuslevel mit mehreren Gegner-Wellen** — erledigt, siehe „Neunzehnte
+    Playtest-Runde" unten für den vollen Stand und die dabei selbst
+    getroffenen Design-Entscheidungen (Gegnerfeuer, Punkte, Konsequenz eines
+    verpassten Durchlaufs — alles bewusst entschieden, nicht mehr offen).
 12. **Lautstärke-Defaults nachziehen** (Nutzer, 2026-09-14, vorgemerkt): die
     15 Sound-Defaults/`base_db` in `sound_manager.gd::SOUNDS` sind seit dem
     Sound-Austausch (dreizehnte Runde) neutrale Platzhalter (`base_db` 0.0,

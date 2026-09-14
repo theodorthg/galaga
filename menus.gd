@@ -452,6 +452,7 @@ func _build_settings() -> Control:
 	_add_stepper(grid, "Win at X points", _fmt_win_score, _step_win_score, _set_win_score_text)
 	_add_stepper(grid, "Max. shots", _fmt_max_shots, _step_max_shots, _set_max_shots_text)
 	_add_stepper(grid, "Difficulty", _fmt_diff, _step_diff)
+	_add_stepper(grid, "Bonus level every X stages", _fmt_bonus_interval, _step_bonus_interval, _set_bonus_interval_text)
 	box.add_child(_spacer(8))
 	box.add_child(_button("Defaults", func(): _swap("confirm_reset")))
 	box.add_child(_button("Sound", func(): _open_sound()))
@@ -476,6 +477,7 @@ func _reset_defaults() -> void:
 	_cfg.win_score = 0
 	_cfg.max_shots = 2
 	_cfg.difficulty = 1
+	_cfg.bonus_level_interval = 3
 	_refresh_settings()
 
 ## Confirmation gate for "Standardwerte" (user request: a misclick shouldn't
@@ -610,6 +612,17 @@ func _set_max_shots_text(t: String) -> void:
 func _fmt_diff() -> String: return GameSettings.DIFF_NAMES[_cfg.difficulty]
 func _step_diff(d: int) -> void:
 	_cfg.difficulty = clampi(_cfg.difficulty + d, 0, 2)
+
+func _fmt_bonus_interval() -> String:
+	return "off" if _cfg.bonus_level_interval == 0 else str(_cfg.bonus_level_interval)
+func _step_bonus_interval(d: int) -> void:
+	_cfg.bonus_level_interval = clampi(_cfg.bonus_level_interval + d, 0, GameSettings.BONUS_LEVEL_INTERVAL_MAX)
+func _set_bonus_interval_text(t: String) -> void:
+	var s := t.strip_edges().to_lower()
+	if s == "" or s == "off" or s == "aus":
+		_cfg.bonus_level_interval = 0
+		return
+	_cfg.bonus_level_interval = clampi(t.to_int(), 0, GameSettings.BONUS_LEVEL_INTERVAL_MAX)
 
 # ---------------------------------------------------------------- sound
 func _build_sound() -> Control:

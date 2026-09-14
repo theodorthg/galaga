@@ -21,6 +21,9 @@ const DEF := {
 	"win_score": 100000,    # 0 = aus (endlos wie bisher), sonst WIN_SCORE_STEP..
 	                        # WIN_SCORE_MAX — Zielscore für ein "gewonnenes" Spiel
 	                        # (eigener Eintrag in derselben Hall of Fame)
+	"bonus_level_interval": 3, # 0 = aus, sonst alle N Stages ein Bonuslevel statt
+	                        # der normalen Formation (game.gd::_start_ready(),
+	                        # "_stage % interval == 0" — siehe dort)
 }
 
 const LIVES_MIN := 2
@@ -33,6 +36,7 @@ const BOSS_INTERVAL_MAX := 20000
 const BOSS_INTERVAL_STEP := 1000
 const WIN_SCORE_MAX := 500000
 const WIN_SCORE_STEP := 10000
+const BONUS_LEVEL_INTERVAL_MAX := 10
 const DIFF_NAMES := ["Easy", "Normal", "Hard"]
 
 static func load_all() -> Dictionary:
