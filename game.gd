@@ -94,6 +94,51 @@ var force_non_touch := false
 @onready var _menus: Menus = $Menus
 @onready var _space_bg := $SpaceBackground/ColorRect
 
+## Cabinet-overlay side-margin decoration, shown only when
+## _wants_cabinet_overlay() is true (see below). arcade-screen1a.png is the
+## user-edited variant of the original research image (arcade-screen1.png,
+## kept in the repo for reference): same 2728x1536 art, but with the top/
+## bottom decorative border strips hollowed out (outline kept, solid fill
+## made transparent) at the spots that would otherwise sit right behind the
+## HUD once those strips bleed into the lane itself — see
+## _set_cabinet_strips_visible() below. The image's cutout spans the full
+## height and is horizontally centered on the image's own midpoint, which is
+## also where STRETCH_KEEP_ASPECT_CENTERED naturally centers the whole image
+## within any window, so it lines up with the game lane's own center for
+## free, no extra positioning math.
+const CABINET_ART := preload("res://arcade-screen1a.png")
+## Native pixel size of CABINET_ART — needed to replicate Godot's own
+## STRETCH_KEEP_ASPECT_CENTERED math by hand in _set_cabinet_strips_visible()
+## (see its doc comment for why: the image's actual fitted top/bottom edges
+## move depending on the window's aspect ratio, they're not always at y=0/
+## win.y — confirmed live on the RG552, whose 1920x1152 shape is narrower
+## than this image's own ~1.776:1, so the image is fit by WIDTH there and
+## letterboxed top/bottom by about 30 logical units, unlike a 960x540 desktop
+## window which happens to fit by HEIGHT with near-zero letterbox).
+const CABINET_ART_SIZE := Vector2(2728.0, 1536.0)
+var _cabinet_art_rect: TextureRect
+
+## The cabinet art's top/bottom decorative border strips bleed INTO the lane
+## itself, replacing the starfield right at its very top/bottom edge (not
+## changing the lane's own 540x960 gameplay dimensions, just what's drawn
+## behind those few pixels). Implemented as two small "clip windows": each is
+## a Control with clip_contents=true sized to one strip's on-screen band,
+## with a child TextureRect INSIDE it that duplicates the exact same
+## full-window, STRETCH_KEEP_ASPECT_CENTERED rendering as the main
+## _cabinet_art_rect above but shifted by -position so the same big image
+## lines up pixel-identically — the clip then reveals only the slice of it
+## that falls within that band. Simpler than computing a source-texture
+## region_rect by hand, and guaranteed to match the margins' own art exactly
+## since it's the same texture+stretch settings, just windowed differently.
+## Sits on its own CanvasLayer at layer -1: above SpaceBackground's starfield
+## (-2), so it paints over the star lane's own top/bottom edges, but below
+## HUD/Menus (layer 0), so score/buttons/etc. still draw on top as always.
+const CABINET_STRIP_H := 70.0
+var _cabinet_strip_top: Control
+var _cabinet_strip_top_tex: TextureRect
+var _cabinet_strip_bottom: Control
+var _cabinet_strip_bottom_tex: TextureRect
+
 var _state := TITLE
 var _stage := 1
 var _score := 0
@@ -236,6 +281,83 @@ func _apply_display_mode() -> void:
 		else Window.CONTENT_SCALE_ASPECT_KEEP)
 	_set_cabinet_camera_active(cabinet)
 	_center_canvas_layers(cabinet)
+	_set_cabinet_art_visible(cabinet)
+	_set_cabinet_strips_visible(cabinet)
+
+## See CABINET_ART's doc comment above. Built once, lazily
+## (only if cabinet mode is ever actually engaged), as a CanvasLayer BELOW
+## SpaceBackground (layer -3 vs its -2) so the lane's own opaque star
+## background — now correctly confined to the 540 lane, see
+## set_cabinet_lane() — draws on top of it inside the lane, leaving the art
+## visible only in the margins either side. Full-window-sized on purpose
+## (STRETCH_KEEP_ASPECT_CENTERED needs the real window rect to center the
+## artwork within, unlike the lane content which is deliberately confined).
+func _set_cabinet_art_visible(visible_now: bool) -> void:
+	if visible_now and not is_instance_valid(_cabinet_art_rect):
+		var layer := CanvasLayer.new()
+		layer.layer = -3
+		add_child(layer)
+		var rect := TextureRect.new()
+		rect.texture = CABINET_ART
+		rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		rect.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		layer.add_child(rect)
+		_cabinet_art_rect = rect
+	if is_instance_valid(_cabinet_art_rect):
+		_cabinet_art_rect.get_parent().visible = visible_now
+
+## See CABINET_STRIP_H's doc comment above.
+func _set_cabinet_strips_visible(cabinet: bool) -> void:
+	if cabinet and not is_instance_valid(_cabinet_strip_top):
+		var layer := CanvasLayer.new()
+		layer.layer = -1
+		add_child(layer)
+		_cabinet_strip_top = _build_cabinet_strip_clip()
+		_cabinet_strip_bottom = _build_cabinet_strip_clip()
+		layer.add_child(_cabinet_strip_top)
+		layer.add_child(_cabinet_strip_bottom)
+		_cabinet_strip_top_tex = _cabinet_strip_top.get_child(0)
+		_cabinet_strip_bottom_tex = _cabinet_strip_bottom.get_child(0)
+	if not is_instance_valid(_cabinet_strip_top):
+		return
+	_cabinet_strip_top.get_parent().visible = cabinet
+	if not cabinet:
+		return
+	var win := get_viewport_rect().size
+	var offset_x := maxf(win.x - DESIGN_WIDTH, 0.0) * 0.5
+	# Replicates STRETCH_KEEP_ASPECT_CENTERED's own fit math (the smaller of
+	# the two axis scales wins, image is centered in whichever axis has
+	# leftover space) so the strip bands track the image's REAL fitted edges
+	# instead of assuming they always sit flush with the window edges.
+	var img_scale := minf(win.x / CABINET_ART_SIZE.x, win.y / CABINET_ART_SIZE.y)
+	var img_top := (win.y - CABINET_ART_SIZE.y * img_scale) * 0.5
+	_position_cabinet_strip(_cabinet_strip_top, _cabinet_strip_top_tex, win, offset_x, img_top)
+	_position_cabinet_strip(_cabinet_strip_bottom, _cabinet_strip_bottom_tex, win, offset_x,
+		win.y - img_top - CABINET_STRIP_H)
+
+func _build_cabinet_strip_clip() -> Control:
+	var clip := Control.new()
+	clip.clip_contents = true
+	clip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var tex := TextureRect.new()
+	tex.texture = CABINET_ART
+	tex.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	tex.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tex.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	clip.add_child(tex)
+	return clip
+
+## band_y is in lane-local (0..DESIGN_HEIGHT) coordinates, like set_cabinet_
+## lane()'s own offset_x parameter — clip.position converts that to window
+## space by adding offset_x, same as every other cabinet-mode element.
+func _position_cabinet_strip(clip: Control, tex: TextureRect, win: Vector2, offset_x: float,
+		band_y: float) -> void:
+	clip.position = Vector2(offset_x, band_y)
+	clip.size = Vector2(DESIGN_WIDTH, CABINET_STRIP_H)
+	tex.size = win
+	tex.position = Vector2(-offset_x, -band_y)
 
 ## EXPAND keeps DESIGN_HEIGHT fixed and grows get_viewport_rect().size.x to
 ## fill a wider window (measured directly, see the CLAUDE.md entry for this
