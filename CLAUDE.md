@@ -2056,6 +2056,34 @@ Sound-Vorhören unterbricht sich jetzt gegenseitig statt zu überlappen.**
   danach stoppt „shoot" zuverlässig und spielt „extra"; `hide_all()` stoppt
   einen noch laufenden Vorhör-Sound zuverlässig.
 
+**Fünfundzwanzigste Playtest-Runde (2026-09-15): Explosions-Sound spielte
+fälschlich auch bei einem Boss-Fang.** Nutzer-Report: „Der Explosions-Sound
+während des Capture-Vorgangs darf natürlich nicht abgespielt werden, weil das
+ja kein Verlust im üblichen Sinne ist."
+- **Ursache**: `ship.gd::_destroy(show_explosion)` spielte den
+  `ship-destroyed`-Sound schon immer BEDINGUNGSLOS, unabhängig vom
+  `show_explosion`-Parameter — nur die BOOM-Animation selbst
+  (`game.gd::_on_ship_died()`s `if show_explosion: await _play_explosion(...)`)
+  war je an diesen Parameter gekoppelt. Bei einem Boss-Fang (`show_explosion
+  = false`, siehe die zwölfte/vierzehnte Playtest-Runde) lief der
+  eigentliche Zerstörungs-Sound also trotzdem — zusätzlich zum dafür
+  vorgesehenen `beam-sound` (siehe „Traktorstrahl-Fang-Sound", Dreizehnte
+  Playtest-Runde) — und ein Fang klang dadurch (akustisch) wie ein
+  echter Tod. Fix: `if _snd and show_explosion: _snd.play("ship-destroyed")`
+  — derselbe Parameter, der schon die Boom-Animation gattet, gattet jetzt
+  auch ihren Sound.
+- **Zum zweiten Teil des Reports** („...und auch durch Treffer der anderen
+  Gegner oder Bomben nicht gespielt werden darf" — gemeint: während eines
+  laufenden Fangversuchs): das war durch die Zweiundzwanzigste Playtest-
+  Runde (`ship.gd::_capture_invuln`) bereits strukturell abgedeckt — ein
+  Treffer durch irgendetwas anderes als den fangenden Strahl selbst erreicht
+  `_on_area_entered()`s `_destroy()`-Aufruf während eines aktiven
+  Fangversuchs gar nicht erst (wird davor schon abgefangen), es gibt also
+  keinen zweiten Codepfad, der noch extra geprüft werden müsste.
+- Per Headless-Test verifiziert: `_destroy(false)` (Fang) spielt
+  `ship-destroyed` nachweislich NICHT, `_destroy(true)` (echter Treffer)
+  spielt ihn weiterhin wie gehabt.
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,

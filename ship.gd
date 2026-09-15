@@ -224,7 +224,16 @@ func _destroy(show_explosion := true) -> void:
 	visible = false
 	set_deferred("monitoring", false)
 	_revert_twin()  # twin bonus doesn't survive a hit, matches the arcade original
-	if _snd:
+	# show_explosion is false ONLY for a Boss tractor-beam capture — not a
+	# "loss" in the usual sense (user request 2026-09-15), so neither the boom
+	# animation (already gated on this, see game.gd::_on_ship_died()) NOR its
+	# "ship-destroyed" sound should play; this line played it unconditionally
+	# before, so a capture still sounded like a real death underneath the
+	# separate "beam-sound" capture cue. A hit from anything ELSE during an
+	# active capture attempt never reaches this far at all any more (ship.gd's
+	# own _capture_invuln guard in _on_area_entered() blocks it before
+	# _destroy() is ever called), so this one check covers every case.
+	if _snd and show_explosion:
 		_snd.play("ship-destroyed")
 	died.emit(show_explosion)
 
