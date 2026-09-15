@@ -11,7 +11,7 @@
   <rect x="14" y="14" width="872" height="952" rx="18" fill="none" stroke="#4db2ff" stroke-opacity="0.18" stroke-width="2"/>
 
   <!-- MOVE -->
-  <g transform="translate(60 80)">
+  <g transform="translate(60 50)">
     <rect x="0" y="0" width="64" height="64" rx="10" fill="url(#key)" stroke="#4db2ff" stroke-opacity="0.5" stroke-width="2"/>
     <text x="32" y="43" text-anchor="middle" font-size="30" fill="#eef4ff">&#8592;</text>
     <rect x="74" y="0" width="64" height="64" rx="10" fill="url(#key)" stroke="#4db2ff" stroke-opacity="0.5" stroke-width="2"/>
@@ -25,7 +25,7 @@
   </g>
 
   <!-- SHOOT -->
-  <g transform="translate(60 232)">
+  <g transform="translate(60 190)">
     <rect x="0" y="0" width="176" height="64" rx="10" fill="url(#key)" stroke="#4db2ff" stroke-opacity="0.5" stroke-width="2"/>
     <text x="88" y="41" text-anchor="middle" font-size="23" fill="#eef4ff">Space</text>
     <text x="196" y="40" font-size="26" fill="#8fa3c8">or</text>
@@ -35,22 +35,67 @@
     <text x="0" y="146" font-size="26" fill="#8fa3c8">hold = autofire</text>
   </g>
 
+  <rect x="40" y="356" width="820" height="2" fill="#4db2ff" fill-opacity="0.18"/>
+
+  <!-- GAMEPAD -->
+  <text x="450" y="398" text-anchor="middle" font-size="26" font-weight="700" fill="#eef4ff">Gamepad</text>
+
+  <!-- D-pad: one solid cross, not four loose squares - reads as a real D-pad
+       at a glance. Only left/right actually steer the ship (this game has no
+       vertical movement) - up/down are still drawn since that's what a real
+       D-pad looks like, the caption to the right calls out which ones do
+       something. -->
+  <g transform="translate(230 412)">
+    <path d="M36 0 H72 V36 H108 V72 H72 V108 H36 V72 H0 V36 H36 Z"
+          fill="url(#key)" stroke="#4db2ff" stroke-opacity="0.5" stroke-width="2" stroke-linejoin="round"/>
+    <g fill="#eef4ff" font-size="24" font-weight="700" text-anchor="middle">
+      <text x="54" y="28">^</text>
+      <text x="54" y="98">v</text>
+      <text x="18" y="61">&lt;</text>
+      <text x="90" y="61">&gt;</text>
+    </g>
+  </g>
+
+  <!-- Only A and B are real bound actions (Godot's ui_accept/ui_cancel plus
+       Galaga's own "shoot") - a third/fourth decorative face button would
+       mismatch real controllers, whose diamond layouts disagree on what sits
+       where (Xbox: Y top, Nintendo: X top, ...). A confirms the focused menu
+       button (or shoots in-game), B always backs out of a menu - both work
+       at once, not a contradiction. -->
+  <g transform="translate(380 427)">
+    <circle cx="20" cy="20" r="18" fill="url(#key)" stroke="#4db2ff" stroke-opacity="0.5" stroke-width="2"/>
+    <text x="20" y="27" text-anchor="middle" font-size="20" fill="#eef4ff" font-weight="700">A</text>
+  </g>
+  <g transform="translate(380 475)">
+    <circle cx="20" cy="20" r="18" fill="url(#key)" stroke="#4db2ff" stroke-opacity="0.5" stroke-width="2"/>
+    <text x="20" y="27" text-anchor="middle" font-size="20" fill="#eef4ff" font-weight="700">B</text>
+  </g>
+
+  <g fill="#8fa3c8" font-size="24">
+    <text x="460" y="434">D-pad left / right to steer</text>
+    <text x="460" y="468">A to shoot</text>
+    <text x="460" y="502">A to confirm menus</text>
+    <text x="460" y="536">B to cancel / go back</text>
+  </g>
+
+  <rect x="40" y="566" width="820" height="2" fill="#4db2ff" fill-opacity="0.18"/>
+
   <!-- PAUSE -->
-  <g transform="translate(60 400)">
+  <g transform="translate(60 596)">
     <rect x="0" y="0" width="86" height="64" rx="10" fill="url(#key)" stroke="#4db2ff" stroke-opacity="0.5" stroke-width="2"/>
     <text x="43" y="41" text-anchor="middle" font-size="23" fill="#eef4ff">Esc</text>
     <text x="106" y="40" font-size="26" fill="#8fa3c8">or</text>
     <rect x="198" y="0" width="64" height="64" rx="10" fill="url(#key)" stroke="#4db2ff" stroke-opacity="0.5" stroke-width="2"/>
     <text x="230" y="43" text-anchor="middle" font-size="27" fill="#eef4ff">P</text>
+    <text x="282" y="40" font-size="26" fill="#8fa3c8">or</text>
+    <rect x="334" y="0" width="110" height="64" rx="10" fill="url(#key)" stroke="#4db2ff" stroke-opacity="0.5" stroke-width="2"/>
+    <text x="389" y="38" text-anchor="middle" font-size="19" fill="#eef4ff">Start</text>
     <text x="0" y="112" font-size="32" font-weight="700" fill="#eef4ff">Pause</text>
   </g>
 
   <!-- ship + thruster glow -->
   <g>
-    <ellipse cx="450" cy="760" rx="90" ry="26" fill="#4db2ff" fill-opacity="0.12"/>
-    <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/player_trim.png" x="345" y="540" width="210" height="258"/>
+    <ellipse cx="450" cy="950" rx="80" ry="22" fill="#4db2ff" fill-opacity="0.12"/>
+    <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/player_trim.png" x="360" y="749" width="180" height="221"/>
   </g>
-
-  <text x="450" y="880" text-anchor="middle" font-size="26" fill="#8fa3c8">A gamepad works too:</text>
-  <text x="450" y="914" text-anchor="middle" font-size="26" fill="#8fa3c8">D-pad moves, a button shoots</text>
 </svg>

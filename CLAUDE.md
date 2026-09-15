@@ -3,7 +3,7 @@
 Ergänzt die übergeordnete `CLAUDE.md` unter
 `~/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/`.
 
-**Stand: v0.1.0 (2026-09-12).** Scaffolding + Phasen 1–5 durch. Fertig:
+**Stand: v0.2.0 (2026-09-15).** Scaffolding + Phasen 1–5 durch. Fertig:
 **Formation + Einflug**, **Sturzflüge + Gegnerfeuer** (P1), **Leben / HUD /
 Game-Over** (P2), **Touch + Aspect-Umschaltung + Pause** (P3), **Menüs /
 Settings / Sound / Hall of Fame** (P4), **echte Assets + Boss-Capture** (P5).
@@ -2273,6 +2273,103 @@ Und eigentlich gar keine Touch-Buttons?" — ja, war sie.
   vermerkt, nicht versucht.
 - `arcade-screen1.png`/`arcade-screen2.png` bleiben im Projekt liegen, falls
   ein künftiger Versuch sie wieder braucht.
+
+**Dreißigste Playtest-Runde (2026-09-15): volle Gamepad-Steuerung für Menüs
++ D-Pad/A/B-Support — v0.2.0.** Nach dem Vorbild von pacmans
+„Fix gamepad menu confirm/cancel not working on some controllers (RG552)" +
+„Release v1.2: full gamepad menu support". Bestandsaufnahme zuerst ergab:
+Galaga stand deutlich besser da als pacman ursprünglich — `move_left`/
+`move_right`/`shoot`/`pause` hatten schon korrekte `device=-1`-Bindungen
+(offenbar aus der schon reparierten pacman-Vorlage übernommen), ebenso
+überraschend bereits `ui_left`/`ui_right`/`ui_up`/`ui_down` (Godot-4.7-
+Built-in-Default in dieser Engine-Version, nicht projekteigen gesetzt). Es
+fehlte wirklich nur die Joypad-Bindung für `ui_accept` (A, `button_index=0`)
+und `ui_cancel` (B, `button_index=1`) — per Headless-Skript ergänzt
+(`ProjectSettings.get_setting`/`set_setting` mit frischem Dictionary, nie
+`[input]` von Hand editiert).
+- **Eigentlicher Kernfund**: `menus.gd::_button()` setzte `focus_mode =
+  Control.FOCUS_NONE` auf JEDEM Button — der eigentliche Grund, warum hier
+  vorher überhaupt keine Tastatur-/Gamepad-Menünavigation möglich war (kein
+  Button konnte je Fokus halten, `ui_accept` hat aber nur einen FOKUSSIERTEN
+  Button zum Ziel). Fix: `FOCUS_ALL` (Godots eigener Button-Default) +
+  `UiStyle.style_button()` bekommt einen eigenen „focus"-StyleBox-Override
+  (helleres Cyan, dickerer Rahmen), damit der Default-Fokusring nicht wie
+  Godots nacktes Editor-Theme aussieht, sondern zum Glas-Look passt.
+- **Default-Fokus pro Screen**: neue `Menus::_grab_default_focus()`, von
+  `_swap()` nach jedem Screen-Wechsel aufgerufen — nimmt den ersten
+  sichtbaren, aktivierten fokussierbaren Node in Tree-Reihenfolge (überspringt
+  disabled Buttons, z. B. den gesperrten Leben-Stepper aus Pause/Summary).
+- **B (ui_cancel) generisch verdrahtet**: `_button()` bekommt einen neuen
+  `is_cancel`-Parameter, der `set_meta("is_cancel", true)` setzt — auf allen
+  „Done"/"No"-Buttons (Settings, Sound, Hilfe, Highscores, beide
+  Bestätigungsdialoge). `Menus::_unhandled_input()` sucht bei `ui_cancel` auf
+  dem gerade sichtbaren Screen genau diesen Button und feuert
+  `.pressed.emit()` — unabhängig vom aktuellen Fokus, exakt pacmans Konvention
+  (A bestätigt das Fokussierte, B geht immer zusätzlich zurück, kein
+  Widerspruch).
+- **Hall-of-Fame-Namensfeld**: `LineEdit` sendet `text_submitted` nur bei
+  Enter, nie bei `ui_accept` — `_unhandled_input()` fängt `ui_accept` bei
+  fokussiertem `_name_edit` explizit ab, ruft `_commit_score()` und übergibt
+  danach den Fokus an „Play Again" (`_play_again_btn`, neu benannt/gespeichert)
+  — das Feld verschwindet ja nach dem Commit.
+- **Hilfe-Seiten-Blättern**: `ui_left`/`ui_right` lösen bei sichtbarem
+  Help-Screen `_help_go(-1/1)` aus.
+- **Echter Bug, live auf dem RG552 gefunden** (Nutzer-Report nach dem ersten
+  Test): auf der Hilfe-Seite sprang der ERSTE Druck von D-Pad-rechts nur auf
+  „Done", erst der ZWEITE blätterte tatsächlich. Ursache: ein fokussierter
+  Button „verbraucht" `ui_left`/`ui_right` zuerst für Godots eingebaute
+  Fokus-Nachbar-Navigation (GUI-Input-Phase, läuft VOR `_unhandled_input()`)
+  — landete der Default-Fokus auf „‹" (erster fokussierbarer Node in
+  Tree-Reihenfolge), bewegte der erste Druck nur den Fokus nach rechts
+  (zu „Done", da rechts von „›" kein Nachbar mehr liegt), erst der zweite
+  Druck (jetzt ohne Fokus-Bewegungsziel) erreichte `_help_go()`. Fix:
+  `_open_help()` überschreibt den generischen Default-Fokus explizit auf
+  `_help_done_btn` (neu gespeicherte Referenz) — als rechtester Button hat
+  die eingebaute Navigation dort nichts mehr zu tun, der erste Druck erreicht
+  sofort `_help_go()`. Live erneut bestätigt: blättert jetzt sofort.
+- **Hilfe-Grafik ergänzt**: `assets/help_src/keyboard.svg` (Desktop-Seite
+  „Controls — Keyboard/Gamepad", umbenannt von „Controls — Keyboard") bekommt
+  einen neuen „Gamepad"-Abschnitt — ein zusammenhängendes D-Pad-Kreuz (nicht
+  vier lose Quadrate) + A/B-Kreise, Beschriftung „D-pad left/right to steer" /
+  „A to shoot" / „A to confirm menus" / „B to cancel / go back" — sowie ein
+  drittes „Start"-Tastensymbol neben Esc/P in der Pause-Zeile. Bekannte Lücke:
+  die separate `HELP_PAGES_TOUCH`-Seite („Controls — Touch") hat KEINE
+  Gamepad-Infos — auf einem Touch-Gerät wie dem RG552 (`OS.has_feature
+  ("mobile")` ist dort true) ist im normalen Spielfluss nur die Touch-Seite
+  erreichbar, die neue Gamepad-Seite technisch nie sichtbar. Nicht
+  nachträglich gefixt (vom Nutzer nach Rückfrage nicht verlangt) — als
+  möglicher Folge-Punkt vermerkt, falls gewünscht.
+- **Dauerfeuer per gehaltenem A**: brauchte keine Code-Änderung — `ship.gd`
+  pollt schon `Input.is_action_pressed("shoot")` jeden Frame (dieselbe
+  Technik wie Tastatur/Maus), `shoot`-Action hatte schon eine korrekte
+  Joypad-Bindung. Per Headless-Test verifiziert (`Input.action_press
+  ("shoot")` 2 simulierte Sekunden gehalten → Laser bis zum `_max_lasers`-
+  Deckel nachgefeuert).
+- **Verifikation, zweistufig**: (1) headless — ein `_selftest.gd`-Parse-Check
+  plus ein eigenes Wegwerf-Testskript (`game.tscn` real instanziiert, echte
+  Autoloads) deckt Default-Fokus, alle sechs `is_cancel`-Ziele, Hilfe-Blättern
+  und den HOF-Namensfeld-Intercept über direkte `_unhandled_input()`-Aufrufe
+  mit `InputEventAction`-Objekten ab (13/13 grün) — **wichtige Einschränkung
+  dabei entdeckt**: dieser direkte Aufruf-Stil umgeht Godots eigene
+  GUI-Input-Phase (Fokus-Nachbar-Navigation) komplett, weshalb der obige
+  „Done"-Fokus-Bug beim ersten Anlauf NICHT headless auffiel, sondern erst
+  live. (2) echter Controller-Test auf dem angeschlossenen RG552 (`adb`):
+  Debug-Autoload (`debug_input.gd`, geloggt via `adb logcat | grep DBGINPUT`,
+  nach dem Test wieder entfernt, nicht committed) bestätigte alle rohen
+  `InputEventJoypadButton`-Events UND die daraus resultierenden
+  `action_just_pressed`-Treffer (B→ui_cancel, A→shoot+ui_accept,
+  D-Pad links/rechts→move_*+ui_left/right, D-Pad hoch→ui_up) unter
+  `device=1` (bestätigt: `device=-1` in der Konfiguration war nötig, das
+  Gerät meldet sich nicht als Device 0). Start (`button_index=6`) tauchte im
+  Log nur als rohes Event auf, nie als „action_just_pressed pause" — Ursache
+  identifiziert als Bug im Debug-Skript selbst (kein `process_mode=ALWAYS`,
+  pollt also nicht mehr, sobald Pause den Baum tatsächlich pausiert — genau
+  das Erfolgssignal, nur nicht mehr sichtbar), vom Nutzer direkt am Gerät
+  bestätigt: Start öffnet zuverlässig das Pausenmenü. Kompletter
+  Nutzer-Durchlauf (Start-Menü, Einstellungen, Hilfe blättern,
+  Restart-Bestätigung, Pause) bestätigt „passt".
+- **Version**: `config/version` 0.1.0 → 0.2.0, getaggt `v0.2.0`, Windows-CI
+  darüber angestoßen.
 
 ## Gameplay-Architektur (alles im Code, wie tetris)
 

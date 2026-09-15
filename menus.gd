@@ -43,7 +43,7 @@ const HELP_DIR := "res://assets/graphics/help/"
 # initializers need to be compile-time constant expressions, and it's not
 # worth relying on Array "+" folding there for two short lists.
 const HELP_PAGES_DESKTOP := [
-	{"file": "keyboard", "h": "Controls — Keyboard"},
+	{"file": "keyboard", "h": "Controls — Keyboard/Gamepad"},
 	{"file": "mouse", "h": "Controls — Mouse"},
 	{"file": "goal", "h": "Goal & Points"},
 	{"file": "difficulty", "h": "Difficulty Levels"},
@@ -58,6 +58,7 @@ const HELP_PAGES_TOUCH := [
 	{"file": "bonus", "h": "Achievements & Bonuses"},
 ]
 var _help_page := 0
+var _help_done_btn: Button
 ## Which page set _help_pages() returns — set from game.gd (see
 ## set_touch_context()), mirroring the same touch detection/retroactive flip
 ## game.gd itself uses for content_scale_aspect, so the help matches whatever
@@ -179,14 +180,49 @@ func _finish_splash() -> void:
 ## delay twice in a row after backing out to the title and pressing Play again
 ## (show_splash() only ever runs once at startup, but better safe than annoying).
 func _unhandled_input(event: InputEvent) -> void:
-	if not _splash_active:
+	if _splash_active:
+		var skip: bool = (event is InputEventKey and event.pressed and not event.echo) \
+			or (event is InputEventMouseButton and event.pressed) \
+			or (event is InputEventScreenTouch and event.pressed)
+		if skip:
+			get_viewport().set_input_as_handled()
+			_finish_splash()
 		return
-	var skip: bool = (event is InputEventKey and event.pressed and not event.echo) \
-		or (event is InputEventMouseButton and event.pressed) \
-		or (event is InputEventScreenTouch and event.pressed)
-	if skip:
+
+	# Hall of Fame name entry: a LineEdit only submits on Enter/Kp Enter (its
+	# own internal key check), never on the generic ui_accept action, so a
+	# gamepad's A would otherwise do nothing while that field has focus.
+	if _name_edit and is_instance_valid(_name_edit) and _name_edit.has_focus() \
+			and event.is_action_pressed("ui_accept"):
+		_commit_score()
 		get_viewport().set_input_as_handled()
-		_finish_splash()
+		return
+
+	# B (ui_cancel) always backs out via whichever button on the CURRENTLY
+	# visible screen is tagged "is_cancel" (see _button()'s is_cancel param),
+	# independent of what currently has focus — standard gamepad convention:
+	# A confirms the focused/default action, B always backs out too, both are
+	# expected to work at once, not a contradiction.
+	if event.is_action_pressed("ui_cancel"):
+		for s in _screens.values():
+			if not s.visible:
+				continue
+			for b in s.find_children("*", "Button", true, false):
+				if b.visible and b.get_meta("is_cancel", false):
+					b.pressed.emit()
+					get_viewport().set_input_as_handled()
+					return
+			break  # found the (one) visible screen, nothing to cancel on it
+
+	# Help page D-pad paging — ui_left/ui_right rather than move_left/right,
+	# since those fire during actual gameplay steering too, not just here.
+	if _screens["help"].visible:
+		if event.is_action_pressed("ui_left"):
+			_help_go(-1)
+			get_viewport().set_input_as_handled()
+		elif event.is_action_pressed("ui_right"):
+			_help_go(1)
+			get_viewport().set_input_as_handled()
 
 func show_title() -> void:
 	_swap("title")
@@ -230,6 +266,20 @@ func _swap(name: String) -> void:
 	_screens[name].show()
 	_glass.visible = true
 	_apply_screen_music(name)
+	_grab_default_focus(_screens[name])
+
+## First enabled, focusable Control in the screen (tree order — i.e. the
+## first Button/LineEdit a builder added), for gamepad/keyboard users: without
+## SOME control holding focus when a screen appears, ui_accept has nothing to
+## trigger and D-pad up/down/left/right has nothing to move away from.
+## call_deferred() — grab_focus() the same frame a node turns visible is
+## unreliable (same reason _name_edit's own grab_focus already used it below).
+func _grab_default_focus(screen: Control) -> void:
+	for n in screen.find_children("*", "", true, false):
+		if n is Control and n.visible and n.focus_mode != Control.FOCUS_NONE \
+				and not (n is BaseButton and n.disabled):
+			n.grab_focus.call_deferred()
+			return
 
 ## Full-rect click-blocker (mouse_filter=STOP keeps clicks from reaching the
 ## game underneath) containing a centered, bordered panel — the frosted glass
@@ -278,14 +328,24 @@ func _title_label(text: String, size := 30, col := Color.WHITE) -> Label:
 ## the design canvas maps ~1:1 to device px via KEEP_WIDTH, so we size to that).
 const TOUCH_H := 56.0
 
-func _button(text: String, cb: Callable) -> Button:
+## `is_cancel`: tags this button as the screen's "back"/"cancel" target for the
+## gamepad's B button (ui_cancel) — see _unhandled_input()'s cancel handling
+## below. Focusable (Control.FOCUS_ALL, Godot's own Button default — this used
+## to be FOCUS_NONE, which is exactly why keyboard/gamepad menu navigation
+## never worked here at all: ui_accept only ever fires a Button that actually
+## HAS focus, and a non-focusable Button can never receive it) so D-pad
+## up/down/left/right can move between buttons and ui_accept can confirm
+## whichever one currently has focus, same as every other Godot menu.
+func _button(text: String, cb: Callable, is_cancel := false) -> Button:
 	var b := Button.new()
 	b.text = text
-	b.focus_mode = Control.FOCUS_NONE
+	b.focus_mode = Control.FOCUS_ALL
 	b.custom_minimum_size = Vector2(270, TOUCH_H)
 	b.add_theme_font_size_override("font_size", 22)
 	b.pressed.connect(cb)
 	UiStyle.style_button(b)
+	if is_cancel:
+		b.set_meta("is_cancel", true)
 	return b
 
 ## `set_from_text`, if given, makes the value a tappable/clickable field the
@@ -433,7 +493,7 @@ func _build_confirm_title() -> Control:
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 12)
-	var no_btn := _button("No", func(): _swap("pause"))
+	var no_btn := _button("No", func(): _swap("pause"), true)
 	no_btn.custom_minimum_size = Vector2(130, TOUCH_H)
 	var yes_btn := _button("Yes", func(): to_title.emit())
 	yes_btn.custom_minimum_size = Vector2(130, TOUCH_H)
@@ -469,7 +529,7 @@ func _build_settings() -> Control:
 	box.add_child(_spacer(8))
 	box.add_child(_button("Defaults", func(): _swap("confirm_reset")))
 	box.add_child(_button("Sound", func(): _open_sound()))
-	box.add_child(_button("Done", func(): _close_sub()))
+	box.add_child(_button("Done", func(): _close_sub(), true))
 	return s
 
 ## Resets the gameplay steppers above to fixed factory defaults (user request)
@@ -508,7 +568,7 @@ func _build_confirm_reset() -> Control:
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 12)
-	var no_btn := _button("No", func(): _swap("settings"))
+	var no_btn := _button("No", func(): _swap("settings"), true)
 	no_btn.custom_minimum_size = Vector2(130, TOUCH_H)
 	var yes_btn := _button("Yes", func(): _reset_defaults(); _swap("settings"))
 	yes_btn.custom_minimum_size = Vector2(130, TOUCH_H)
@@ -662,7 +722,7 @@ func _build_sound() -> Control:
 	for key in (snd.ORDER if snd else []):
 		list.add_child(_sound_row(key, snd))
 	box.add_child(_spacer(8))
-	box.add_child(_button("Done", func(): _swap("settings")))
+	box.add_child(_button("Done", func(): _swap("settings"), true))
 	return s
 
 func _sound_row(key: String, snd) -> HBoxContainer:
@@ -732,7 +792,8 @@ func _build_help() -> Control:
 	next.custom_minimum_size = Vector2(56, TOUCH_H)
 	nav.add_child(next)
 	box.add_child(nav)
-	box.add_child(_button("Done", func(): _swap(_return_to)))
+	_help_done_btn = _button("Done", func(): _swap(_return_to), true)
+	box.add_child(_help_done_btn)
 	return s
 
 ## Called from game.gd whenever it (re)determines whether the player is on a
@@ -752,6 +813,17 @@ func _open_help(from: String) -> void:
 	_help_page = 0
 	_help_render()
 	_swap("help")
+	# Override _swap()'s generic "first focusable control" default (which
+	# would land on the "‹" prev button here): a focused Button/Control
+	# consumes ui_left/ui_right FIRST for Godot's own built-in focus-neighbor
+	# navigation, before _unhandled_input()'s _help_go() ever sees the event —
+	# landing default focus on "‹"/"›" meant the first D-pad-right press only
+	# moved focus over to Done, and only the SECOND press actually paged (user
+	# report, confirmed live on the RG552). Defaulting to Done instead — the
+	# rightmost control, with no further focusable neighbor to its right —
+	# means that built-in focus-move has nowhere to go, so ui_right falls
+	# through to _help_go() immediately on the very first press.
+	_help_done_btn.grab_focus.call_deferred()
 
 func _help_go(d: int) -> void:
 	_help_page = wrapi(_help_page + d, 0, _help_pages().size())
@@ -777,6 +849,7 @@ func _help_render() -> void:
 # ---------------------------------------------------------------- game over
 var _name_edit: LineEdit
 var _hof_box: GridContainer
+var _play_again_btn: Button
 
 func _build_gameover() -> Control:
 	var s := _screen()
@@ -828,7 +901,8 @@ func _build_gameover() -> Control:
 	box.add_child(_hof_box)
 
 	box.add_child(_spacer(8))
-	box.add_child(_button("Play Again", func(): _maybe_auto_commit(); start_game.emit()))
+	_play_again_btn = _button("Play Again", func(): _maybe_auto_commit(); start_game.emit())
+	box.add_child(_play_again_btn)
 	box.add_child(_button("Main Menu", func(): _maybe_auto_commit(); to_title.emit()))
 	if not IS_WEB:
 		box.add_child(_button("Exit", func(): _maybe_auto_commit(); get_tree().quit()))
@@ -960,6 +1034,10 @@ func _commit_score() -> void:
 	who = who.to_upper()
 	var list := HallOfFame.insert(who, int(_pending.score), int(_pending.stage))
 	_box(_screens["gameover"]).get_node("Entry").visible = false
+	# The name field just disappeared out from under whatever had focus (often
+	# itself) — hand focus to Play Again so a gamepad/keyboard user can carry
+	# straight on instead of focus hanging on a now-invisible control.
+	_play_again_btn.grab_focus()
 	var mine := -1
 	for i in list.size():
 		if list[i].name == who and int(list[i].score) == int(_pending.score):
@@ -1008,7 +1086,7 @@ func _build_highscores() -> Control:
 	_highscores_box.add_theme_constant_override("v_separation", 2)
 	box.add_child(_highscores_box)
 	box.add_child(_spacer(10))
-	box.add_child(_button("Done", func(): _swap(_return_to)))
+	box.add_child(_button("Done", func(): _swap(_return_to), true))
 	return s
 
 # ---------------------------------------------------------------- misc

@@ -33,6 +33,17 @@ static func style_button(b: Button) -> void:
 	b.add_theme_color_override("font_color", Color(0.93, 0.96, 1.0))
 	b.add_theme_color_override("font_hover_color", Color.WHITE)
 	b.add_theme_color_override("font_pressed_color", ACCENT)
+	# Buttons are focusable (gamepad/keyboard menu navigation, see menus.gd's
+	# _button()) — without this override Godot draws its plain default-theme
+	# focus rectangle on top of the "normal" stylebox above, which clashes with
+	# the glass look. A brighter, thicker version of the same border reads as
+	# "this one has focus" while still matching the rest of the button.
+	var focus_sb := StyleBoxFlat.new()
+	focus_sb.bg_color = Color(ACCENT.r, ACCENT.g, ACCENT.b, alphas["normal"])
+	focus_sb.set_corner_radius_all(10)
+	focus_sb.set_border_width_all(2)
+	focus_sb.border_color = ACCENT
+	b.add_theme_stylebox_override("focus", focus_sb)
 
 ## Outlined heading label — flat colored text on a dark panel reads muddy;
 ## a dark outline gives it the arcade-marquee pop the game's own HUD/_draw
