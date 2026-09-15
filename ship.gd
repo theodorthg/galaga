@@ -51,6 +51,15 @@ const GUN_MUZZLE_OFFSET_Y := -22.0
 ## every fire-rate combo the same way.
 const FIRE_COOLDOWN := 0.15
 
+## The playable lane is always exactly this wide, regardless of the actual
+## window/viewport width — matches display/window/size/viewport_width in
+## project.godot. Only relevant on the landscape-cabinet-overlay path
+## (CONTENT_SCALE_ASPECT_EXPAND, see game.gd::_apply_display_mode()), where
+## get_viewport_rect().size.x grows to fill a wide window; KEEP/KEEP_WIDTH
+## never touch the x-axis, so this was already numerically identical to
+## get_viewport_rect().size.x in every case that existed before that mode.
+const DESIGN_WIDTH := 540.0
+
 var speed := 480.0
 var ship_half_width := 34.0
 var viewport_width := 0.0
@@ -96,7 +105,7 @@ func _ready() -> void:
 	add_to_group("touch_layout_listeners")
 	_snd = get_node_or_null("/root/Snd")
 	area_entered.connect(_on_area_entered)
-	viewport_width = get_viewport_rect().size.x
+	viewport_width = DESIGN_WIDTH
 	_update_home_y()
 
 ## See HUD_BOTTOM_CLEARANCE above for why this reads the real viewport height

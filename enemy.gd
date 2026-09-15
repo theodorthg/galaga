@@ -29,6 +29,11 @@ const BOMB_SCENE := preload("res://bomb.tscn")
 const CAPTURE_BEAM_SCENE := preload("res://capture_beam.tscn")
 const CAPTIVE_TEXTURE := preload("res://assets/graphics/ship_captured.png")
 const CAPTURE_BEAM_TOTAL := 0.95  # keep in sync with capture_beam.gd (grow+hold+shrink)
+## See ship.gd::DESIGN_WIDTH — dive()/return_to() curves are generated in
+## terms of a Vector2(width, height) "canvas"; width must stay the fixed
+## playable-lane width, not the actual (possibly wider, landscape-cabinet-
+## overlay) viewport, or dives would sweep out into the cabinet-art margins.
+const DESIGN_WIDTH := 540.0
 
 var kind := EnemyKinds.ZAKO
 ## Which of EnemyKinds' several stage-variant sprites this particular enemy is
@@ -119,7 +124,7 @@ func dive() -> void:
 	_bomb_t = 0.55
 	if _snd:
 		_snd.play("dive")
-	var vp := get_viewport_rect().size
+	var vp := Vector2(DESIGN_WIDTH, get_viewport_rect().size.y)
 	var player := get_tree().get_first_node_in_group("player")
 	var ppos: Vector2 = player.global_position if player else Vector2(vp.x * 0.5, vp.y * 0.82)
 	_start_path(AttackPaths.dive(global_position, ppos, vp), DIVE_SPEED, _begin_return)
@@ -222,7 +227,7 @@ func _spawn_captive_visual() -> void:
 
 func _begin_return() -> void:
 	_state = RETURNING
-	var vp := get_viewport_rect().size
+	var vp := Vector2(DESIGN_WIDTH, get_viewport_rect().size.y)
 	_start_path(AttackPaths.return_to(_formation.slot_global(_slot), vp), RETURN_SPEED, _begin_lock)
 
 # --- generic path follower ----------------------------------------------

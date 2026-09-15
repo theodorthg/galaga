@@ -13,6 +13,23 @@ extends Control
 @onready var _pause_btn: Button = $PauseButton
 var _pause_glass: ColorRect
 
+## See space_background.gd::set_cabinet_lane() for the full story — same fix,
+## same reason, applied here since HUD is a CanvasLayer's full-rect Control
+## too (Score/Stage/PauseButton's own anchors are percentages of THIS node's
+## rect, so without this they'd pin to the wide window's corners instead of
+## the centered lane's).
+const DESIGN_WIDTH := 540.0
+const DESIGN_HEIGHT := 960.0
+
+func set_cabinet_lane(active: bool, offset_x: float) -> void:
+	if active:
+		set_anchors_preset(Control.PRESET_TOP_LEFT)
+		size = Vector2(DESIGN_WIDTH, DESIGN_HEIGHT)
+		position = Vector2(offset_x, 0.0)
+	else:
+		set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		position = Vector2.ZERO
+
 ## Small ship icons, bottom-left — the real ship art rather than a generic
 ## placeholder, per the user's request. Below MANY_THRESHOLD each spare ship
 ## gets its own icon (classic arcade style); at/above it, tetris-style, one

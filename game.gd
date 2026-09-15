@@ -71,16 +71,19 @@ const BONUS_SPEED_JITTER := 0.18  # ± fraction of the wave's base speed
 ## revert the Twin bonus mid-level, so a later wave should stop doubling if
 ## that happens.
 const BONUS_TWIN_ROW_GAP := 70.0
+## See ship.gd::DESIGN_WIDTH — bonus-level column x positions are fractions of
+## the fixed playable-lane width, not the actual (possibly wider, landscape-
+## cabinet-overlay) viewport, or they'd drift into the cabinet-art margins.
+const DESIGN_WIDTH := 540.0
 
-## Set by arcade_shell.gd BEFORE add_child() (so _ready() below sees it) when
-## this instance is being manually scaled/positioned for the landscape-
-## cabinet-overlay case — that case is always controller/keyboard driven
-## (e.g. the user's Anbernic RG552), so it's forced to skip the normal
-## OS.has_feature("mobile")/touchscreen autodetection entirely regardless of
-## what the device would otherwise report. Currently unused: arcade_shell.gd
-## is parked, not wired up as run/main_scene (see its own doc comment for why
-## — the touch-vs-viewport-size conflict isn't solved yet). Left in place,
-## harmless at its default of false, for whoever resumes that work.
+## Manual override to force non-touch regardless of what OS.has_feature
+## ("mobile")/touchscreen autodetection or the connected-joypad check (see
+## _ready()) would otherwise conclude. Not currently set by anything —
+## superseded by the joypad check for the one case it was originally written
+## for (the Anbernic RG552's landscape-cabinet-overlay mode, which turned out
+## to need this to be based on "is a real controller actually connected",
+## not "is this device in some particular shape/mode"). Left in place as an
+## explicit escape hatch for a future device that needs it.
 var force_non_touch := false
 
 @onready var _hud_layer: CanvasLayer = $HUD
@@ -89,6 +92,7 @@ var force_non_touch := false
 @onready var _ship: Area2D = $Ship
 @onready var _hud: Hud = $HUD/Root
 @onready var _menus: Menus = $Menus
+@onready var _space_bg := $SpaceBackground/ColorRect
 
 var _state := TITLE
 var _stage := 1
@@ -138,9 +142,37 @@ var _kill_stats: Array = []
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	add_to_group("touch_layout_listeners")
-	_touch = false if force_non_touch else (OS.has_feature("mobile") or DisplayServer.is_touchscreen_available())
+	# NOT tied to _wants_cabinet_overlay() — tried that first, but it forces
+	# every landscape-shaped window non-touch, which is right for the
+	# Anbernic RG552 (has a touchscreen but is actually played with its
+	# D-pad/buttons there) and WRONG for a plain phone that rotates to
+	# landscape — a phone has no alternative controller, so forcing
+	# non-touch would leave the ship completely uncontrollable, not just
+	# cosmetically off (also why phones stay portrait-locked again after a
+	# 2026-09-15 test — see the project's own CLAUDE.md for the outcome). A
+	# connected joypad is a much more direct signal of "this device has a
+	# real controller" than window shape ever was — confirmed live on the
+	# RG552 (its own D-pad/buttons enumerate as Input's joypad device 1 from
+	# boot, per the DBGINPUT logcat capture from the gamepad-menu-support
+	# round).
+	_touch = false if (force_non_touch or Input.get_connected_joypads().size() > 0) \
+		else (OS.has_feature("mobile") or DisplayServer.is_touchscreen_available())
 	_apply_display_mode()
 	_menus.set_touch_context(_touch)
+	# Live window resizing (desktop) can cross into/out of cabinet-overlay
+	# shape, or just change how much excess width there is while already in
+	# it — _center_canvas_layers() needs the current width each time, unlike
+	# the fixed Camera2D which needs no re-positioning at all (see
+	# _set_cabinet_camera_active()'s doc comment). Kept as a best-effort extra
+	# signal alongside the _process() poll below, not the only source of
+	# truth — live-tested on Linux/X11 (user report 2026-09-15): dragging
+	# ONLY the width edge didn't reliably fire size_changed at all, while
+	# dragging height did, leaving the display mode stuck stale until some
+	# later resize that happened to touch height. The RG552 was never
+	# affected (fixed window size for its whole session, no live resize ever
+	# happens there) — this is specifically a desktop live-resize gap.
+	get_window().size_changed.connect(_apply_display_mode)
+	_last_window_size = DisplayServer.window_get_size()
 	# Ship is a CHILD node, so its own _ready() (and _update_home_y() inside
 	# it) already ran BEFORE this parent _ready() — against whatever aspect
 	# was in effect at scene load, not the one _apply_display_mode() just set
@@ -173,38 +205,93 @@ func _ready() -> void:
 	_menus.show_splash()
 
 # --- device layout: fixed design canvas, aspect handled at runtime ------
+## Matches display/window/size/viewport_height in project.godot — see
+## ship.gd::DESIGN_WIDTH for the width counterpart and why a fixed constant
+## is needed here instead of reading the live viewport rect.
+const DESIGN_HEIGHT := 960.0
+
+var _cabinet_cam: Camera2D
+## See the _process() poll below and _ready()'s size_changed connection —
+## belt-and-suspenders against size_changed not firing for every kind of
+## desktop window resize.
+var _last_window_size := Vector2i.ZERO
+
+## Landscape-shaped window (wider than tall) — a portrait-ish or square window
+## has no meaningful side margin for cabinet art to fill in the first place.
+## Deliberately NOT gated on touch/mobile: a landscape-locked device needing
+## this (the Anbernic RG552) reports OS.has_feature("mobile")=true regardless
+## of screen shape, and an earlier attempt (see the retired arcade_shell.gd's
+## own history, CLAUDE.md "Achtundzwanzigste Playtest-Runde") excluded touch
+## for exactly that reason and never triggered at all. Also true for a plain
+## desktop window someone's dragged wide — same treatment applies there too.
+func _wants_cabinet_overlay() -> bool:
+	var win := DisplayServer.window_get_size()
+	return win.x > win.y
+
 func _apply_display_mode() -> void:
+	var cabinet := _wants_cabinet_overlay()
 	get_window().content_scale_aspect = (
-		Window.CONTENT_SCALE_ASPECT_KEEP_WIDTH if _touch
+		Window.CONTENT_SCALE_ASPECT_EXPAND if cabinet
+		else Window.CONTENT_SCALE_ASPECT_KEEP_WIDTH if _touch
 		else Window.CONTENT_SCALE_ASPECT_KEEP)
+	_set_cabinet_camera_active(cabinet)
+	_center_canvas_layers(cabinet)
+
+## EXPAND keeps DESIGN_HEIGHT fixed and grows get_viewport_rect().size.x to
+## fill a wider window (measured directly, see the CLAUDE.md entry for this
+## round) — pinned at the LEFT edge, not centered, same as KEEP_WIDTH pins its
+## own extra height at the top. A Camera2D fixed at the design canvas's own
+## center re-centers it for free: Camera2D always shows a viewport-sized
+## window centered ON the camera's position, so a camera sitting exactly on
+## the lane's own center (270, 480) makes the visible margin equal on both
+## sides for ANY viewport width, with no per-resize recalculation needed —
+## the same "fixed camera, never move it" principle the global CLAUDE.md
+## documents for vertical centering, applied to the horizontal case here.
+## Left disabled outside cabinet mode: KEEP already shows exactly this same
+## view with no camera at all (a fixed camera here would be a no-op for it),
+## but KEEP_WIDTH's whole point is pinning content to the TOP, not centering
+## it — an active camera would fight that.
+func _set_cabinet_camera_active(cabinet: bool) -> void:
+	if cabinet and not is_instance_valid(_cabinet_cam):
+		_cabinet_cam = Camera2D.new()
+		_cabinet_cam.position = Vector2(DESIGN_WIDTH * 0.5, DESIGN_HEIGHT * 0.5)
+		add_child(_cabinet_cam)
+	if is_instance_valid(_cabinet_cam):
+		_cabinet_cam.enabled = cabinet
+		if cabinet:
+			_cabinet_cam.make_current()
+
+## HUD/Menus are CanvasLayers, which deliberately don't inherit ancestor
+## Node2D transforms (that's the whole point of CanvasLayer) - so the
+## Camera2D above re-centers the game WORLD but not these, and they need the
+## same centering applied by hand. NOT via CanvasLayer.offset, despite that
+## looking like the obvious tool — tried first, and found (live, on Linux)
+## to be wrong: HUD/Menus's own root Controls default to PRESET_FULL_RECT,
+## sized to match the CanvasLayer's own (now widened) viewport rect, so an
+## .offset just translates that same oversized rect sideways rather than
+## narrowing it — CenterContainer content ends up centered on the WRONG,
+## still-1706-wide rect, and edge-anchored elements (Stage, PauseButton)
+## pin to ITS corners instead of the lane's. See set_cabinet_lane() on Hud/
+## Menus/space_background.gd instead: constrains each to a genuine, fixed
+## 540-wide rect positioned at the current offset. Re-run on every resize
+## (see the size_changed connection in _ready()) since, unlike the camera,
+## this genuinely depends on the current excess width.
+func _center_canvas_layers(cabinet: bool) -> void:
+	var offset_x := 0.0
+	if cabinet:
+		offset_x = maxf(get_viewport_rect().size.x - DESIGN_WIDTH, 0.0) * 0.5
+	_hud.set_cabinet_lane(cabinet, offset_x)
+	_menus.set_cabinet_lane(cabinet, offset_x)
+	_space_bg.set_cabinet_lane(cabinet, offset_x)
 
 func apply_touch_layout() -> void:
+	# Not gated on _wants_cabinet_overlay() any more — see _ready()'s _touch
+	# computation for why window shape alone no longer decides this.
 	if _touch:
 		return
 	_touch = true
 	_apply_display_mode()
 	_menus.set_touch_context(_touch)
-
-## Currently unused — written for arcade_shell.gd's parked landscape-cabinet-
-## overlay attempt (see that file's doc comment for the full story: this
-## avoids the touch-input breakage a SubViewport-based version had, but the
-## caller side of this still has an unresolved get_viewport_rect() conflict
-## with the rest of the gameplay code, so it's not wired up). Reproduces the
-## same "scale + center within the window" transform Godot's own
-## content_scale_mode=canvas_items would normally apply automatically.
-## Node2D-based content (ship, enemies, background, ...) inherits this node's
-## own transform automatically since they're plain children of it; HUD/Menus
-## are CanvasLayers, which deliberately DON'T inherit ancestor Node2D
-## transforms (that's the whole point of CanvasLayer), so they need their own
-## scale/offset set to match, or they'd stay full-window-sized while the
-## world shrinks into its letterboxed rect.
-func apply_manual_scale(new_scale: float, offset: Vector2) -> void:
-	scale = Vector2(new_scale, new_scale)
-	position = offset
-	_hud_layer.scale = Vector2(new_scale, new_scale)
-	_hud_layer.offset = offset
-	_menus.scale = Vector2(new_scale, new_scale)
-	_menus.offset = offset
 
 # --- run lifecycle ----------------------------------------------------
 func _reload_settings() -> void:
@@ -432,7 +519,7 @@ func _start_bonus_level() -> void:
 	_bonus_total = 0
 	_bonus_points = 0
 	_bonus_abort = false
-	var vp := get_viewport_rect().size
+	var vp := Vector2(DESIGN_WIDTH, get_viewport_rect().size.y)
 	# Three separate flights, one after another, each its own vertical column
 	# at a different x ("von unterschiedlichen Stellen aus") — never a Boss
 	# (see the class doc above). Only two non-Boss kinds exist, so consecutive
@@ -748,6 +835,17 @@ func _unhandled_input(event: InputEvent) -> void:
 			_request_pause()
 
 func _process(delta: float) -> void:
+	# Belt-and-suspenders against get_window().size_changed not firing for
+	# every kind of desktop resize (see _ready()'s connection to
+	# _apply_display_mode() for the live-tested specifics) — a plain
+	# Vector2i comparison every frame is cheap enough to just always run,
+	# unconditionally, ahead of every early-return below (a resize must be
+	# picked up regardless of game state — title screen, paused, mid-run).
+	var win_now := DisplayServer.window_get_size()
+	if win_now != _last_window_size:
+		_last_window_size = win_now
+		_apply_display_mode()
+
 	# Not Formation.live_count() — that only counts enemies currently occupying
 	# a slot. A diving enemy releases its slot the instant it peels off (still
 	# alive, still on screen, still able to return), so if it's the last one

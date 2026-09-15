@@ -11,6 +11,10 @@ signal to_title         # pause Quit-to-title, game-over Title
 signal settings_changed # a gameplay setting was saved
 signal splash_done      # minimum time elapsed (or the player skipped it)
 
+## See space_background.gd::set_cabinet_lane() for the full story.
+const DESIGN_WIDTH := 540.0
+const DESIGN_HEIGHT := 960.0
+
 const ACCENT := Color("4db2ff")
 var IS_WEB := OS.has_feature("web")  # not const: OS.has_feature isn't a constant expr
 
@@ -109,6 +113,24 @@ func hide_all() -> void:
 	var snd := get_node_or_null("/root/Snd")
 	if snd:
 		snd.stop_preview()
+
+## See space_background.gd::set_cabinet_lane() for the full story — both
+## _root (every screen's container) and _glass (the frosted backdrop) default
+## to full-rect, which is exactly wrong once the landscape-cabinet-overlay
+## case widens the viewport: menus would center themselves on the WIDE
+## window instead of the narrower lane the game world (via its own fixed
+## Camera2D) actually shows. Restoring the original full-rect behavior when
+## cabinet mode ends is a no-op for KEEP/KEEP_WIDTH, which never widen the
+## viewport past 540 in the first place.
+func set_cabinet_lane(active: bool, offset_x: float) -> void:
+	for c: Control in [_root, _glass]:
+		if active:
+			c.set_anchors_preset(Control.PRESET_TOP_LEFT)
+			c.size = Vector2(DESIGN_WIDTH, DESIGN_HEIGHT)
+			c.position = Vector2(offset_x, 0.0)
+		else:
+			c.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			c.position = Vector2.ZERO
 
 ## Screen -> which looping music track (see sound_manager.gd's LOOPING_KEYS)
 ## should be playing while it's shown. "menu-music" is genuinely the SAME

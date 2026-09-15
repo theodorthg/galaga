@@ -15,6 +15,10 @@ const ENEMY_SCENE := preload("res://enemy.tscn")
 const GROUP_SIZE := 8
 const GROUP_GAP := 0.9
 const LAUNCH_GAP := 0.16
+## See ship.gd::DESIGN_WIDTH — EntryPaths.make() builds its curves in terms of
+## a Vector2(width, height) "canvas"; width must stay the fixed playable-lane
+## width, not the actual (possibly wider, landscape-cabinet-overlay) viewport.
+const DESIGN_WIDTH := 540.0
 
 const ATTACK_DEFAULT := {"first": 1.8, "min": 1.3, "max": 3.2, "max_divers": 3}
 # Capture attempts run on their own clock instead of piggy-backing on the
@@ -83,7 +87,7 @@ func abort() -> void:
 func _run_stage(stage: int, run_id: int) -> void:
 	_spawning = true
 	_pending = 0
-	var vp := get_viewport_rect().size
+	var vp := Vector2(DESIGN_WIDTH, get_viewport_rect().size.y)
 	var total := _formation.slot_count()
 	var patterns := [EntryPaths.BOTTOM_UP, EntryPaths.TOP_LEFT, EntryPaths.TOP_RIGHT]
 	var group_count := int(ceil(float(total) / GROUP_SIZE))

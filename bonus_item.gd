@@ -16,6 +16,9 @@ const DISPLAY_H := 34.0
 # Margin keeps the icon's own half-width off the sway extremes so it never
 # clips off-screen at the turnaround points.
 const SIDE_MARGIN := 40.0
+## See ship.gd::DESIGN_WIDTH — the playable lane's fixed width, independent of
+## the actual (possibly wider, landscape-cabinet-overlay) viewport.
+const DESIGN_WIDTH := 540.0
 
 # 1, 5, 6, 7 dropped: 1 reads too easily as the player's own ship sprite
 # (risk of confusion mid-fight); 5/6/7 still carry heavy nebula-background
@@ -53,7 +56,7 @@ func _ready() -> void:
 	area_entered.connect(_on_area_entered)
 	# Sweep the whole design width, not just wobble around wherever the
 	# caller happened to place it — centered sine covering edge-to-edge.
-	var vp_w := get_viewport_rect().size.x
+	var vp_w := DESIGN_WIDTH
 	_base_x = vp_w * 0.5
 	_amplitude = maxf(vp_w * 0.5 - SIDE_MARGIN, 0.0)
 	_phase = randf_range(0.0, TAU)
