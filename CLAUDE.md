@@ -2084,6 +2084,38 @@ ja kein Verlust im üblichen Sinne ist."
   `ship-destroyed` nachweislich NICHT, `_destroy(true)` (echter Treffer)
   spielt ihn weiterhin wie gehabt.
 
+**Sechsundzwanzigste Playtest-Runde (2026-09-15): Sound-Lautstärke-Defaults
+kalibriert (CLAUDE.md-„Offen"-Punkt 12 abgeschlossen).**
+- **Keine Pegelmessung** — der Nutzer hat stattdessen für jeden der 15 Sounds
+  den Prozentwert genannt, den er im Sound-Menü unter der bisherigen
+  (neutralen `base_db=0.0`) Kalibrierung als angenehm eingestellt hatte:
+  Menu music 40, Results music 25, Intro music (level 1) 30, Shot 15, Enemy
+  kill 15, Enemy kill (diving) 15, Dive 10, Wave announcement 10, Tractor
+  beam capture 15, Boss killed 25, Ship destroyed 30, Extra life 30,
+  Achievement row full 20, Stage cleared 20, Next stage 20.
+- **Umrechnung auf eine einheitliche 50-%-Mitte** (Nutzerwunsch: „als
+  mittlere Lautstärke normieren, damit dann nach unten und nach oben quasi
+  je 50 % an Lautstärke abgezogen oder hinzugefügt werden könnten"). Aus
+  `volume_db = base_db + linear_to_db(prozent/100)` (`sound_manager.gd::
+  _apply()`) folgt: damit der neue Default von 50 % exakt so klingt wie der
+  vom Nutzer gefundene alte Prozentwert bei `base_db=0`, muss
+  `base_db = 20·log10(alter_prozent / 50)` sein (hergeleitet aus
+  `base_db + linear_to_db(0.5) = linear_to_db(alter_prozent/100)`). Alle 15
+  `SOUNDS`-Einträge in `sound_manager.gd` haben jetzt diesen errechneten
+  `base_db`-Wert UND einheitlich Default-% 50 (vorher uneinheitlich
+  45–85 geraten) — „nach oben/unten" bedeutet jetzt für jeden Sound
+  gleichermaßen „lauter/leiser als die vom Nutzer selbst gefundene
+  Referenz", nicht mehr „lauter/leiser als ein arbiträrer Alt-Default".
+  `CALIB_VERSION` 4→5, damit alte gespeicherte Prozentwerte (die gegen die
+  ALTE, flachen Kurve eingestellt wurden und unter der neuen an der
+  falschen Stelle klingen würden) verworfen werden und jeder wieder bei den
+  neuen 50-%-Defaults startet.
+- Per Headless-Test verifiziert: für jeden der 15 Keys erzeugt der neue
+  `base_db` bei 50 % exakt (auf 0,01 dB genau, reine Rundungsdifferenz durch
+  die zweistellige `base_db`-Rundung im Code) denselben `volume_db`-Wert,
+  den die alte Kalibrierung beim vom Nutzer genannten Prozentwert erzeugt
+  hätte — die Umrechnung stimmt rechnerisch exakt.
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,
@@ -2572,14 +2604,9 @@ und „Boss-Capture" weiter oben für Details.
     Hänger-Bug behoben, Bewegung jetzt senkrechte Spalte statt Seitwärts-
     Formation, kein Boss mehr) — beides zusammen ergibt den vollen,
     aktuellen Stand, nicht mehr offen.
-12. **Lautstärke-Defaults nachziehen** (Nutzer, 2026-09-14, vorgemerkt): die
-    15 Sound-Defaults/`base_db` in `sound_manager.gd::SOUNDS` sind seit dem
-    Sound-Austausch (dreizehnte Runde) neutrale Platzhalter (`base_db` 0.0,
-    Prozentwerte geraten) — nach dem Hören im Spiel gehören sie kalibriert
-    (Pegel messen, `base_db` je Clip, sinnvolle Default-%), danach
-    `CALIB_VERSION` hochzählen, damit alte gespeicherte Werte verworfen
-    werden. Gehört zum angekündigten „Sound-Finetuning" (Pausen zwischen
-    Sounds usw.) als eigene Runde.
+12. **Lautstärke-Defaults nachziehen** — erledigt, siehe „Sechsundzwanzigste
+    Playtest-Runde" unten für den vollen Stand (alle 15 `base_db`-Werte
+    kalibriert, einheitlicher 50-%-Default, `CALIB_VERSION` hochgezählt).
 13. **Landscape-Letterbox-Bilder für Geräte ohne Hochkant** (Nutzer,
     2026-09-14, vorgemerkt): `arcade-screen1.png`/`arcade-screen2.png` (im
     Projekt-Wurzelverzeichnis, vom Nutzer abgelegt) sind für Geräte gedacht,

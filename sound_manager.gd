@@ -9,39 +9,42 @@ extends Node
 ## "Snd" identifier does not resolve under `godot --script` (breaks _selftest).
 
 const CFG_PATH := "user://settings.cfg"
-const CALIB_VERSION := 4  # bumped 2026-09-13 (second time same day): "music"
-                          # (gameplay background loop) retired entirely — NES
-                          # Galaga has no in-game music, user's call — and
-                          # "pause-menu-music" replaced by "menu-music" (a
-                          # single track the user liked better, reused from
-                          # what was going to be the highscore screen's own
-                          # music); dive/extra/stage got real clips for the
-                          # first time. Old saved % values for any of that
-                          # would be meaningless.
+const CALIB_VERSION := 5  # bumped 2026-09-15: real per-sound calibration
+                          # (base_db) replaces the neutral 0.0 placeholders —
+                          # see SOUNDS' own comment below. Old saved %
+                          # values were tuned against the old (flat) curve
+                          # and would land at the wrong loudness under the
+                          # new one.
 
 # clips: res://assets/sounds/<key>.wav (or .ogg). All-.ogg as of 2026-09-13.
 const EXTS := [".wav", ".ogg"]
 
-# key -> [display name, default %, base_db calibration]. base_db is 0.0 for
-# every key with a clip as of 2026-09-13 — the user asked to defer real
-# calibration to a later round once they've actually heard these in-game, so
-# these are neutral placeholders, not measured levels.
+# key -> [display name, default %, base_db calibration]. Default % is 50 for
+# every key (2026-09-15) — a deliberate, uniform "middle" so raising/lowering
+# a slider always means "louder/quieter than the reference", never "louder/
+# quieter than some other key's arbitrary starting point". base_db per key is
+# derived from the user's own in-game listening (not a measured clip level):
+# they reported, per sound, the % they found comfortable under the OLD
+# calibration (base_db=0.0 for all). volume_db = base_db + linear_to_db(pct/100)
+# (see _apply() below), so reproducing "sounds like pct_old% did at base_db=0"
+# at the new default of 50% requires base_db = 20*log10(pct_old/50) — solved
+# from base_db + linear_to_db(0.5) = linear_to_db(pct_old/100).
 const SOUNDS := {
-	"menu-music":              ["Menu music", 45, 0.0],
-	"scoring-board-music":     ["Results music", 45, 0.0],
-	"start-first-level-music": ["Intro music (level 1)", 45, 0.0],
-	"shoot":                   ["Shot", 50, 0.0],
-	"enemy-death1":            ["Enemy kill", 70, 0.0],
-	"enemy-death2":            ["Enemy kill (diving)", 70, 0.0],
-	"dive":                    ["Dive", 60, 0.0],
-	"enemy-wave1":             ["Wave announcement", 70, 0.0],
-	"beam-sound":              ["Tractor beam capture", 70, 0.0],
-	"boss-killed":             ["Boss killed", 70, 0.0],
-	"ship-destroyed":          ["Ship destroyed", 85, 0.0],
-	"extra":                   ["Extra life", 75, 0.0],
-	"bonus-stage-cleared":     ["Achievement row full", 70, 0.0],
-	"level-cleared":           ["Stage cleared", 70, 0.0],
-	"stage":                   ["Next stage", 70, 0.0],
+	"menu-music":              ["Menu music", 50, -1.94],   # was comfortable at 40%
+	"scoring-board-music":     ["Results music", 50, -6.02],  # was comfortable at 25%
+	"start-first-level-music": ["Intro music (level 1)", 50, -4.44],  # was comfortable at 30%
+	"shoot":                   ["Shot", 50, -10.46],  # was comfortable at 15%
+	"enemy-death1":            ["Enemy kill", 50, -10.46],  # was comfortable at 15%
+	"enemy-death2":            ["Enemy kill (diving)", 50, -10.46],  # was comfortable at 15%
+	"dive":                    ["Dive", 50, -13.98],  # was comfortable at 10%
+	"enemy-wave1":             ["Wave announcement", 50, -13.98],  # was comfortable at 10%
+	"beam-sound":              ["Tractor beam capture", 50, -10.46],  # was comfortable at 15%
+	"boss-killed":             ["Boss killed", 50, -6.02],  # was comfortable at 25%
+	"ship-destroyed":          ["Ship destroyed", 50, -4.44],  # was comfortable at 30%
+	"extra":                   ["Extra life", 50, -4.44],  # was comfortable at 30%
+	"bonus-stage-cleared":     ["Achievement row full", 50, -7.96],  # was comfortable at 20%
+	"level-cleared":           ["Stage cleared", 50, -7.96],  # was comfortable at 20%
+	"stage":                   ["Next stage", 50, -7.96],  # was comfortable at 20%
 }
 const ORDER := [
 	"menu-music", "scoring-board-music", "start-first-level-music",
