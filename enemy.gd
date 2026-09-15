@@ -140,8 +140,12 @@ func capture_dive() -> void:
 	_formation.release(self)
 	_state = CAPTURE_APPROACH
 	_set_player_capture_invuln(true)
-	if _snd:
-		_snd.play("dive")
+	# No "dive" sound here (user report 2026-09-15: heard it play right before
+	# a Boss capture) — this is a capture approach, not a plain dive, and it
+	# already has its own dedicated cue ("beam-sound", played once the beam
+	# actually catches the ship — see _begin_capture_beam() below). Playing
+	# "dive" on top of that read as two overlapping, conflicting sounds for
+	# one event.
 
 ## See ship.gd::set_capture_invulnerable() for why the whole attempt (not just
 ## the beam itself) needs to make the ship immune to any OTHER source of death.

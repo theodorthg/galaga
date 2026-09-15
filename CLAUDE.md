@@ -2116,6 +2116,77 @@ kalibriert (CLAUDE.md-„Offen"-Punkt 12 abgeschlossen).**
   den die alte Kalibrierung beim vom Nutzer genannten Prozentwert erzeugt
   hätte — die Umrechnung stimmt rechnerisch exakt.
 
+**Siebenundzwanzigste Playtest-Runde (2026-09-15): Boss spielt beim
+Fangversuch keinen dive-Sound mehr; erster Versuch eines Landscape-
+Kabinett-Overlays für Geräte ohne Hochkant (Anbernic RG552).**
+- **1. Boss-Fang spielte fälschlich "dive" zusätzlich zu "beam-sound"**
+  (Nutzer-Report): `enemy.gd::capture_dive()` spielte seit jeher `_snd.play
+  ("dive")` beim Start des Fangversuchs — vermutlich aus dem normalen
+  `dive()` kopiert und nie entfernt. Der Fangversuch hat aber längst seinen
+  eigenen, dedizierten Sound (`beam-sound`, aus der Dreizehnten Playtest-
+  Runde, gespielt beim tatsächlichen Fang). Fix: die `dive`-Zeile in
+  `capture_dive()` ersatzlos gestrichen. Per Headless-Test verifiziert.
+- **2. Landscape-Kabinett-Overlay (erster, unverifizierter Versuch)** — der
+  Nutzer möchte testen, wie das Spiel mit `arcade-screen1.png` als
+  Kabinett-Rahmen auf seinem Anbernic RG552 aussieht (ein Gerät ohne
+  Hochkant-Rotation, läuft vermutlich über die Linux-Variante dieses
+  Exports — sonst gäbe es hier keine schwarzen Balken zu füllen, siehe
+  unten). Neue Datei `arcade_shell.gd`/`.tscn`, jetzt `run/main_scene`
+  (ersetzt `game.tscn` direkt als Startpunkt).
+  - **Warum das nicht einfach ein Hintergrundbild sein kann**: Godots
+    `canvas_items`+`KEEP`-Streckmodus (bisheriges Verhalten auf
+    Nicht-Touch-Geräten) erzeugt die schwarzen Ränder als echtes Letterboxing
+    AUSSERHALB des von der Szene erreichbaren Koordinatenraums — dort lässt
+    sich grundsätzlich nichts hinzeichnen, auch kein Hintergrund-Node. Fix:
+    `arcade_shell.gd` schaltet für genau diesen einen Fall die automatische
+    Fenster-Skalierung ab (`Window.content_scale_mode = DISABLED`) und baut
+    das Letterboxing von Hand nach: ein `Control` über das ganze Fenster mit
+    dem Kabinett-Bild als `TextureRect` (`STRETCH_KEEP_ASPECT_CENTERED`),
+    darüber ein `SubViewportContainer` (`stretch=true`) mit einem
+    `SubViewport` fester Größe 540×960, in dem `game.tscn` unverändert läuft
+    — das Spiel selbst „sieht" innen weiterhin exakt dieselbe feste
+    540×960-Welt wie eh und je, nichts an `ship.gd`/`enemy.gd`/HUD/etc.
+    musste dafür angefasst werden.
+  - **Bewusst nur für EINEN Fall aktiv** (`arcade_shell.gd::_wants_overlay()`
+    — nicht touch UND Fenster breiter als hoch): für jeden anderen Fall
+    (Touch-Geräte, Web, normale Desktop-Fenster in der bisherigen Form)
+    instanziiert die Shell `game.tscn` einfach direkt als einzigen Kind-Node,
+    strukturell identisch dazu, dass `game.tscn` weiterhin selbst die
+    `main_scene` wäre — `project.godot`s `window/stretch/mode="canvas_items"`
+    bleibt für diesen Zweig komplett unangetastet, null Risiko für Touch-
+    Geräte/Web/normales Desktop-Spiel. **Nebenwirkung, noch nicht
+    eingegrenzt**: ein gewöhnliches breites Desktop-Fenster (z. B. 16:9) hat
+    genau dieselbe Form wie das Zielgerät und bekommt das Overlay aktuell
+    also GENAUSO — bisher niemand gefragt, ob das für normales
+    Desktop-Spielen erwünscht ist oder eingeschränkt werden soll (z. B. nur
+    für den Android/Linux-Export, oder ein eigener Einstellungs-Schalter).
+  - **Platzierung im Bild**: `arcade-screen1.png` direkt vermessen
+    (2728×1536 Gesamtgröße) — der große zusammenhängende transparente
+    Bereich läuft über die VOLLE Bildhöhe und ist horizontal zentriert, aber
+    selbst deutlich breiter (~1787 px) als eine 540:960-Fläche braucht.
+    Statt das Spiel auf die (nicht-Hochkant-förmige) Aussparung zu strecken
+    (hätte es verzerrt), bleibt das Seitenverhältnis exakt 540:960 erhalten
+    und wird auf die VOLLE Höhe der Aussparung skaliert, horizontal
+    zentriert — es bleibt dadurch links/rechts noch etwas vom transparenten
+    Rand der Aussparung selbst sichtbar (durchscheinendes Schwarz), was in
+    Ordnung sein sollte, da es klar innerhalb der vorgesehenen „Bildschirm"-
+    Aussparung bleibt statt auf die Kabinett-Grafik drumherum überzugreifen.
+  - **Nicht visuell verifiziert** — keine Möglichkeit, das Rendering an
+    Pixeln zu prüfen (kein Display/Gerät verfügbar). Per Headless-Test nur
+    strukturell/rechnerisch geprüft: (a) der Passthrough-Zweig (Touch/
+    Desktop normal) hängt `game.tscn` unverändert direkt ein, (b) der
+    Overlay-Zweig baut exakt die erwartete Struktur (Control → TextureRect +
+    SubViewportContainer → SubViewport 540×960 → Game-Instanz), (c) die
+    Platzierungs-Formel liefert für ein RG552-typisches Fenster (1920×1152)
+    ein exakt 540:960-proportioniertes, horizontal zentriertes Rechteck, das
+    vollständig innerhalb des Fensters liegt. Die eigentliche Bildwirkung
+    (sitzt das Spielfeld optisch richtig in der Aussparung? wirkt der
+    Kabinett-Rahmen stimmig?) kann nur der Nutzer selbst auf dem echten
+    RG552 beurteilen — nächste Runde nach seinem Feedback, ggf. mit
+    angepassten Zahlen in `arcade_shell.gd` (`IMG_SIZE`/`CUTOUT_CENTER_X`)
+    oder mit `arcade-screen2.png` als Alternative (vom Nutzer genannt, aber
+    nicht bevorzugt).
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,
@@ -2607,17 +2678,13 @@ und „Boss-Capture" weiter oben für Details.
 12. **Lautstärke-Defaults nachziehen** — erledigt, siehe „Sechsundzwanzigste
     Playtest-Runde" unten für den vollen Stand (alle 15 `base_db`-Werte
     kalibriert, einheitlicher 50-%-Default, `CALIB_VERSION` hochgezählt).
-13. **Landscape-Letterbox-Bilder für Geräte ohne Hochkant** (Nutzer,
-    2026-09-14, vorgemerkt): `arcade-screen1.png`/`arcade-screen2.png` (im
-    Projekt-Wurzelverzeichnis, vom Nutzer abgelegt) sind für Geräte gedacht,
-    die gar kein Hochkant-Format kennen (Nutzerbeispiel: Anbernic R552) — sie
-    sollen den linken/rechten schwarzen Rand kaschieren, der dort neben dem
-    Hochkant-Spielfeld entsteht. **`arcade-screen1.png` ist die bevorzugte
-    Wahl**, `arcade-screen2.png` die Alternative. Noch nicht eingebaut — noch
-    zu klären: wo genau im Rendering das eingehängt wird (vermutlich ein
-    Hintergrund-Layer hinter/neben dem eigentlichen `CONTENT_SCALE_ASPECT_
-    KEEP`-Letterbox-Bereich auf Nicht-Touch-Geräten mit falscher Ratio) —
-    eigene Runde, sobald der Nutzer konkret danach fragt.
+13. **Landscape-Letterbox-Bilder für Geräte ohne Hochkant** — erster Versuch
+    erledigt, siehe „Siebenundzwanzigste Playtest-Runde" oben
+    (`arcade_shell.gd`/`.tscn`, jetzt `run/main_scene`). Noch offen: visuelle
+    Verifikation durch den Nutzer auf dem echten Anbernic RG552 (kein
+    Display hier verfügbar) und die Frage, ob das Overlay auch für normale
+    breite Desktop-Fenster gewünscht ist oder eingegrenzt werden soll.
+    `arcade-screen2.png` liegt weiterhin als unbenutzte Alternative bereit.
 
 ## Aseprite MCP Pro
 
