@@ -72,15 +72,18 @@ const BONUS_SPEED_JITTER := 0.18  # ± fraction of the wave's base speed
 ## that happens.
 const BONUS_TWIN_ROW_GAP := 70.0
 
-## Set by arcade_shell.gd BEFORE add_child() (so _ready() below sees it)
-## when this instance runs inside its own fixed-size SubViewport for the
-## landscape-cabinet-overlay case — that case is always controller/keyboard
-## driven (e.g. the user's Anbernic RG552), so it's forced to skip the normal
+## Set by arcade_shell.gd BEFORE add_child() (so _ready() below sees it) when
+## this instance is being manually scaled/positioned for the landscape-
+## cabinet-overlay case — that case is always controller/keyboard driven
+## (e.g. the user's Anbernic RG552), so it's forced to skip the normal
 ## OS.has_feature("mobile")/touchscreen autodetection entirely regardless of
-## what the device would otherwise report. The wrapping SubViewport is also a
-## fixed 540x960 with no "extra height" to give a touch layout anyway.
+## what the device would otherwise report. Currently unused: arcade_shell.gd
+## is parked, not wired up as run/main_scene (see its own doc comment for why
+## — the touch-vs-viewport-size conflict isn't solved yet). Left in place,
+## harmless at its default of false, for whoever resumes that work.
 var force_non_touch := false
 
+@onready var _hud_layer: CanvasLayer = $HUD
 @onready var _formation: Formation = $Formation
 @onready var _director: StageDirector = $StageDirector
 @onready var _ship: Area2D = $Ship
@@ -181,6 +184,27 @@ func apply_touch_layout() -> void:
 	_touch = true
 	_apply_display_mode()
 	_menus.set_touch_context(_touch)
+
+## Currently unused — written for arcade_shell.gd's parked landscape-cabinet-
+## overlay attempt (see that file's doc comment for the full story: this
+## avoids the touch-input breakage a SubViewport-based version had, but the
+## caller side of this still has an unresolved get_viewport_rect() conflict
+## with the rest of the gameplay code, so it's not wired up). Reproduces the
+## same "scale + center within the window" transform Godot's own
+## content_scale_mode=canvas_items would normally apply automatically.
+## Node2D-based content (ship, enemies, background, ...) inherits this node's
+## own transform automatically since they're plain children of it; HUD/Menus
+## are CanvasLayers, which deliberately DON'T inherit ancestor Node2D
+## transforms (that's the whole point of CanvasLayer), so they need their own
+## scale/offset set to match, or they'd stay full-window-sized while the
+## world shrinks into its letterboxed rect.
+func apply_manual_scale(new_scale: float, offset: Vector2) -> void:
+	scale = Vector2(new_scale, new_scale)
+	position = offset
+	_hud_layer.scale = Vector2(new_scale, new_scale)
+	_hud_layer.offset = offset
+	_menus.scale = Vector2(new_scale, new_scale)
+	_menus.offset = offset
 
 # --- run lifecycle ----------------------------------------------------
 func _reload_settings() -> void:

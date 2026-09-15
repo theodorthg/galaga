@@ -2212,6 +2212,68 @@ logcat` für `print()`-Ausgaben aus dem laufenden Spiel.
   `expand_mode == EXPAND_IGNORE_SIZE` gesetzt, `force_non_touch` korrekt bis
   zur gewrappten `Game`-Instanz durchgereicht.
 
+**Neunundzwanzigste Playtest-Runde (2026-09-15): Landscape-Kabinett-Overlay
+wieder zurückgenommen — Touch-Buttons (u. a. „Beenden") funktionierten dadurch
+nicht mehr. Feature vorerst pausiert, `run/main_scene` wieder auf `game.tscn`.**
+Nutzer-Report direkt nach der letzten Runde: „ist diese Änderung jetzt auch
+der Grund dafür, dass ich den Exit-Button nicht mehr mit touch klicken kann?
+Und eigentlich gar keine Touch-Buttons?" — ja, war sie.
+- **Ursache gefunden, nicht geraten** — wieder per `adb` direkt am RG552
+  verifiziert: `adb shell input tap <x> <y>` auf den Exit-Button-Koordinaten
+  löste NICHTS aus (App lief weiter). Diagnose-`print()`s in
+  `arcade_shell.gd::_input()` UND `game.gd::_input()` zeigten: das
+  Touch-Event erreichte NICHT EINMAL den obersten Knoten der Szene, solange
+  irgendwo ein `SubViewport` existierte — unabhängig davon, ob
+  `content_scale_mode` deaktiviert war oder nicht. Mit `_wants_overlay()`
+  testweise fest auf `false` gezwungen (kein `SubViewport` mehr, `game.tscn`
+  wieder direktes Kind) kam derselbe Tap auf denselben Koordinaten korrekt
+  an — der Exit-Button hat die App tatsächlich beendet. Damit ist belegt
+  (nicht nur vermutet): `SubViewportContainer` leitet
+  `InputEventScreenTouch`/`Drag` auf dieser Android/Godot-4.7.1-Kombination
+  nicht zuverlässig an sein `SubViewport` weiter — und offenbar stört die
+  bloße Existenz eines `SubViewport` sogar die Touch-Zustellung an den
+  gesamten übrigen Baum.
+- **Zweiter Versuch ohne SubViewport, dabei einen fundamentaleren Konflikt
+  entdeckt, BEVOR er auf dem Gerät ausprobiert wurde**: `game.tscn` bleibt
+  direktes Kind derselben Viewport-Ebene, manuell skaliert/positioniert über
+  ein neues `game.gd::apply_manual_scale()` (setzt `scale`/`position` auf
+  `Game` selbst für die Node2D-Inhalte, UND zusätzlich `scale`/`offset` auf
+  die beiden `CanvasLayer`-Kinder `HUD`/`Menus`, da CanvasLayer bewusst NICHT
+  die Transforms von Node2D-Vorfahren übernimmt). Löst das Touch-Problem
+  (nur noch eine Viewport-Ebene) — aber: mit deaktiviertem
+  `content_scale_mode` liefert `get_viewport_rect()` jetzt die ECHTE
+  Fenstergröße (z. B. 1920×1152 auf dem RG552) statt der von praktisch
+  JEDEM Gameplay-Code angenommenen ~540×960 (Schiffs-Bewegungsgrenzen in
+  `ship.gd`, Kurven in `entry_paths.gd`/`attack_paths.gd`,
+  Bonuslevel-Spaltenpositionen, HUD-Layout, Despawn-Grenzen in `bomb.gd`,
+  …) — das Schiff könnte sich z. B. über den halben physischen Bildschirm
+  bewegen statt nur über die vorgesehenen ~540 Einheiten. Kein kosmetisches
+  Problem, sondern unspielbar. Diesen zweiten Fehler VOR jedem weiteren
+  Geräte-Test selbst gefunden (reine Code-Analyse) — nicht erst durch den
+  Nutzer gemeldet.
+- **Entscheidung: Feature vorerst zurückgenommen statt eine der beiden
+  kaputten Varianten auszuliefern.** `project.godot`s `run/main_scene` wieder
+  auf `res://game.tscn` (direkt, wie vor der Siebenundzwanzigsten Runde) —
+  auf dem RG552 per `adb` erneut verifiziert: derselbe Exit-Button-Tap
+  beendet die App jetzt wieder korrekt. `arcade_shell.gd`/`.tscn` sowie
+  `game.gd::force_non_touch`/`apply_manual_scale()` bleiben als Code liegen
+  (nicht gelöscht — echte Analysearbeit steckt darin, siehe die ausführliche
+  neue Kopfkommentar-Dokumentation in `arcade_shell.gd` für beide
+  gescheiterten Ansätze im Detail), sind aber ausdrücklich NICHT aktiv und
+  dürfen nicht ohne Weiteres wieder scharf geschaltet werden — der zweite
+  Ansatz hat den Viewport-Größen-Konflikt bis heute ungelöst.
+- **Mögliche nächste Schritte, falls das Thema wieder aufgegriffen wird**
+  (in `arcade_shell.gd` selbst dokumentiert): entweder die eigentliche
+  Ursache für das SubViewport-Touch-Problem finden und beheben, oder einen
+  Weg finden, dem Spiel eine feste logische Viewport-Größe zu geben OHNE ein
+  zweites Viewport-Objekt. Ein nativer Android-Ansatz (transparente
+  Godot-Oberfläche über einem eigenen Launcher-Hintergrundbild) wurde
+  erwogen, bräuchte aber einen custom Gradle/Android-Export-Build, deutlich
+  über den bisherigen Build-Aufbau dieses Projekts hinaus — hier nur
+  vermerkt, nicht versucht.
+- `arcade-screen1.png`/`arcade-screen2.png` bleiben im Projekt liegen, falls
+  ein künftiger Versuch sie wieder braucht.
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,
@@ -2703,14 +2765,18 @@ und „Boss-Capture" weiter oben für Details.
 12. **Lautstärke-Defaults nachziehen** — erledigt, siehe „Sechsundzwanzigste
     Playtest-Runde" unten für den vollen Stand (alle 15 `base_db`-Werte
     kalibriert, einheitlicher 50-%-Default, `CALIB_VERSION` hochgezählt).
-13. **Landscape-Letterbox-Bilder für Geräte ohne Hochkant** — erledigt und
-    live auf dem echten Anbernic RG552 verifiziert (siehe „Siebenundzwanzigste"
-    + „Achtundzwanzigste Playtest-Runde" oben — `arcade_shell.gd`/`.tscn`,
-    jetzt `run/main_scene`). Bewusst nicht auf das eine Gerät eingegrenzt:
-    gilt jetzt für jedes Fenster, das breiter als hoch ist (Desktop
-    eingeschlossen), auf Nutzerwunsch. `arcade-screen2.png` liegt weiterhin
-    als unbenutzte Alternative bereit, falls `arcade-screen1.png` sich
-    später doch nicht bewährt.
+13. **Landscape-Letterbox-Bilder für Geräte ohne Hochkant** — PAUSIERT, nicht
+    erledigt (siehe „Siebenundzwanzigste" bis „Neunundzwanzigste
+    Playtest-Runde" oben für den vollen Verlauf). Zwei Ansätze probiert, beide
+    kaputt: ein `SubViewport`-Wrapper sah optisch korrekt aus, brach aber
+    sämtliche Touch-Buttons (live auf dem RG552 per `adb` bestätigt); die
+    Alternative ohne `SubViewport` behebt das, aber `get_viewport_rect()`
+    liefert dann die rohe Fenstergröße statt der von praktisch jedem
+    Gameplay-Code angenommenen ~540×960 — unspielbar. `run/main_scene` ist
+    deshalb wieder `game.tscn` direkt, `arcade_shell.gd`/`.tscn` liegen als
+    dokumentierter, aber inaktiver Code für einen künftigen Anlauf bereit
+    (nicht ohne Weiteres wieder scharf schalten — siehe die ausführliche
+    Doku dort). `arcade-screen1.png`/`arcade-screen2.png` bleiben im Projekt.
 
 ## Aseprite MCP Pro
 

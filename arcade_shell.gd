@@ -1,47 +1,65 @@
 extends Node
 
-## New res://project run/main_scene (2026-09-15), replacing game.tscn directly.
-## Exists for ONE reason: a device that can't rotate to portrait at all (user's
-## Anbernic RG552, running this project's Linux export) has no way to show a
-## portrait 540x960 game without either (a) plain black bars left/right
-## (today's game.gd::_apply_display_mode() KEEP behavior) or (b) badly
-## squashing the game if treated as a "touch" device (KEEP_WIDTH assumes a
-## device TALLER than 540:960, not wider). This shell instead fills those bars
-## with the user's own arcade-cabinet artwork (arcade-screen1.png).
+## PARKED, NOT CURRENTLY WIRED UP (2026-09-15) — project.godot's
+## run/main_scene points at res://game.tscn directly again, NOT this file.
+## Kept around (code + comments) as a starting point for whoever picks this
+## back up, since real work and two real findings went into it — see below —
+## but it must NOT be re-enabled as-is: the current code in this file has a
+## known, unresolved bug (explained below) that would break core gameplay
+## math on every screen it activates for.
 ##
-## Godot's own canvas_items + KEEP stretch mode CANNOT do this itself: the
+## GOAL: a device that can't rotate to portrait at all (user's Anbernic
+## RG552) shows the portrait 540x960 game letterboxed with plain black bars
+## left/right (game.gd::_apply_display_mode()'s normal KEEP behavior on a
+## non-touch device). The idea was to fill those bars with the user's own
+## arcade-cabinet artwork (arcade-screen1.png) instead of plain black.
+##
+## Godot's own canvas_items + KEEP stretch mode can't do this itself: the
 ## letterbox area it produces is genuinely outside the scene tree's reach —
 ## nothing can be drawn there, by design. Reproducing "KEEP, but with custom
-## art in the bars" therefore needs disabling the engine's automatic window
-## scaling and doing it by hand: a full-window background Control, with the
-## actual game running inside a SubViewport sized/positioned to sit within the
-## background image's own transparent cutout.
+## art in the bars" needs disabling the engine's automatic window scaling and
+## doing it by hand — and BOTH ways tried so far to then still show the game
+## itself turned out to break something else:
 ##
-## Deliberately triggers on window SHAPE alone (landscape, i.e. wider than
-## tall — see _wants_overlay()), not on touch/mobile detection: any window
-## that's landscape-shaped has the same letterbox problem regardless of what
-## device it's running on, so — per user request 2026-09-15 — this applies
-## equally to a normal widescreen desktop window as it does to the RG552; no
-## separate device-specific carve-out. A portrait-ish or taller-than-wide
-## window (phones, tablets, a narrow desktop window) has no meaningful
-## letterbox space to fill in the first place, so it instantiates game.tscn
-## directly as this node's only child instead — ZERO structural difference
-## from game.tscn being the main scene itself, project.godot's existing
-## window/stretch/mode="canvas_items" keeps working exactly as before there,
-## completely untouched.
+## ATTEMPT 1 — wrap game.tscn in its own SubViewport, sized/scaled via a
+## SubViewportContainer to sit in the background image's transparent cutout.
+## Looked correct in screenshots (confirmed live on the RG552 via adb: art
+## symmetric both sides, game centered right on the cutout). But live-testing
+## actual interaction (`adb shell input tap` at the Exit button's on-screen
+## position, since the RG552 was on USB in developer mode) found it silently
+## broke ALL touch input: nothing happened, and not even this shell's own
+## top-level _input() saw the event any more, though the EXACT same tap
+## worked and correctly exited the app with the SubViewport removed.
+## SubViewportContainer evidently does not reliably forward
+## InputEventScreenTouch/Drag to a child SubViewport on this Android/Godot
+## 4.7.1 combination — confirmed by direct A/B testing on the device, not a
+## guess (mouse/keyboard/gamepad were never isolated, only touch).
 ##
-## Verified live on the user's actual RG552 (2026-09-15, via adb screenshots)
-## — looks correct: symmetric cabinet art both sides, game centered exactly on
-## the transparent cutout. Two real bugs found and fixed in the process, both
-## confirmed for good reason to trust actual device testing over guessing:
-## (1) OS.has_feature("mobile") is true on this Android device, so an earlier
-## version's touch/mobile gate on _wants_overlay() skipped the overlay branch
-## entirely regardless of screen shape — removed, see _wants_overlay() below.
-## (2) TextureRect's default expand_mode=EXPAND_KEEP_SIZE sized the background
-## to the texture's native 2728x1536 pixels anchored at (0,0), ignoring the
-## anchors entirely — only the image's top-left corner showed, cropped to the
-## screen, nothing at all on the right. Fixed via expand_mode=EXPAND_IGNORE_SIZE
-## (see _build_overlay() below).
+## ATTEMPT 2 (this file's current code) — avoid a second viewport entirely:
+## keep game.tscn a plain, direct child of the SAME viewport as this shell,
+## manually scaled/positioned via game.gd::apply_manual_scale() instead of a
+## SubViewport. This DOES fix the touch problem (single viewport, nothing to
+## forward) — but introduces a different, more fundamental one, caught before
+## ever reaching the device: with content_scale_mode disabled for the whole
+## window, get_viewport_rect() now returns the RAW WINDOW size (e.g.
+## 1920x1152 on the RG552) instead of the ~540x960 design size EVERY piece of
+## gameplay code assumes (ship.gd's movement clamp, entry_paths.gd/
+## attack_paths.gd curves, bonus level column placement, HUD layout, bomb
+## despawn bounds, ...). Left as-is, the ship could wander most of the way
+## across a 1920px-wide screen instead of the intended ~540 design units —
+## not a cosmetic bug, the game becomes unplayable. Fixing that would mean
+## either restoring a real design-sized viewport (bringing back Attempt 1's
+## touch problem) or auditing and adapting every one of those call sites,
+## neither of which happened here.
+##
+## NEXT STEPS for whoever resumes this: either find the actual reason
+## SubViewportContainer drops touch here (an engine version quirk? a missing
+## property?) and fix Attempt 1 properly, or find a way to give the game a
+## fixed logical viewport size without a second Viewport object at all. A
+## native-Android approach (transparent Godot surface over a custom launcher
+## background image) was considered but needs a custom Gradle/Android export
+## build, well beyond this project's current build setup — noted here rather
+## than attempted.
 
 const GAME_SCENE := preload("res://game.tscn")
 const BG_TEXTURE := preload("res://arcade-screen1.png")
@@ -58,7 +76,7 @@ const IMG_SIZE := Vector2(2728.0, 1536.0)
 const CUTOUT_CENTER_X := IMG_SIZE.x * 0.5  # the cutout is horizontally centered on the image
 const DESIGN_SIZE := Vector2(540.0, 960.0)
 
-var _container: SubViewportContainer
+var _game_instance: Node2D
 
 func _ready() -> void:
 	if _wants_overlay():
@@ -68,11 +86,11 @@ func _ready() -> void:
 
 ## Landscape-shaped (wider than tall) — a portrait-ish or square window has no
 ## meaningful letterbox space for the art to fill in the first place. NOT
-## gated on touch/mobile any more (2026-09-15 fix, user report: RG552 is an
-## Android device, so OS.has_feature("mobile") is almost certainly true there,
-## which skipped this branch entirely regardless of the screen's actual
-## shape) — a landscape-locked device needing this treatment has nothing to
-## do with whether it happens to report "mobile" or has a touchscreen at all.
+## gated on touch/mobile: a landscape-locked device needing this treatment has
+## nothing to do with whether it happens to report "mobile" or has a
+## touchscreen at all (2026-09-15 fix — RG552 is Android, so OS.has_feature
+## ("mobile") is true there; an earlier version excluded it for exactly that
+## reason and never built the overlay at all regardless of screen shape).
 func _wants_overlay() -> bool:
 	var win := DisplayServer.window_get_size()
 	return win.x > win.y
@@ -80,14 +98,14 @@ func _wants_overlay() -> bool:
 func _build_overlay() -> void:
 	# The engine's own automatic scaling is exactly what walls off the
 	# letterbox area from the scene tree in the first place — turn it off for
-	# this one code path so the Control/SubViewport structure below can
-	# address the REAL window pixels directly instead.
+	# this one code path so the background Control below can address the REAL
+	# window pixels directly instead.
 	get_window().content_scale_mode = Window.CONTENT_SCALE_MODE_DISABLED
 
-	var root := Control.new()
-	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(root)
+	var bg_root := Control.new()
+	bg_root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	bg_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(bg_root)
 
 	var bg := TextureRect.new()
 	bg.texture = BG_TEXTURE
@@ -97,44 +115,38 @@ func _build_overlay() -> void:
 	# ignores anchors entirely — confirmed live on the RG552 (2026-09-15):
 	# only the image's top-left corner showed, anchored at (0,0), cropped to
 	# the screen, with nothing at all on the right (that part of the 2728px-
-	# wide image fell outside the 1920px-wide screen). EXPAND_IGNORE_SIZE
-	# lets the Control's rect follow the anchors below like any other Control,
+	# wide image fell outside the 1920px-wide screen). EXPAND_IGNORE_SIZE lets
+	# the Control's rect follow the anchors below like any other Control,
 	# which is what actually makes stretch_mode's scale-to-fit take effect.
 	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	root.add_child(bg)
+	bg_root.add_child(bg)
 
-	_container = SubViewportContainer.new()
-	_container.stretch = true
-	root.add_child(_container)
-
-	var vp := SubViewport.new()
-	vp.size = Vector2i(DESIGN_SIZE)
-	_container.add_child(vp)
-	var game_instance := GAME_SCENE.instantiate()
-	# This case is always controller/keyboard driven, and the SubViewport
-	# above is a fixed 540x960 with no "extra height" to give a touch layout
-	# anyway — see force_non_touch's own doc comment in game.gd.
-	game_instance.force_non_touch = true
-	vp.add_child(game_instance)
+	_game_instance = GAME_SCENE.instantiate()
+	# This case is always controller/keyboard driven — see force_non_touch's
+	# own doc comment in game.gd.
+	_game_instance.force_non_touch = true
+	add_child(_game_instance)
 
 	_update_layout()
 	get_window().size_changed.connect(_update_layout)
 
 ## Same fit-to-window math TextureRect's own STRETCH_KEEP_ASPECT_CENTERED uses
-## for the background (scale to fit, centered) — applied here to place the
-## SubViewportContainer at the corresponding spot within the DISPLAYED image,
-## not the raw image's own pixel coordinates.
+## for the background (scale to fit, centered) — applied here to work out
+## where the game itself should sit within the DISPLAYED image, not the raw
+## image's own pixel coordinates, then handed to game.gd::apply_manual_scale()
+## to actually place it (see that function for why it needs the game itself to
+## do this rather than a wrapping Control/SubViewport).
 func _update_layout() -> void:
-	if not is_instance_valid(_container):
+	if not is_instance_valid(_game_instance):
 		return
 	var win := Vector2(DisplayServer.window_get_size())
-	var scale := minf(win.x / IMG_SIZE.x, win.y / IMG_SIZE.y)
-	var displayed := IMG_SIZE * scale
+	var img_scale := minf(win.x / IMG_SIZE.x, win.y / IMG_SIZE.y)
+	var displayed := IMG_SIZE * img_scale
 	var offset := (win - displayed) * 0.5
 	var game_h := displayed.y
 	var game_w := game_h * (DESIGN_SIZE.x / DESIGN_SIZE.y)
-	var game_x := offset.x + CUTOUT_CENTER_X * scale - game_w * 0.5
-	_container.position = Vector2(game_x, offset.y)
-	_container.size = Vector2(game_w, game_h)
+	var game_scale := game_h / DESIGN_SIZE.y
+	var game_x := offset.x + CUTOUT_CENTER_X * img_scale - game_w * 0.5
+	_game_instance.apply_manual_scale(game_scale, Vector2(game_x, offset.y))
