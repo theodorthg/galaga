@@ -11,7 +11,12 @@ extends Control
 @onready var _stage: Label = $Stage
 @onready var _banner: Label = $Banner
 @onready var _pause_btn: Button = $PauseButton
+@onready var _mute_btn: Button = $MuteButton
 var _pause_glass: ColorRect
+var _mute_glass: ColorRect
+## See mute_icon.gd's own doc comment for why the icon lives on a dedicated
+## Control instead of being drawn directly by this node.
+var _mute_icon: Control
 
 ## See space_background.gd::set_cabinet_lane() for the full story — same fix,
 ## same reason, applied here since HUD is a CanvasLayer's full-rect Control
@@ -102,6 +107,7 @@ var _bonus_laps := 0
 var _lap_pending := false
 
 signal pause_pressed
+signal mute_pressed
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -110,6 +116,10 @@ func _ready() -> void:
 	_pause_btn.visible = true
 	UiStyle.style_button(_pause_btn)
 	_add_pause_glass()
+	_mute_btn.pressed.connect(func(): mute_pressed.emit())
+	_mute_btn.visible = true
+	UiStyle.style_button(_mute_btn)
+	_add_mute_glass()
 	UiStyle.impact_label(_banner)
 	_stage.add_theme_color_override("font_color", UiStyle.ACCENT)
 	_stage.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
@@ -185,6 +195,41 @@ func _add_pause_glass() -> void:
 	_pause_glass.offset_top = _pause_btn.offset_top
 	_pause_glass.offset_right = _pause_btn.offset_right
 	_pause_glass.offset_bottom = _pause_btn.offset_bottom
+
+## Same trick as _add_pause_glass(), sized to the mute button's own rect.
+func _add_mute_glass() -> void:
+	var g := UiStyle.make_glass_backdrop()
+	var btn_idx := _mute_btn.get_index()
+	add_child(g.backbuffer)
+	move_child(g.backbuffer, btn_idx)
+	add_child(g.glass)
+	move_child(g.glass, btn_idx + 1)
+	_mute_glass = g.glass
+	_mute_glass.visible = true
+	_mute_glass.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	_mute_glass.offset_left = _mute_btn.offset_left
+	_mute_glass.offset_top = _mute_btn.offset_top
+	_mute_glass.offset_right = _mute_btn.offset_right
+	_mute_glass.offset_bottom = _mute_btn.offset_bottom
+	# On top of the button itself (see mute_icon.gd's doc comment for why
+	# that has to be a separate Control instead of drawn by this node) —
+	# added last / moved to btn_idx+1 so it's the topmost of the three.
+	_mute_icon = Control.new()
+	_mute_icon.set_script(load("res://mute_icon.gd"))
+	_mute_icon.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	_mute_icon.offset_left = _mute_btn.offset_left
+	_mute_icon.offset_top = _mute_btn.offset_top
+	_mute_icon.offset_right = _mute_btn.offset_right
+	_mute_icon.offset_bottom = _mute_btn.offset_bottom
+	add_child(_mute_icon)
+	move_child(_mute_icon, _mute_btn.get_index() + 1)
+
+## Called by game.gd whenever the muted state changes (button press, or once
+## on _ready() to reflect the persisted user://settings.cfg value) — never
+## touches audio itself, just the icon.
+func set_muted(m: bool) -> void:
+	if is_instance_valid(_mute_icon):
+		_mute_icon.set_muted(m)
 
 # hide the whole HUD while a full-screen menu is up
 func set_playing(on: bool) -> void:

@@ -20,6 +20,7 @@ const SCRIPTS := [
 	"res://arcade_shell.gd",
 	"res://game.gd",
 	"res://hud.gd",
+	"res://mute_icon.gd",
 	"res://ui_style.gd",
 	"res://menus.gd",
 	"res://game_settings.gd",
@@ -42,7 +43,7 @@ func _init() -> void:
 	fails += _expect(canvas.y > canvas.x, "design canvas is portrait (%dx%d)" % [canvas.x, canvas.y])
 	fails += _expect(ProjectSettings.get_setting("display/window/stretch/mode") == "canvas_items",
 		"stretch mode = canvas_items")
-	for action in ["move_left", "move_right", "shoot", "pause"]:
+	for action in ["move_left", "move_right", "shoot", "pause", "mute"]:
 		fails += _expect(InputMap.has_action(action), "input action present: %s" % action)
 
 	# --- formation --------------------------------------------------------

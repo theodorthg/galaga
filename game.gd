@@ -232,6 +232,8 @@ func _ready() -> void:
 	# high on tall touch devices (e.g. OnePlus 12), user-reported 2026-09-13.
 	get_tree().call_group("touch_layout_listeners", "apply_touch_layout")
 	_snd = get_node_or_null("/root/Snd")
+	if _snd:
+		_hud.set_muted(_snd.is_muted())
 
 	_director.setup(_formation, self)
 	_director.stage_populated.connect(_on_stage_populated)
@@ -239,6 +241,7 @@ func _ready() -> void:
 	_director.ship_rescued.connect(_on_ship_rescued)
 	_ship.died.connect(_on_ship_died)
 	_hud.pause_pressed.connect(_request_pause)
+	_hud.mute_pressed.connect(_toggle_mute)
 	_menus.start_game.connect(_new_run)
 	_menus.resume_game.connect(_resume)
 	_menus.to_title.connect(_enter_title)
@@ -562,6 +565,14 @@ func _request_pause() -> void:
 	get_tree().paused = true
 	_hud.set_playing(false)
 	_menus.show_pause()
+
+## Works regardless of pause state (same "always processes" reasoning as the
+## pause action itself, see _unhandled_input()) — muting while paused should
+## take effect immediately, not wait for the game to resume.
+func _toggle_mute() -> void:
+	if not _snd:
+		return
+	_hud.set_muted(_snd.toggle_mute())
 
 func _resume() -> void:
 	_paused = false
@@ -955,6 +966,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			_resume()
 		else:
 			_request_pause()
+	if event.is_action_pressed("mute"):
+		_toggle_mute()
 
 func _process(delta: float) -> void:
 	# Belt-and-suspenders against get_window().size_changed not firing for

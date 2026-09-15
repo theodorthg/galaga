@@ -814,6 +814,21 @@ func _build_help() -> Control:
 	next.custom_minimum_size = Vector2(56, TOUCH_H)
 	nav.add_child(next)
 	box.add_child(nav)
+	box.add_child(_spacer(4))
+	# Tiny, easy-to-miss-on-purpose hint (user request 2026-09-15) — shown on
+	# every page rather than added to one specific SVG, so it doesn't need
+	# new artwork and stays visible regardless of which page a player happens
+	# to land on. Mentions both input paths since the mute button itself is
+	# always on screen (mouse/touch) but M/Select only apply off-touch.
+	var mute_hint := Label.new()
+	mute_hint.name = "MuteHint"
+	mute_hint.text = "Tip: mute/unmute with the speaker button next to Pause, or press M / D-pad Select"
+	mute_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	mute_hint.autowrap_mode = TextServer.AUTOWRAP_WORD
+	mute_hint.add_theme_font_size_override("font_size", 14)
+	mute_hint.add_theme_color_override("font_color", Color(1, 1, 1, 0.65))
+	box.add_child(mute_hint)
+	box.add_child(_spacer(4))
 	_help_done_btn = _button("Done", func(): _swap(_return_to), true)
 	box.add_child(_help_done_btn)
 	return s

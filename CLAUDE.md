@@ -2371,6 +2371,76 @@ und `ui_cancel` (B, `button_index=1`) — per Headless-Skript ergänzt
 - **Version**: `config/version` 0.1.0 → 0.2.0, getaggt `v0.2.0`, Windows-CI
   darüber angestoßen.
 
+**Einunddreißigste Playtest-Runde (2026-09-15): Landscape-Kabinett-Grafik
+bekommt oben/unten in die Lane blutende Rand-Streifen, Sternenhimmel
+Blau→Schwarz, Mute/Unmute-Button.** Drei Nutzeraufträge im Anschluss an die
+Dreißigste Runde.
+- **Hintergrund Blau→Schwarz**: `space_material.tres`s `background_color`
+  von `(0.14, 0.18, 0.51)` auf `(0,0,0)` — multipliziert sich zu reinem
+  Schwarz durch die bestehende `multiply_color`-Rechnung (Nebel-Muster fällt
+  weg, gewünscht), die Sterne selbst sind im Shader unabhängig davon
+  berechnet und bleiben unverändert.
+- **Kabinett-Rand-Streifen bluten in die Lane**: `arcade-screen1a.png`
+  (neue, vom Nutzer bereitgestellte Variante von `arcade-screen1.png`,
+  Original bleibt als Referenz im Repo) ersetzt `CABINET_ART` — die massive
+  Farbfüllung der oberen/unteren Zier-Bänder ist dort transparent gemacht an
+  den Stellen, wo HUD-Elemente sitzen würden; der dünne rote Umriss bleibt
+  stehen. Zwei neue "Clip-Fenster" (`game.gd::_cabinet_strip_top/bottom`,
+  eigene CanvasLayer bei `layer=-1`: über dem Sternenfeld der Lane, unter
+  HUD/Menüs) spiegeln denselben großflächigen, `STRETCH_KEEP_ASPECT_CENTERED`
+  -gestreckten Kabinett-Text als Ausschnitt in die Lane — Technik: derselbe
+  Text, dieselben Stretch-Einstellungen wie beim Haupt-`_cabinet_art_rect`,
+  nur um `-position` verschoben und geclippt, sodass exakt dieselbe Bildzeile
+  erscheint wie in den Seiten-Margins, ohne eigene `region_rect`-Rechnung.
+  **Live auf dem RG552 gefunden**: die Streifen blieben dort zunächst
+  unsichtbar — dessen 1920×1152-Seitenverhältnis (1,667:1) ist enger als das
+  Bild selbst (~1,776:1), `STRETCH_KEEP_ASPECT_CENTERED` passt das Bild dort
+  per BREITE statt Höhe ein und lässt oben/unten ca. 30 logische Einheiten
+  Letterbox — ein 960×540-Desktop-Testfenster war zufällig height-bound
+  (kein Letterbox), weshalb der Bug dort nicht auffiel. Fix: `CABINET_ART_SIZE`
+  + dieselbe Aspect-Fit-Formel wie Godots eigenes `STRETCH_KEEP_ASPECT_
+  CENTERED`, um die tatsächliche Bildkante statt der Fensterkante zu treffen
+  — auf beiden Geräten nachverifiziert.
+- **Mute/Unmute-Button** (siehe auch die globale CLAUDE.md, jetzt Standard-
+  Konvention für jedes Spiel mit Sound): Milchglas-Button links neben Pause,
+  gleiche Größe, Icon per Vektor-`_draw()` (Lautsprecher-Kegel + Schallwellen-
+  Bögen normal, diagonales Kreuz bei Mute) statt Text-/Emoji-Glyphe. Neue
+  Input-Action `mute` (`M`-Taste + D-Pad „Select"/`JOY_BUTTON_BACK`, beide
+  `device=-1`, per Headless-Skript ergänzt wie gehabt), abgefragt in
+  `_unhandled_input()` genau wie `pause` — wirkt sofort, unabhängig vom
+  Pause-Zustand. `sound_manager.gd`: neues `is_muted()`/`toggle_mute()`/
+  `set_muted()` über `AudioServer.set_bus_mute(Master, bool)` (unabhängig von
+  allen Pro-Sound-Reglern, exakte Wiederherstellung beim Entmuten),
+  persistiert in `user://settings.cfg [sound] muted` — bewusst NICHT an
+  `CALIB_VERSION` gekoppelt (unabhängiger Schalter, keine Lautstärke-
+  Kalibrierung). Ein-Satz-Hinweis auf jeder Hilfeseite ergänzt (ein
+  zusätzliches `Label` in `_build_help()`, kein SVG-Rework nötig).
+  **Echter Bug gefunden und behoben** (erst live sichtbar, nicht im
+  Headless-Test — siehe unten): das Icon zunächst direkt im `_draw()` des
+  HUD-Eltern-Controls gezeichnet — ein `Button` zeichnet seine eigene
+  `StyleBoxFlat` aber NACH (über) allem, was der Elternteil vorher
+  gezeichnet hat, wodurch das Icon im Hover-/Pressed-Zustand (undurchsichtiger
+  Alpha-Wert) komplett verschwand, obwohl es im Ruhezustand noch passabel
+  durchschien — genau deshalb im ersten Screenshot (Titelbildschirm, kein
+  Hover) unauffällig, nach dem ersten Klick im Browser-Test aber spurlos weg.
+  Fix: eigene `mute_icon.gd`-Node, exakt über dem Button positioniert UND
+  direkt danach in die Kindreihenfolge einsortiert
+  (`move_child(icon, button.get_index() + 1)`), `mouse_filter=IGNORE` (Klicks
+  erreichen weiterhin den Button darunter). **Stolperfalle beim eigenen
+  Headless-Test**: `_selftest.gd`s Parse-Check (`load(path) != null`) hatte
+  einen echten Typinferenz-Fehler (`for i in [1,2]: var rad := s*(...)`, `i`
+  aus einem untypisierten Array-Literal) NICHT gefangen — `load()` kompiliert
+  Methodenkörper offenbar lazily und deckt nicht jeden GDScript-Static-Typing-
+  Fehler ab; erst ein `set_script()` + echte Instanziierung (mein eigener
+  Funktionstest) hat ihn aufgedeckt. Kein Fix am Testsystem selbst
+  vorgenommen (außerhalb des Auftragsumfangs), aber hier vermerkt: `_selftest.
+  gd`s „ok parses" ist kein vollständiger Garant gegen Methodenkörper-Fehler.
+  Verifiziert: Headless-Funktionstest (Toggle/Persistenz/Icon-Zustand/
+  Button-Reihenfolge, alle grün) + Live-Screenshots auf Desktop-Web (Chrome
+  via `chrome-devtools`-MCP) und RG552 (beide Icon-Zustände per echtem
+  Touch-Tap ausgelöst, sauber sichtbar über dem Button) + Hilfeseiten-Hinweis
+  live auf dem RG552 bestätigt (lesbar, kein Layout-Bruch).
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,

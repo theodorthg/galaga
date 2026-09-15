@@ -59,6 +59,11 @@ const ORDER := [
 const LOOPING_KEYS := ["menu-music", "scoring-board-music"]
 var _wanted := {}  # key (from LOOPING_KEYS) -> bool, "should keep looping"
 
+## Global mute (HUD button top-right, "mute" input action — M / D-pad Select)
+## — muting the Master bus rather than each AudioStreamPlayer individually
+## means every per-sound volume in _vol stays exactly as the user set it;
+## unmuting just un-silences the whole mix again, no bookkeeping needed here.
+var _muted := false
 var _players := {}
 var _vol := {}
 ## Currently-auditioned key in the Sound settings screen (menus.gd's
@@ -67,6 +72,7 @@ var _previewing := ""
 
 func _ready() -> void:
 	_load()
+	AudioServer.set_bus_mute(AudioServer.get_bus_index("Master"), _muted)
 	for key in SOUNDS:
 		var p := AudioStreamPlayer.new()
 		p.name = key
@@ -113,6 +119,20 @@ func stop(key: String) -> void:
 	var p = _players.get(key)
 	if p:
 		p.stop()
+
+func is_muted() -> bool:
+	return _muted
+
+## Returns the new state, for callers (hud.gd via game.gd) that need to sync
+## a button icon right away without a separate is_muted() round trip.
+func toggle_mute() -> bool:
+	set_muted(not _muted)
+	return _muted
+
+func set_muted(m: bool) -> void:
+	_muted = m
+	AudioServer.set_bus_mute(AudioServer.get_bus_index("Master"), m)
+	_save()
 
 func has_clip(key: String) -> bool:
 	var p = _players.get(key)
@@ -175,6 +195,9 @@ func _load() -> void:
 	var c := ConfigFile.new()
 	if c.load(CFG_PATH) != OK:
 		return
+	# muted isn't gated on CALIB_VERSION — it's an independent on/off switch,
+	# not a per-sound loudness value the calibration rework could invalidate.
+	_muted = c.get_value("sound", "muted", false)
 	if c.get_value("sound", "calib_version", 0) != CALIB_VERSION:
 		return
 	for key in SOUNDS:
@@ -184,6 +207,7 @@ func _save() -> void:
 	var c := ConfigFile.new()
 	c.load(CFG_PATH)
 	c.set_value("sound", "calib_version", CALIB_VERSION)
+	c.set_value("sound", "muted", _muted)
 	for key in _vol:
 		c.set_value("sound", key, _vol[key])
 	c.save(CFG_PATH)
