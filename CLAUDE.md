@@ -2126,13 +2126,11 @@ Kabinett-Overlays für Geräte ohne Hochkant (Anbernic RG552).**
   eigenen, dedizierten Sound (`beam-sound`, aus der Dreizehnten Playtest-
   Runde, gespielt beim tatsächlichen Fang). Fix: die `dive`-Zeile in
   `capture_dive()` ersatzlos gestrichen. Per Headless-Test verifiziert.
-- **2. Landscape-Kabinett-Overlay (erster, unverifizierter Versuch)** — der
-  Nutzer möchte testen, wie das Spiel mit `arcade-screen1.png` als
-  Kabinett-Rahmen auf seinem Anbernic RG552 aussieht (ein Gerät ohne
-  Hochkant-Rotation, läuft vermutlich über die Linux-Variante dieses
-  Exports — sonst gäbe es hier keine schwarzen Balken zu füllen, siehe
-  unten). Neue Datei `arcade_shell.gd`/`.tscn`, jetzt `run/main_scene`
-  (ersetzt `game.tscn` direkt als Startpunkt).
+- **2. Landscape-Kabinett-Overlay (erster Versuch)** — der Nutzer möchte
+  testen, wie das Spiel mit `arcade-screen1.png` als Kabinett-Rahmen auf
+  seinem Anbernic RG552 aussieht (ein Gerät ohne Hochkant-Rotation). Neue
+  Datei `arcade_shell.gd`/`.tscn`, jetzt `run/main_scene` (ersetzt
+  `game.tscn` direkt als Startpunkt).
   - **Warum das nicht einfach ein Hintergrundbild sein kann**: Godots
     `canvas_items`+`KEEP`-Streckmodus (bisheriges Verhalten auf
     Nicht-Touch-Geräten) erzeugt die schwarzen Ränder als echtes Letterboxing
@@ -2147,19 +2145,6 @@ Kabinett-Overlays für Geräte ohne Hochkant (Anbernic RG552).**
     — das Spiel selbst „sieht" innen weiterhin exakt dieselbe feste
     540×960-Welt wie eh und je, nichts an `ship.gd`/`enemy.gd`/HUD/etc.
     musste dafür angefasst werden.
-  - **Bewusst nur für EINEN Fall aktiv** (`arcade_shell.gd::_wants_overlay()`
-    — nicht touch UND Fenster breiter als hoch): für jeden anderen Fall
-    (Touch-Geräte, Web, normale Desktop-Fenster in der bisherigen Form)
-    instanziiert die Shell `game.tscn` einfach direkt als einzigen Kind-Node,
-    strukturell identisch dazu, dass `game.tscn` weiterhin selbst die
-    `main_scene` wäre — `project.godot`s `window/stretch/mode="canvas_items"`
-    bleibt für diesen Zweig komplett unangetastet, null Risiko für Touch-
-    Geräte/Web/normales Desktop-Spiel. **Nebenwirkung, noch nicht
-    eingegrenzt**: ein gewöhnliches breites Desktop-Fenster (z. B. 16:9) hat
-    genau dieselbe Form wie das Zielgerät und bekommt das Overlay aktuell
-    also GENAUSO — bisher niemand gefragt, ob das für normales
-    Desktop-Spielen erwünscht ist oder eingeschränkt werden soll (z. B. nur
-    für den Android/Linux-Export, oder ein eigener Einstellungs-Schalter).
   - **Platzierung im Bild**: `arcade-screen1.png` direkt vermessen
     (2728×1536 Gesamtgröße) — der große zusammenhängende transparente
     Bereich läuft über die VOLLE Bildhöhe und ist horizontal zentriert, aber
@@ -2167,25 +2152,65 @@ Kabinett-Overlays für Geräte ohne Hochkant (Anbernic RG552).**
     Statt das Spiel auf die (nicht-Hochkant-förmige) Aussparung zu strecken
     (hätte es verzerrt), bleibt das Seitenverhältnis exakt 540:960 erhalten
     und wird auf die VOLLE Höhe der Aussparung skaliert, horizontal
-    zentriert — es bleibt dadurch links/rechts noch etwas vom transparenten
-    Rand der Aussparung selbst sichtbar (durchscheinendes Schwarz), was in
-    Ordnung sein sollte, da es klar innerhalb der vorgesehenen „Bildschirm"-
-    Aussparung bleibt statt auf die Kabinett-Grafik drumherum überzugreifen.
-  - **Nicht visuell verifiziert** — keine Möglichkeit, das Rendering an
-    Pixeln zu prüfen (kein Display/Gerät verfügbar). Per Headless-Test nur
-    strukturell/rechnerisch geprüft: (a) der Passthrough-Zweig (Touch/
-    Desktop normal) hängt `game.tscn` unverändert direkt ein, (b) der
-    Overlay-Zweig baut exakt die erwartete Struktur (Control → TextureRect +
-    SubViewportContainer → SubViewport 540×960 → Game-Instanz), (c) die
-    Platzierungs-Formel liefert für ein RG552-typisches Fenster (1920×1152)
-    ein exakt 540:960-proportioniertes, horizontal zentriertes Rechteck, das
-    vollständig innerhalb des Fensters liegt. Die eigentliche Bildwirkung
-    (sitzt das Spielfeld optisch richtig in der Aussparung? wirkt der
-    Kabinett-Rahmen stimmig?) kann nur der Nutzer selbst auf dem echten
-    RG552 beurteilen — nächste Runde nach seinem Feedback, ggf. mit
-    angepassten Zahlen in `arcade_shell.gd` (`IMG_SIZE`/`CUTOUT_CENTER_X`)
-    oder mit `arcade-screen2.png` als Alternative (vom Nutzer genannt, aber
-    nicht bevorzugt).
+    zentriert.
+  - Zuerst nur per Headless-Test strukturell/rechnerisch geprüft (kein
+    Display hier verfügbar) — die eigentliche Bildwirkung brauchte den
+    Nutzer auf dem echten Gerät. Direkt im Anschluss per USB getestet, siehe
+    „Achtundzwanzigste Playtest-Runde" unten für zwei dabei gefundene echte
+    Bugs und das Ergebnis.
+
+**Achtundzwanzigste Playtest-Runde (2026-09-15): Landscape-Kabinett-Overlay
+live auf dem RG552 verifiziert — zwei echte Bugs gefunden und behoben, jetzt
+bewusst für JEDES breite Fenster aktiv, nicht nur das eine Gerät.**
+RG552 hing per USB im Entwicklermodus — direkter Zugriff über `adb`, daher
+diesmal ausnahmsweise echte Verifikation statt nur Headless-Tests: APK bauen,
+`adb -s <serial> install -r`, `adb shell monkey ... -c LAUNCHER` zum Starten,
+`adb shell screencap` + `adb pull` für echte Screenshots vom Gerät, `adb
+logcat` für `print()`-Ausgaben aus dem laufenden Spiel.
+- **Bug 1 — Overlay erschien gar nicht**: `arcade_shell.gd::_wants_overlay()`
+  hatte einen `OS.has_feature("mobile") or DisplayServer.is_touchscreen_
+  available()`-Ausschluss (aus der vorigen Runde, „nicht touch UND breiter
+  als hoch"). Per Diagnose-`print()` + `adb logcat` bestätigt: auf dem RG552
+  (Android-Export) liefert `OS.has_feature("mobile")` `true` — der Ausschluss
+  griff also *immer*, unabhängig von der tatsächlichen Bildschirmform, das
+  Overlay wurde nie gebaut. Fix: der Touch/Mobile-Ausschluss ist komplett
+  raus — `_wants_overlay()` prüft jetzt ausschließlich die Fensterform
+  (breiter als hoch). Landscape-Bildschirme haben das Letterbox-Problem
+  unabhängig davon, ob das Gerät "mobile" meldet oder einen Touchscreen hat.
+  Zusätzlich neues `game.gd::force_non_touch` (von `arcade_shell.gd` vor
+  `add_child()` gesetzt): der gewrappte Spiel-Screen wird jetzt bewusst NIE
+  als Touch-Gerät behandelt, unabhängig davon, was `OS.has_feature("mobile")`
+  dort sagt — dieser Fall ist immer Controller-/Tastatur-gesteuert, und das
+  feste 540×960-SubViewport hat ohnehin keine "Extra-Höhe" für ein
+  Touch-Layout herzugeben.
+- **Bug 2 — Kunst nur oben links, rechts nichts**: erster Live-Screenshot
+  zeigte das Kabinett-Bild nur in der LINKEN Bildschirmhälfte, rechts nur
+  Schwarz — nicht symmetrisch wie erwartet. Ursache: `TextureRect` hat
+  standardmäßig `expand_mode = EXPAND_KEEP_SIZE`, wodurch die Control-Größe
+  der NATIVEN Textur-Pixelgröße (2728×1536) folgt und die zuvor gesetzten
+  Anchors komplett ignoriert werden — das Bild wurde oben links unskaliert
+  angezeigt und am Bildschirmrand (1920 px) abgeschnitten; der komplette
+  rechte Bildteil (der bei echter Skalierung sichtbar gewesen wäre) lag
+  jenseits des sichtbaren Bereichs. Fix: `bg.expand_mode = TextureRect.
+  EXPAND_IGNORE_SIZE` — dadurch folgt die Control-Größe den Anchors wie bei
+  jedem anderen Control, und `stretch_mode` (`STRETCH_KEEP_ASPECT_CENTERED`)
+  greift erst dadurch tatsächlich.
+- **Ergebnis nach beiden Fixes**: per Screenshot bestätigt — Kabinett-Kunst
+  symmetrisch links/rechts, Spiel exakt mittig in der Aussparung, weder
+  verzerrt noch abgeschnitten. Screenshots dem Nutzer direkt als Datei
+  geschickt.
+- **Bewusste Scope-Erweiterung** (Nutzerfrage: „würde es auf breiten
+  Bildschirmen auch allen anderen Versionen gut zu Gesicht stehen, oder habe
+  ich einen Denkfehler?" — keiner: durch den Wegfall des Touch/Mobile-
+  Ausschlusses gilt die Bedingung jetzt ohnehin rein über die Fensterform,
+  ganz ohne separate Geräte-Erkennung) — ein normales breites
+  Desktop-Fenster bekommt den Kabinett-Rahmen jetzt genauso wie das RG552,
+  nicht mehr nur ein einzelnes Zielgerät. Kein separater Schalter dafür
+  nötig oder vorgesehen.
+- Diagnose-`print()` nach Bestätigung wieder entfernt (war nur für die
+  `adb logcat`-Analyse gedacht). Per Headless-Test nachverifiziert:
+  `expand_mode == EXPAND_IGNORE_SIZE` gesetzt, `force_non_touch` korrekt bis
+  zur gewrappten `Game`-Instanz durchgereicht.
 
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
@@ -2678,13 +2703,14 @@ und „Boss-Capture" weiter oben für Details.
 12. **Lautstärke-Defaults nachziehen** — erledigt, siehe „Sechsundzwanzigste
     Playtest-Runde" unten für den vollen Stand (alle 15 `base_db`-Werte
     kalibriert, einheitlicher 50-%-Default, `CALIB_VERSION` hochgezählt).
-13. **Landscape-Letterbox-Bilder für Geräte ohne Hochkant** — erster Versuch
-    erledigt, siehe „Siebenundzwanzigste Playtest-Runde" oben
-    (`arcade_shell.gd`/`.tscn`, jetzt `run/main_scene`). Noch offen: visuelle
-    Verifikation durch den Nutzer auf dem echten Anbernic RG552 (kein
-    Display hier verfügbar) und die Frage, ob das Overlay auch für normale
-    breite Desktop-Fenster gewünscht ist oder eingegrenzt werden soll.
-    `arcade-screen2.png` liegt weiterhin als unbenutzte Alternative bereit.
+13. **Landscape-Letterbox-Bilder für Geräte ohne Hochkant** — erledigt und
+    live auf dem echten Anbernic RG552 verifiziert (siehe „Siebenundzwanzigste"
+    + „Achtundzwanzigste Playtest-Runde" oben — `arcade_shell.gd`/`.tscn`,
+    jetzt `run/main_scene`). Bewusst nicht auf das eine Gerät eingegrenzt:
+    gilt jetzt für jedes Fenster, das breiter als hoch ist (Desktop
+    eingeschlossen), auf Nutzerwunsch. `arcade-screen2.png` liegt weiterhin
+    als unbenutzte Alternative bereit, falls `arcade-screen1.png` sich
+    später doch nicht bewährt.
 
 ## Aseprite MCP Pro
 

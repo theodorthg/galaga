@@ -17,23 +17,31 @@ extends Node
 ## actual game running inside a SubViewport sized/positioned to sit within the
 ## background image's own transparent cutout.
 ##
-## IMPORTANT — this only ever affects the ONE new code path below
-## (_wants_overlay() == true, i.e. non-touch AND landscape-shaped window).
-## Every other case (phones, tablets, normal desktop/web windows) instantiates
-## game.tscn directly as this node's only child, with ZERO structural
-## difference from it being the main scene itself — project.godot's existing
+## Deliberately triggers on window SHAPE alone (landscape, i.e. wider than
+## tall — see _wants_overlay()), not on touch/mobile detection: any window
+## that's landscape-shaped has the same letterbox problem regardless of what
+## device it's running on, so — per user request 2026-09-15 — this applies
+## equally to a normal widescreen desktop window as it does to the RG552; no
+## separate device-specific carve-out. A portrait-ish or taller-than-wide
+## window (phones, tablets, a narrow desktop window) has no meaningful
+## letterbox space to fill in the first place, so it instantiates game.tscn
+## directly as this node's only child instead — ZERO structural difference
+## from game.tscn being the main scene itself, project.godot's existing
 ## window/stretch/mode="canvas_items" keeps working exactly as before there,
-## completely untouched. That also means: for now, a normal landscape-shaped
-## DESKTOP window (not just the RG552) will ALSO get the cabinet-art overlay,
-## since there's currently no way to tell those apart from window shape alone
-## — flag if that turns out to be unwanted for regular desktop play, it's an
-## easy follow-up to scope down further (e.g. an explicit settings toggle).
+## completely untouched.
 ##
-## Not yet visually verified — no display/device available to check pixel
-## alignment against. Built from directly measuring arcade-screen1.png's own
-## transparent cutout (see IMG_SIZE/CUTOUT_CENTER_X below); needs the user's
-## own eyes on the actual RG552 to confirm it looks right, then iterate on the
-## numbers below if not.
+## Verified live on the user's actual RG552 (2026-09-15, via adb screenshots)
+## — looks correct: symmetric cabinet art both sides, game centered exactly on
+## the transparent cutout. Two real bugs found and fixed in the process, both
+## confirmed for good reason to trust actual device testing over guessing:
+## (1) OS.has_feature("mobile") is true on this Android device, so an earlier
+## version's touch/mobile gate on _wants_overlay() skipped the overlay branch
+## entirely regardless of screen shape — removed, see _wants_overlay() below.
+## (2) TextureRect's default expand_mode=EXPAND_KEEP_SIZE sized the background
+## to the texture's native 2728x1536 pixels anchored at (0,0), ignoring the
+## anchors entirely — only the image's top-left corner showed, cropped to the
+## screen, nothing at all on the right. Fixed via expand_mode=EXPAND_IGNORE_SIZE
+## (see _build_overlay() below).
 
 const GAME_SCENE := preload("res://game.tscn")
 const BG_TEXTURE := preload("res://arcade-screen1.png")
@@ -58,13 +66,14 @@ func _ready() -> void:
 	else:
 		add_child(GAME_SCENE.instantiate())
 
-## Non-touch (a touch device already gets its own correct, non-letterboxed
-## KEEP_WIDTH handling from game.gd) AND landscape-shaped (wider than tall) —
-## a portrait-ish or square window has no meaningful letterbox space for the
-## art to fill in the first place.
+## Landscape-shaped (wider than tall) — a portrait-ish or square window has no
+## meaningful letterbox space for the art to fill in the first place. NOT
+## gated on touch/mobile any more (2026-09-15 fix, user report: RG552 is an
+## Android device, so OS.has_feature("mobile") is almost certainly true there,
+## which skipped this branch entirely regardless of the screen's actual
+## shape) — a landscape-locked device needing this treatment has nothing to
+## do with whether it happens to report "mobile" or has a touchscreen at all.
 func _wants_overlay() -> bool:
-	if OS.has_feature("mobile") or DisplayServer.is_touchscreen_available():
-		return false
 	var win := DisplayServer.window_get_size()
 	return win.x > win.y
 
@@ -83,6 +92,15 @@ func _build_overlay() -> void:
 	var bg := TextureRect.new()
 	bg.texture = BG_TEXTURE
 	bg.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	# TextureRect defaults to expand_mode=EXPAND_KEEP_SIZE, which sizes the
+	# Control to the TEXTURE's own native pixel size (2728x1536 here) and
+	# ignores anchors entirely — confirmed live on the RG552 (2026-09-15):
+	# only the image's top-left corner showed, anchored at (0,0), cropped to
+	# the screen, with nothing at all on the right (that part of the 2728px-
+	# wide image fell outside the 1920px-wide screen). EXPAND_IGNORE_SIZE
+	# lets the Control's rect follow the anchors below like any other Control,
+	# which is what actually makes stretch_mode's scale-to-fit take effect.
+	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.add_child(bg)
@@ -94,7 +112,12 @@ func _build_overlay() -> void:
 	var vp := SubViewport.new()
 	vp.size = Vector2i(DESIGN_SIZE)
 	_container.add_child(vp)
-	vp.add_child(GAME_SCENE.instantiate())
+	var game_instance := GAME_SCENE.instantiate()
+	# This case is always controller/keyboard driven, and the SubViewport
+	# above is a fixed 540x960 with no "extra height" to give a touch layout
+	# anyway — see force_non_touch's own doc comment in game.gd.
+	game_instance.force_non_touch = true
+	vp.add_child(game_instance)
 
 	_update_layout()
 	get_window().size_changed.connect(_update_layout)

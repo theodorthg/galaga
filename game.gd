@@ -72,6 +72,15 @@ const BONUS_SPEED_JITTER := 0.18  # ± fraction of the wave's base speed
 ## that happens.
 const BONUS_TWIN_ROW_GAP := 70.0
 
+## Set by arcade_shell.gd BEFORE add_child() (so _ready() below sees it)
+## when this instance runs inside its own fixed-size SubViewport for the
+## landscape-cabinet-overlay case — that case is always controller/keyboard
+## driven (e.g. the user's Anbernic RG552), so it's forced to skip the normal
+## OS.has_feature("mobile")/touchscreen autodetection entirely regardless of
+## what the device would otherwise report. The wrapping SubViewport is also a
+## fixed 540x960 with no "extra height" to give a touch layout anyway.
+var force_non_touch := false
+
 @onready var _formation: Formation = $Formation
 @onready var _director: StageDirector = $StageDirector
 @onready var _ship: Area2D = $Ship
@@ -126,7 +135,7 @@ var _kill_stats: Array = []
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	add_to_group("touch_layout_listeners")
-	_touch = OS.has_feature("mobile") or DisplayServer.is_touchscreen_available()
+	_touch = false if force_non_touch else (OS.has_feature("mobile") or DisplayServer.is_touchscreen_available())
 	_apply_display_mode()
 	_menus.set_touch_context(_touch)
 	# Ship is a CHILD node, so its own _ready() (and _update_home_y() inside
