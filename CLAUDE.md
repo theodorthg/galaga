@@ -2502,6 +2502,40 @@ in Folge.
   _finish_splash()` explizit im Test aufgerufen behebt es. Kein Bug im Spiel
   selbst.
 
+**Dreiunddreißigste Playtest-Runde (2026-09-16): eigenes Android-App-Icon
+(kein Godot-Standard-Icon mehr) + v1.0.1.** Nutzerwunsch, analog zu pacman
+(dort aus den vier Geistern per Gemini Nano Banana erzeugt). Claude hat
+keinen KI-Bildgenerator zur Verfügung — stattdessen aus den echten,
+bereits im Projekt vorhandenen Gegner-Sprites komponiert (Python/Pillow):
+`enemy2_trim.png` (Zako), `enemy3_trim.png` (Goei), `enemy4_trim.png`
+(Boss) freigestellt (Alpha-Bounding-Box), in einer kleinen Dreiecks-
+Formation (Boss oben mittig größer, Zako/Goei unten links/rechts kleiner —
+spiegelt die echte Größenhierarchie `half=18/15/13` aus `enemy_kinds.gd`)
+auf einen dunklen Sternenhimmel-Verlaufshintergrund gesetzt, dünner
+Cyan-Rahmen im UI-Look des Spiels. Zwei Kandidaten gebaut und dem Nutzer
+zur Wahl geschickt — Alternative B (Doppelschiff, zwei `player_trim.png`
+nebeneinander) als Fallback, falls die Gegner-Variante nicht überzeugt;
+Nutzer wählte **Variante A (Gegner)**.
+- Neue Dateien im Projekt-Wurzelverzeichnis (wie pacmans
+  `pacman-icon *.png`-Konvention): `galaga-icon 192x192.png` (mit
+  abgerundeten Ecken, transparent außerhalb — für Launcher-Vorschauen),
+  `galaga-icon 432x432.png` (voller Hintergrund, scharfe Ecken — Android
+  übernimmt das Masking selbst), `galaga-icon 432x432 mono.png`
+  (entsättigte Graustufen-Variante fürs Android-13+-„Themed Icon", exakt
+  wie bei pacman keine echte Alpha-Silhouette, sondern nur Graustufen).
+- `export_presets.cfg`: `launcher_icons/main_192x192`,
+  `adaptive_foreground_432x432`, `adaptive_background_432x432` (bewusst
+  dieselbe volle 432er-Datei für Vorder- **und** Hintergrund, exakt wie bei
+  pacman — kein echtes Foreground/Background-Layer-Splitting, da überflüssig
+  bei einem bereits opaken Vollbild) und `adaptive_monochrome_432x432` zeigen
+  jetzt auf die drei neuen Dateien statt auf `res://icon.svg`. `config/icon`
+  selbst (Editor/Desktop-Fensterleiste/Web-Favicon) bleibt bewusst der
+  Godot-Standard — genau wie bei pacman nie angefasst, nur der Android-
+  Launcher bekam ein echtes Icon.
+- Auf dem RG552 per `adb`-Homescreen-Screenshot verifiziert: das neue Icon
+  ersetzt sichtbar das alte Godot-Standard-Icon.
+- Version → **1.0.1**, getaggt, Windows-CI-Release durchgelaufen.
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,
