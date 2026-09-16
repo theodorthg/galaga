@@ -91,6 +91,25 @@
     <rect x="334" y="0" width="110" height="64" rx="10" fill="url(#key)" stroke="#4db2ff" stroke-opacity="0.5" stroke-width="2"/>
     <text x="389" y="38" text-anchor="middle" font-size="19" fill="#eef4ff">Start</text>
     <text x="0" y="112" font-size="32" font-weight="700" fill="#eef4ff">Pause</text>
+
+    <!-- MUTE, sharing the Pause row: a mockup of the actual frosted-glass
+         HUD button (speaker cone + sound-wave arcs, same hand-drawn shape as
+         mute_icon.gd) so the control is shown, not just named - plus its
+         key/gamepad bindings, same "key box" style as the rest of the page. -->
+    <g transform="translate(500 0)">
+      <rect x="0" y="0" width="64" height="64" rx="14" fill="#ffffff" fill-opacity="0.08" stroke="#4db2ff" stroke-opacity="0.6" stroke-width="2"/>
+      <polygon points="22.9,27.45 28.75,27.45 36.55,19 36.55,45 28.75,36.55 22.9,36.55" fill="#eef4ff"/>
+      <path d="M43.81 22.01 A12.35 12.35 0 0 1 43.81 41.99" fill="none" stroke="#eef4ff" stroke-width="2" stroke-linecap="round"/>
+      <path d="M46.87 17.80 A17.55 17.55 0 0 1 46.87 46.20" fill="none" stroke="#eef4ff" stroke-width="2" stroke-linecap="round"/>
+    </g>
+    <text x="574" y="40" font-size="26" fill="#8fa3c8">or</text>
+    <rect x="610" y="0" width="64" height="64" rx="10" fill="url(#key)" stroke="#4db2ff" stroke-opacity="0.5" stroke-width="2"/>
+    <text x="642" y="43" text-anchor="middle" font-size="27" fill="#eef4ff">M</text>
+    <text x="684" y="40" font-size="26" fill="#8fa3c8">or</text>
+    <rect x="720" y="0" width="100" height="64" rx="10" fill="url(#key)" stroke="#4db2ff" stroke-opacity="0.5" stroke-width="2"/>
+    <text x="770" y="38" text-anchor="middle" font-size="18" fill="#eef4ff">Select</text>
+    <text x="500" y="112" font-size="32" font-weight="700" fill="#eef4ff">Mute</text>
+    <text x="500" y="146" font-size="22" fill="#8fa3c8">toggles all sound</text>
   </g>
 
   <!-- ship + thruster glow -->
