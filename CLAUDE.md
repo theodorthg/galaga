@@ -3,7 +3,7 @@
 Ergänzt die übergeordnete `CLAUDE.md` unter
 `~/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/`.
 
-**Stand: v0.2.0 (2026-09-15).** Scaffolding + Phasen 1–5 durch. Fertig:
+**Stand: v1.0.0 (2026-09-16) — Release.** Scaffolding + Phasen 1–5 durch. Fertig:
 **Formation + Einflug**, **Sturzflüge + Gegnerfeuer** (P1), **Leben / HUD /
 Game-Over** (P2), **Touch + Aspect-Umschaltung + Pause** (P3), **Menüs /
 Settings / Sound / Hall of Fame** (P4), **echte Assets + Boss-Capture** (P5).
