@@ -1,0 +1,907 @@
+<title>Galaga Architektur-Dossier</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#05060d;
+    --bg-2:#080b18;
+    --panel:#10142c;
+    --panel-2:#171c3d;
+    --panel-line:#232a52;
+    --accent:#4db2ff;
+    --accent-soft:rgba(77,178,255,.14);
+    --accent-line:rgba(77,178,255,.22);
+    --amber:#ff9d4d;
+    --amber-soft:rgba(255,157,77,.14);
+    --good:#5fe3a6;
+    --text:#eef4ff;
+    --text-dim:#93a6c9;
+    --text-faint:#5d6c8f;
+    --code-bg:#0b0e20;
+    --shadow:0 20px 60px -30px rgba(0,0,0,.7);
+    --maxw:790px;
+    color-scheme:dark;
+  }
+
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1200px 700px at 12% -10%, rgba(77,178,255,.09), transparent 60%),
+      radial-gradient(900px 600px at 100% 0%, rgba(255,157,77,.06), transparent 55%),
+      var(--bg);
+    color:var(--text);
+    font-family:"IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    font-size:16px;
+    line-height:1.65;
+    padding-inline:20px;
+    padding-block:0 80px;
+  }
+  a{color:var(--accent);}
+  h1,h2,h3{text-wrap:balance; font-family:"IBM Plex Sans",sans-serif; color:var(--text); margin:0;}
+  code,pre,.mono{font-family:"IBM Plex Mono","SFMono-Regular",monospace;}
+  img{max-width:100%; display:block;}
+  table{font-variant-numeric:tabular-nums;}
+
+  /* ---------- stars: a faint, static echo of the game's own background ---------- */
+  .stars{
+    position:fixed; inset:0; z-index:0; pointer-events:none; opacity:.55;
+    background-image:
+      radial-gradient(1.5px 1.5px at 8% 22%, #cfe6ff 0, transparent 60%),
+      radial-gradient(1.5px 1.5px at 22% 68%, #9fd0ff 0, transparent 60%),
+      radial-gradient(1px 1px at 38% 12%, #ffffff 0, transparent 60%),
+      radial-gradient(1.5px 1.5px at 52% 82%, #cfe6ff 0, transparent 60%),
+      radial-gradient(1px 1px at 68% 34%, #ffffff 0, transparent 60%),
+      radial-gradient(1.5px 1.5px at 78% 58%, #9fd0ff 0, transparent 60%),
+      radial-gradient(1px 1px at 91% 20%, #ffffff 0, transparent 60%),
+      radial-gradient(1.5px 1.5px at 95% 74%, #cfe6ff 0, transparent 60%);
+    background-repeat:no-repeat;
+  }
+
+  .wrap{position:relative; z-index:1; max-width:1180px; margin-inline:auto;}
+
+  /* ---------- title block, modelled on an engineering drawing's stamp ---------- */
+  header.titleblock{
+    padding-block:44px 28px;
+    display:flex; flex-wrap:wrap; gap:28px; align-items:flex-end; justify-content:space-between;
+    border-bottom:1px solid var(--panel-line);
+  }
+  .titleblock__id{display:flex; align-items:center; gap:16px;}
+  .titleblock__id img{width:56px; height:56px; border-radius:14px; box-shadow:var(--shadow); border:1px solid var(--accent-line);}
+  .eyebrow{
+    font-family:"IBM Plex Mono",monospace; font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--accent); margin:0 0 8px;
+  }
+  h1.title{
+    font-family:"Orbitron",sans-serif; font-weight:800; font-size:clamp(28px,4.2vw,42px);
+    letter-spacing:.02em; line-height:1.05;
+    background:linear-gradient(180deg,#fff, #b9d9ff 65%, var(--accent));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .stamp{
+    font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--text-dim);
+    display:grid; grid-template-columns:auto auto; gap:4px 14px; border:1px solid var(--panel-line);
+    background:var(--panel); border-radius:10px; padding:12px 16px;
+  }
+  .stamp b{color:var(--text); font-weight:600;}
+  .stamp .k{color:var(--text-faint); text-transform:uppercase; letter-spacing:.08em; font-size:10.5px; align-self:center;}
+
+  .lede{max-width:var(--maxw); padding-block:22px 6px; color:var(--text-dim); font-size:16px;}
+  .lede strong{color:var(--text); font-weight:600;}
+
+  /* ---------- layout: sticky module rail + content column ---------- */
+  .layout{display:grid; grid-template-columns:200px minmax(0,1fr); gap:52px; padding-top:28px;}
+  nav.rail{position:sticky; top:24px; align-self:start; display:flex; flex-direction:column; gap:2px;}
+  nav.rail a{
+    display:flex; gap:10px; align-items:baseline; text-decoration:none; color:var(--text-dim);
+    font-size:13.5px; padding:8px 10px; border-radius:8px; border-left:2px solid transparent;
+  }
+  nav.rail a .n{font-family:"IBM Plex Mono",monospace; color:var(--text-faint); font-size:12px;}
+  nav.rail a:hover{background:var(--accent-soft); color:var(--text);}
+  nav.rail a.active{border-left-color:var(--accent); background:var(--accent-soft); color:var(--text);}
+  nav.rail a.active .n{color:var(--accent);}
+
+  main{min-width:0; max-width:var(--maxw);}
+
+  section.mod{padding-block:40px; border-top:1px solid var(--panel-line);}
+  section.mod:first-child{border-top:none; padding-top:6px;}
+  .mod__head{display:flex; gap:16px; align-items:baseline; margin-bottom:6px;}
+  .mod__num{
+    font-family:"Orbitron",sans-serif; font-weight:700; font-size:15px; color:var(--bg);
+    background:var(--accent); border-radius:6px; padding:3px 9px; letter-spacing:.03em;
+    box-shadow:0 0 0 1px var(--accent-line), 0 8px 18px -8px var(--accent-soft);
+  }
+  .mod h2{font-size:23px; font-weight:700; letter-spacing:.01em;}
+  .mod__sub{color:var(--text-faint); font-size:13px; margin:6px 0 22px; font-family:"IBM Plex Mono",monospace;}
+
+  p{margin:0 0 14px;}
+  h3{font-size:16.5px; font-weight:600; margin:26px 0 10px; color:var(--text);}
+  h3 .k{color:var(--accent); font-family:"IBM Plex Mono",monospace; font-size:13px; margin-right:8px;}
+  ul,ol{margin:0 0 16px; padding-left:22px;}
+  li{margin-bottom:6px;}
+
+  /* ---------- module table (file/purpose listing, styled like a parts list) --- */
+  .partslist{width:100%; border-collapse:collapse; margin:8px 0 24px; font-size:14px;}
+  .partslist th{
+    text-align:left; font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--text-faint); font-weight:500; padding:0 12px 8px 0;
+    border-bottom:1px solid var(--panel-line);
+  }
+  .partslist td{padding:10px 12px 10px 0; border-bottom:1px solid rgba(35,42,82,.55); vertical-align:top;}
+  .partslist tr:last-child td{border-bottom:none;}
+  .partslist td:first-child{white-space:nowrap;}
+  .partslist a{font-family:"IBM Plex Mono",monospace; font-size:13px; font-weight:500;}
+
+  /* ---------- pinout-style table (layers, signals) ---------------------------- */
+  .pinout{width:100%; border-collapse:collapse; margin:8px 0 24px; font-size:13.5px;}
+  .pinout th{
+    text-align:left; font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.08em;
+    text-transform:uppercase; color:var(--bg); background:var(--accent); padding:8px 12px;
+  }
+  .pinout th:first-child{border-radius:8px 0 0 0;}
+  .pinout th:last-child{border-radius:0 8px 0 0;}
+  .pinout td{padding:9px 12px; border-bottom:1px solid rgba(35,42,82,.6); background:var(--panel);}
+  .pinout tr:last-child td:first-child{border-radius:0 0 0 8px;}
+  .pinout tr:last-child td:last-child{border-radius:0 0 8px 0;}
+  .pinout code{color:var(--accent); font-size:12.5px;}
+  .pinout .tbl-wrap{overflow-x:auto;}
+
+  /* ---------- code console panel ---------------------------------------------- */
+  .code{
+    margin:14px 0 22px; border-radius:10px; overflow:hidden; border:1px solid var(--panel-line);
+    background:var(--code-bg); box-shadow:var(--shadow);
+  }
+  .code .tab{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    padding:8px 14px; background:var(--panel-2); border-bottom:1px solid var(--panel-line);
+    font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--text-dim);
+  }
+  .code .tab .dots{display:flex; gap:5px;}
+  .code .tab .dots span{width:8px; height:8px; border-radius:50%; background:var(--panel-line);}
+  .code pre{margin:0; padding:16px 18px; overflow-x:auto;}
+  .code code{font-size:13px; line-height:1.62; color:#dbe8ff; white-space:pre;}
+  .code .c1{color:var(--text-faint);}
+  .tbl-wrap{overflow-x:auto;}
+
+  /* ---------- experimental: real Godot 4.7 editor syntax colors ----------
+     Values pulled verbatim from this machine's own editor_data/
+     editor_settings-4.7.tres (text_editor/theme/highlighting/*), not
+     eyeballed — see the project CLAUDE.md entry for the exact source line.
+     Screen-only comparison toggle; @media print always neutralizes it back
+     to the dossier's own print palette regardless of toggle state, and the
+     tab bar / rest of the page never changes — only the code TEXT itself,
+     since that's the one readability question being tested. */
+  .syntax-toggle{
+    display:inline-flex; align-items:center; gap:10px; margin:14px 0 4px;
+    font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--text-dim);
+  }
+  .syntax-toggle button{
+    font-family:inherit; font-size:12px; letter-spacing:.02em; cursor:pointer;
+    background:var(--panel); color:var(--text-dim); border:1px solid var(--panel-line);
+    border-radius:7px; padding:6px 12px;
+  }
+  .syntax-toggle button[aria-pressed="true"]{ background:var(--accent); color:var(--bg); border-color:var(--accent); }
+  .syntax-toggle button:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+
+  body.godot-syntax .code{ background:#1a1a1a; }
+  body.godot-syntax .code code{ color:rgba(255,255,255,.75); }
+  .gd-kf{color:#ff8ccc;}  /* control-flow keywords: if/elif/for/while/return/match/await */
+  .gd-kd{color:#ff7085;}  /* declaration keywords: var/const/func/class_name/extends/signal/and/or/not/in/as */
+  .gd-t {color:#42ffc2;}  /* types: int/float/bool/String/Vector2/… and any CapitalizedWord */
+  .gd-s {color:#ffeda1;}  /* string literals */
+  .gd-n {color:#a1ffe0;}  /* numbers */
+  .gd-fn{color:#57b2ff;}  /* function calls */
+  .gd-fd{color:#66e6ff;}  /* function definitions (right after "func ") */
+  .gd-a {color:#ffb273;}  /* annotations: @export, @onready */
+  .gd-c {color:rgba(255,255,255,.5);}  /* comments */
+
+  /* ---------- figure plates ---------------------------------------------------- */
+  figure.plate{
+    margin:22px 0; border:1px solid var(--panel-line); border-radius:12px; overflow:hidden;
+    background:var(--panel); box-shadow:var(--shadow);
+  }
+  figure.plate img{width:100%;}
+  figure.plate figcaption{
+    padding:10px 16px; font-family:"IBM Plex Mono",monospace; font-size:11.5px; letter-spacing:.03em;
+    color:var(--text-dim); border-top:1px solid var(--panel-line);
+  }
+  figure.plate figcaption b{color:var(--accent); font-weight:600; margin-right:10px;}
+  .plate-row{display:grid; grid-template-columns:1fr 1fr; gap:18px;}
+  @media (max-width:640px){.plate-row{grid-template-columns:1fr;}}
+
+  .legend{display:flex; gap:18px; flex-wrap:wrap; font-size:12.5px; color:var(--text-dim); margin:2px 0 18px;}
+  .legend span{display:inline-flex; align-items:center; gap:7px;}
+  .legend i{width:14px; height:3px; border-radius:2px; display:inline-block;}
+
+  .callout{
+    border-left:3px solid var(--amber); background:var(--amber-soft); border-radius:0 10px 10px 0;
+    padding:12px 16px; font-size:14px; color:var(--text-dim); margin:18px 0;
+  }
+  .callout b{color:var(--text);}
+
+  footer{
+    max-width:var(--maxw); margin-left:auto; margin-right:0; padding-top:26px; border-top:1px solid var(--panel-line);
+    color:var(--text-faint); font-family:"IBM Plex Mono",monospace; font-size:11.5px;
+  }
+  footer p{margin:4px 0;}
+
+  @media (max-width:880px){
+    .layout{grid-template-columns:1fr;}
+    nav.rail{
+      position:static; flex-direction:row; overflow-x:auto; gap:6px; padding-bottom:6px;
+      border-bottom:1px solid var(--panel-line); margin-bottom:8px;
+    }
+    nav.rail a{white-space:nowrap; border-left:none; border-bottom:2px solid transparent;}
+    nav.rail a.active{border-left:none; border-bottom-color:var(--accent);}
+    main{max-width:100%;}
+  }
+
+  /* ---------- print hint (screen only) ------------------------------------
+     Not a button: this page runs inside a sandboxed iframe (no "allow-modals"
+     in its sandbox token list), which blocks window.print() unconditionally
+     per the HTML spec — no script here can open the print dialog, so a
+     "Print" button would just silently do nothing. Ctrl/Cmd+P is a browser
+     shortcut the user triggers directly, not a script call from inside this
+     frame, so it isn't affected by that restriction. */
+  .print-hint{
+    font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--text-dim);
+    background:var(--panel); border:1px solid var(--panel-line); border-radius:8px;
+    padding:9px 14px; text-align:right; line-height:1.5;
+  }
+  .print-hint kbd{
+    font-family:inherit; font-size:11px; color:var(--text); background:var(--panel-2);
+    border:1px solid var(--panel-line); border-radius:4px; padding:1px 6px;
+  }
+
+  /* =====================================================================
+     PRINT — a separate "blueprint" palette: dark backgrounds don't print
+     (most browsers drop background colors unless "print backgrounds" is on,
+     which would leave this page's light text on bare white paper otherwise),
+     so print gets its own light, ink-appropriate scheme instead of trying to
+     reuse the on-screen dark one. Page-break rules keep headings glued to
+     their following paragraph, and figures/tables/code blocks intact.
+     ===================================================================== */
+  @media print{
+    @page{ size:A4; margin:16mm 15mm 18mm; }
+
+    /* Redefine the same tokens every component already reads from — this is
+       what actually makes the switch safe: a color hard-coded per selector
+       is easy to forget on one element (a heading stayed near-white-on-white
+       the first time round, see the project notes), a token redefinition
+       fixes every consumer of --text/--accent/etc. at once. Dark backgrounds
+       don't print (browsers drop background-color unless "print backgrounds"
+       is on, which would leave this page's light text on bare paper), so
+       print gets its own light, ink-appropriate palette instead of reusing
+       the on-screen dark one — plus print-color-adjust below as a safety net
+       for the few places that still rely on a filled background. */
+    :root{
+      --bg:#f4f6fb; --bg-2:#f4f6fb; --panel:#ffffff; --panel-2:#eef1f9;
+      --panel-line:#c7d0e6; --accent:#0b5fa8; --accent-soft:transparent; --accent-line:#c7d0e6;
+      --amber:#b5711f; --amber-soft:#fff3e2; --good:#1f7a4d;
+      --text:#151a33; --text-dim:#4b5578; --text-faint:#6b7699;
+      --code-bg:#ffffff; --shadow:none;
+    }
+    *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+
+    .stars, nav.rail, .print-hint, .syntax-toggle{ display:none !important; }
+    /* the print palette always wins, regardless of whether the screen-only
+       Godot-editor-colors toggle was left on */
+    .code, .code code{ background:var(--code-bg) !important; color:var(--text) !important; }
+    .gd-kf, .gd-kd, .gd-t, .gd-s, .gd-n, .gd-fn, .gd-fd, .gd-a, .gd-c{ color:inherit !important; }
+    .layout{ display:block; }
+    main{ max-width:none; }
+    body{ padding:0; font-size:12.5px; background:var(--bg); } /* flat paper, no on-screen glow gradients */
+
+    h1.title{ background:none; -webkit-text-fill-color:currentColor; }
+    .code code{ color:var(--text); }  /* the one hard-coded (non-token) text color on screen */
+    /* a scrollbar means nothing on a static page — wrap long lines instead of
+       silently clipping them off the right edge of the sheet */
+    .code pre{ overflow-x:visible; }
+    .code pre, .code code{ white-space:pre-wrap; word-break:break-word; overflow-wrap:anywhere; }
+    .tbl-wrap{ overflow-x:visible; }
+
+    /* every module opens on a fresh sheet, so its heading can never be
+       stranded alone at the bottom of the previous one */
+    section.mod{ border-top:none; padding-block:0; break-before:page; page-break-before:always; }
+    section.mod:first-of-type{ break-before:avoid; page-break-before:avoid; }
+
+    /* these two rely on a FILLED background behind light text on screen —
+       kept as an outline/text-only look in print so they still read even if
+       a PDF path ignores print-color-adjust and drops the fill */
+    .mod__num{ background:none; color:var(--accent); border:1.4px solid var(--accent); }
+    .pinout th{ background:none; color:var(--accent); border-bottom:1.5px solid var(--accent); }
+
+    h2, h3, .mod__head{
+      break-after:avoid; page-break-after:avoid; break-inside:avoid; page-break-inside:avoid;
+    }
+    p, li{ orphans:3; widows:3; }
+
+    /* `overflow:hidden` (used on screen only to clip the rounded corners
+       around the tab bar / screenshot) makes Chrome's print engine ignore
+       break-inside:avoid on the element that has it — a well-known bug, and
+       the actual reason code blocks were still splitting mid-block even
+       though this rule was already here. Print instead gets square corners
+       and no overflow clipping, so the box is a plain fragmentable block
+       Chrome can move to the next page as a whole. */
+    .code, figure.plate{ overflow:visible; border-radius:0; }
+    .code .tab{ border-radius:0; }
+    .code, figure.plate, .plate-row, .callout{ break-inside:avoid; page-break-inside:avoid; }
+    .code pre, .code .tab{ break-inside:avoid; page-break-inside:avoid; }
+    .code .tab{ break-after:avoid; page-break-after:avoid; }
+    .partslist tr, .pinout tr{ break-inside:avoid; page-break-inside:avoid; }
+
+    footer{ break-before:avoid; }
+  }
+</style>
+
+<div class="stars"></div>
+<div class="wrap">
+
+  <header class="titleblock">
+    <div class="titleblock__id">
+      <img src="assets/galaga-icon.png" alt="Galaga-Icon">
+      <div>
+        <p class="eyebrow">Technisches Dossier</p>
+        <h1 class="title">GALAGA<br>ARCHITEKTUR&#8209;DOSSIER</h1>
+      </div>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:10px; align-items:flex-end;">
+      <p class="print-hint">Für die PDF: <kbd>Strg</kbd>/<kbd>Cmd</kbd>+<kbd>P</kbd><br>Ziel „Als PDF speichern"</p>
+      <div class="stamp">
+        <span class="k">Doc</span><b>GALAGA&#8209;ARCH&#8209;001</b>
+        <span class="k">Rev</span><b>v1.0.1</b>
+        <span class="k">Datum</span><b>2026&#8209;09&#8209;16</b>
+        <span class="k">Engine</span><b>Godot 4.7.1 · GL Compatibility</b>
+      </div>
+    </div>
+  </header>
+
+  <p class="lede">
+    Übersicht über <strong>Steuerung</strong>, <strong>Gegner-Formationen</strong>,
+    <strong>Kollisionserkennung</strong> und <strong>Punktevergabe</strong> im Galaga-Projekt —
+    fünf Module, von den einzelnen GDScript-Dateien über den Szenenbaum bis zu den
+    Signalen, die sie verbinden. Alle Code-Ausschnitte und Screenshots stammen aus dem
+    aktuellen Projektstand; die beiden Diagramme in Modul 02 und 05 sind eigens dafür gezeichnet.
+  </p>
+
+  <div class="syntax-toggle">
+    Code-Farben:
+    <button type="button" id="syntaxToggleBtn" aria-pressed="false" onclick="toggleGodotSyntax()">Dossier ⇄ Godot-Editor (experimentell)</button>
+  </div>
+
+  <div class="layout">
+    <nav class="rail" id="rail">
+      <a href="#sec-01"><span class="n">01</span> Module</a>
+      <a href="#sec-02"><span class="n">02</span> Szenenbaum</a>
+      <a href="#sec-03"><span class="n">03</span> Kern-Code</a>
+      <a href="#sec-04"><span class="n">04</span> Signale</a>
+      <a href="#sec-05"><span class="n">05</span> UML</a>
+    </nav>
+
+    <main>
+
+      <!-- ============================================================= 01 -->
+      <section class="mod" id="sec-01">
+        <div class="mod__head"><span class="mod__num">01</span><h2>GDScript-Dateien — Bedeutung &amp; Modularisierung</h2></div>
+        <p class="mod__sub">jede Datei kennt nur, was sie selbst betrifft</p>
+
+        <p>Die Codebasis ist klar nach Verantwortlichkeit geschnitten — keine Datei
+        übernimmt eine fremde Rolle. <code>enemy.gd</code> weiß nichts von Punkten
+        oder der HUD, es <em>meldet</em> nur per Signal; <code>ship.gd</code> weiß
+        nichts von Formationen, nur davon, dass „irgendetwas in Gruppe X" es
+        berührt hat.</p>
+
+        <div class="tbl-wrap">
+        <table class="partslist">
+          <thead><tr><th>Bereich</th><th>Dateien</th><th>Zweck</th></tr></thead>
+          <tbody>
+          <tr>
+            <td>Einstieg /<br>State-Machine</td>
+            <td><a href="#" class="mono">game.gd</a></td>
+            <td>Einziger Ort, der den Spielzustand kennt (<code>TITLE→READY→ENTERING→FORMATION→GAME_OVER</code>/<code>BONUS</code>). Verbindet alle Signale, verwaltet Punkte/Leben/Stage, startet Runden.</td>
+          </tr>
+          <tr>
+            <td>Formation &amp;<br>Choreografie</td>
+            <td class="mono">formation.gd<br>stage_director.gd<br>entry_paths.gd<br>attack_paths.gd<br>enemy.gd<br>enemy_kinds.gd</td>
+            <td>Slot-Gitter, Fly-in-/Angriffs-Timing, Kurvengeometrie, Einzel-Gegner-Zustandsautomat, statische Gegner-Daten.</td>
+          </tr>
+          <tr>
+            <td>Spieler</td>
+            <td class="mono">ship.gd</td>
+            <td>Bewegung (Tastatur/Maus/Touch), Schießen, Twin-/Hyper-Ammo-Boni, Zerstörung.</td>
+          </tr>
+          <tr>
+            <td>Projektile /<br>Gefahren</td>
+            <td class="mono">laser.gd<br>bomb.gd<br>capture_beam.gd</td>
+            <td>Reine <code>Area2D</code>-„Geschosse", jede mit sehr kleiner, eigener Zuständigkeit.</td>
+          </tr>
+          <tr>
+            <td>Bonusinhalte</td>
+            <td class="mono">bonus_item.gd<br>bonus_enemy.gd<br>score_popup.gd</td>
+            <td>Sammelobjekte, Bonuslevel-Ketten, das kurze „+Punkte"-Textpopup.</td>
+          </tr>
+          <tr>
+            <td>Übergangs-<br>Animationen</td>
+            <td class="mono">ship_reconstruct.gd<br>ship_explosion.gd</td>
+            <td>Reine <code>AnimatedSprite2D</code>-Wrapper mit <code>await …signal</code>-Schnittstelle, sonst zustandslos.</td>
+          </tr>
+          <tr>
+            <td>UI</td>
+            <td class="mono">hud.gd<br>menus.gd<br>ui_style.gd<br>mute_icon.gd</td>
+            <td>HUD zeigt nur <em>während</em> einer Runde etwas; alle Screens (Titel/Pause/Settings/Game&nbsp;Over) baut <code>menus.gd</code> komplett im Code.</td>
+          </tr>
+          <tr>
+            <td>Daten /<br>Persistenz</td>
+            <td class="mono">game_settings.gd<br>hall_of_fame.gd<br>sound_manager.gd</td>
+            <td>Alles <code>static</code>/Autoload — kein Node im Baum außer <code>Snd</code>.</td>
+          </tr>
+          <tr>
+            <td>Diagnose</td>
+            <td class="mono">_selftest.gd</td>
+            <td>Headless-Parse-Check + ein paar Logik-Assertions (siehe Grenzen davon in Modul&nbsp;03).</td>
+          </tr>
+          </tbody>
+        </table>
+        </div>
+
+        <div class="plate-row">
+          <figure class="plate">
+            <img src="assets/fig-formation.jpg" alt="Formations-Fly-in mit Cabinet-Overlay">
+            <figcaption><b>FIG.&nbsp;01</b> Formations-Fly-in, echter Screenshot (RG552, Cabinet-Overlay)</figcaption>
+          </figure>
+          <figure class="plate">
+            <img src="assets/fig-controls.png" alt="Steuerungs-Hilfeseite">
+            <figcaption><b>FIG.&nbsp;02</b> Steuerungs-Hilfeseite aus dem Spiel selbst</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <!-- ============================================================= 02 -->
+      <section class="mod" id="sec-02">
+        <div class="mod__head"><span class="mod__num">02</span><h2>Szenenaufbau &amp; Abhängigkeiten</h2></div>
+        <p class="mod__sub">eine feste Szene, alles Übrige zur Laufzeit instanziiert</p>
+
+        <p>Es gibt nur <strong>eine</strong> fest in der Godot-Szenenansicht
+        verdrahtete Szene, <code>game.tscn</code> (<code>run/main_scene</code>).
+        Alles, was während des Spiels an Gegnern/Schüssen/Effekten auftaucht, wird
+        <strong>zur Laufzeit</strong> aus separaten <code>.tscn</code>-Dateien
+        instanziiert (<code>preload(...).instantiate()</code>) — bewusst so,
+        damit z.&nbsp;B. <code>enemy.gd</code> unabhängig von der Formation
+        getestet werden kann. Boss-Capture etwa spawnt <code>capture_beam.tscn</code>
+        als <em>Kind</em> eines Enemy-Node, nicht als Geschwister.</p>
+
+        <div class="legend">
+          <span><i style="background:var(--accent)"></i> game.tscn (fest verdrahtet)</span>
+          <span><i style="background:var(--amber)"></i> zur Laufzeit instanziiert</span>
+        </div>
+
+        <figure class="plate">
+          <img src="assets/fig-scenetree.png" alt="Szenenbaum- und Abhängigkeitsdiagramm">
+          <figcaption><b>FIG.&nbsp;03</b> Szenenbaum von game.tscn und wer welche Laufzeit-Szene erzeugt</figcaption>
+        </figure>
+
+        <h3>Kollisionsschichten</h3>
+        <p>Jede Gefahr/jedes Ziel ist selbst ein <code>Area2D</code> mit eigenem
+        <code>collision_layer</code>/<code>collision_mask</code> — es gibt keinen
+        zentralen Kollisions-Manager.</p>
+
+        <div class="tbl-wrap">
+        <table class="pinout">
+          <thead><tr><th>Node</th><th>Layer</th><th>Maske (reagiert auf)</th></tr></thead>
+          <tbody>
+          <tr><td><code>player</code> (Ship)</td><td>1</td><td>4&nbsp;+&nbsp;16 (enemies + enemy_shots)</td></tr>
+          <tr><td><code>collectibles</code> (BonusItem)</td><td>2</td><td>1&nbsp;+&nbsp;8 (player + player_shots)</td></tr>
+          <tr><td><code>enemies</code> (Enemy)</td><td>4</td><td>8 (player_shots)</td></tr>
+          <tr><td><code>player_shots</code> (Laser)</td><td>8</td><td>—</td></tr>
+          <tr><td><code>enemy_shots</code> (Bomb, CaptureBeam)</td><td>16</td><td>1&nbsp;+&nbsp;8 (player + player_shots — auch Bomben lassen sich abschießen)</td></tr>
+          </tbody>
+        </table>
+        </div>
+      </section>
+
+      <!-- ============================================================= 03 -->
+      <section class="mod" id="sec-03">
+        <div class="mod__head"><span class="mod__num">03</span><h2>Wesentliche Code-Ausschnitte</h2></div>
+        <p class="mod__sub">Steuerung → Spawning → Animation → Kollision → Punkte</p>
+
+        <h3><span class="k">A</span>Steuerung — drei Eingabewege, ein gemeinsamer Feuer-Mechanismus</h3>
+        <p><code>ship.gd</code> fragt Tastatur/Gamepad-Achse, Maus-Tracking und
+        Touch-Drag ab, aber <strong>alle drei münden in dieselbe
+        <code>shoot()</code>-Bedingung</strong> — kein Eingabeweg hat eigene Feuerlogik.</p>
+        <div class="code">
+          <div class="tab"><span>ship.gd — _process()</span><span class="dots"><span></span><span></span><span></span></span></div>
+          <pre><code>func _process(delta: float) -&gt; void:
+    ...
+    var dir := Input.get_axis("move_left", "move_right")
+    if dir != 0.0:
+        _mouse_aim = false
+        position.x += dir * speed * delta
+    elif _mouse_aim:
+        position.x = get_global_mouse_position().x   <span class="c1"># 1:1, kein "Nachziehen"</span>
+    position.x = clampf(position.x, ship_half_width, viewport_width - ship_half_width)
+
+    if _touch_down or _mouse_down or Input.is_action_pressed("shoot"):
+        shoot()</code></pre>
+        </div>
+
+        <p><code>shoot()</code> selbst begrenzt über <strong>Salven</strong>, nicht
+        über einzelne Strahlen — wichtig, weil Hyper-Ammo zwei Strahlen pro Schuss abfeuert:</p>
+        <div class="code">
+          <div class="tab"><span>ship.gd — shoot()</span><span class="dots"><span></span><span></span><span></span></span></div>
+          <pre><code>func shoot() -&gt; void:
+    if _fire_cooldown_t &gt; 0.0:
+        return
+    var cap := _max_lasers * (2 if _hyper_ammo else 1)
+    if get_tree().get_nodes_in_group("player_lasers").size() &gt;= cap:
+        return
+    _fire_cooldown_t = FIRE_COOLDOWN
+    for gun_x in ([-TWIN_OFFSET, TWIN_OFFSET] if _twin else [0.0]):
+        ...</code></pre>
+        </div>
+
+        <h3><span class="k">B</span>Gegner-Spawning &amp; Formationsflug</h3>
+        <p><code>stage_director.gd</code> teilt die 40 Formationsplätze in
+        5er-Gruppen und lässt jede Gruppe eine gemeinsame Kurve aus
+        <code>entry_paths.gd</code> abfliegen:</p>
+        <div class="code">
+          <div class="tab"><span>stage_director.gd — _run_stage()</span><span class="dots"><span></span><span></span><span></span></span></div>
+          <pre><code>func _run_stage(stage: int, run_id: int) -&gt; void:
+    var patterns := [EntryPaths.BOTTOM_UP, EntryPaths.TOP_LEFT, EntryPaths.TOP_RIGHT]
+    for g in group_count:
+        var pattern: int = patterns[(g + stage - 1) % patterns.size()]
+        var curve := EntryPaths.make(pattern, vp)
+        for k in GROUP_SIZE:
+            _spawn(idx, curve, k * LAUNCH_GAP, stage)   <span class="c1"># k*LAUNCH_GAP staffelt die Gruppe</span>
+        await get_tree().create_timer(GROUP_GAP, false).timeout</code></pre>
+        </div>
+
+        <p>Jeder <code>Enemy</code> folgt der Kurve selbst per generischem
+        Path-Follower und tweent erst am Ende in seinen Formations-Slot ein:</p>
+        <div class="code">
+          <div class="tab"><span>enemy.gd — _follow_path()</span><span class="dots"><span></span><span></span><span></span></span></div>
+          <pre><code>func _follow_path(delta: float) -&gt; void:
+    _path_dist += _path_speed * delta
+    var pos := _path.sample_baked(min(_path_dist, _path.get_baked_length()))
+    global_position = pos
+    ...
+    if _path_dist &gt;= length:
+        _after_path.call()          <span class="c1"># z.B. _begin_lock() -&gt; Tween in den Slot</span></code></pre>
+        </div>
+
+        <p>Die Kurven selbst sind handgebaute Catmull-Rom-artige Splines — derselbe
+        kleine Helfer taucht identisch in <code>entry_paths.gd</code> <strong>und</strong>
+        <code>attack_paths.gd</code> auf:</p>
+        <div class="code">
+          <div class="tab"><span>entry_paths.gd / attack_paths.gd — _smooth()</span><span class="dots"><span></span><span></span><span></span></span></div>
+          <pre><code>static func _smooth(pts: PackedVector2Array, tension := 0.35) -&gt; Curve2D:
+    var c := Curve2D.new()
+    for i in pts.size():
+        var tan := (pts[mini(i+1, n-1)] - pts[maxi(i-1, 0)]) * tension
+        c.add_point(pts[i], -tan, tan)   <span class="c1"># symmetrische Tangenten -&gt; weiche Kurve ohne Handarbeit</span>
+    return c</code></pre>
+        </div>
+
+        <p>Die „lebendige" Formation selbst (Sway + Flügelschlag-Takt) sitzt
+        komplett in <code>formation.gd</code>:</p>
+        <div class="code">
+          <div class="tab"><span>formation.gd — _process()</span><span class="dots"><span></span><span></span><span></span></span></div>
+          <pre><code>func _process(delta: float) -&gt; void:
+    _time += delta
+    position.x = home.x + sin(_time * SWAY_SPEED) * SWAY_AMP   <span class="c1"># ganzer Block schwingt</span>
+    _flap_t += delta
+    if _flap_t &gt;= FLAP_INTERVAL:
+        flap = not flap
+        flap_toggled.emit(flap)     <span class="c1"># jeder Enemy hört mit und flappt synchron</span></code></pre>
+        </div>
+
+        <h3><span class="k">C</span>Kollisionserkennung → Zerstörung → Punkte</h3>
+        <p>Das ist der Kern der Anfrage — jede <code>Area2D</code> meldet Kontakt
+        über Godots eigenes <code>area_entered</code>-Signal, geprüft wird nur per
+        Gruppenzugehörigkeit.</p>
+
+        <p><strong>Gegner von Laser getroffen</strong>:</p>
+        <div class="code">
+          <div class="tab"><span>enemy.gd — _on_area_entered() / _explode()</span><span class="dots"><span></span><span></span><span></span></span></div>
+          <pre><code>func _on_area_entered(area: Area2D) -&gt; void:
+    if area.is_in_group("player_lasers"):
+        area.queue_free()
+        if _is_invulnerable():   <span class="c1"># z.B. Boss mitten im Capture, oder noch unter der Mündung</span>
+            return
+        _explode()
+
+func _explode() -&gt; void:
+    if _state == LOCKING: return          <span class="c1"># Doppel-Treffer-Sperre</span>
+    var was_diving := _state == DIVING or _state == RETURNING
+    _state = LOCKING
+    killed.emit(int(EnemyKinds.DATA[kind]["points"]), kind, _variant_idx, _carrying_captive)
+    if _carrying_captive:
+        ship_rescued.emit(global_position)   <span class="c1"># Boss trug ein gefangenes Schiff -&gt; Zwillingsjäger</span>
+    ...</code></pre>
+        </div>
+
+        <p><strong>Schiff von Gegner/Bombe getroffen</strong>:</p>
+        <div class="code">
+          <div class="tab"><span>ship.gd — _on_area_entered()</span><span class="dots"><span></span><span></span><span></span></span></div>
+          <pre><code>func _on_area_entered(area: Area2D) -&gt; void:
+    if not _alive or _invuln &gt; 0.0: return
+    if _capture_invuln and not area.is_in_group("capture_beam"): return
+    if area.is_in_group("enemy_shots"):
+        area.queue_free(); _destroy(not area.is_in_group("capture_beam"))
+    elif area.is_in_group("enemy") and area.is_active_diver():
+        _destroy(true)
+    elif area.is_in_group("bonus_wave_active"):
+        _destroy(true)               <span class="c1"># Rammen im Bonuslevel kostet auch ein Leben</span></code></pre>
+        </div>
+
+        <p>Die Punktevergabe selbst passiert <strong>nicht</strong> in
+        <code>enemy.gd</code>, sondern erst zwei Ebenen weiter oben in
+        <code>game.gd</code> — <code>enemy.gd</code> kennt weder Score noch HUD:</p>
+        <div class="code">
+          <div class="tab"><span>game.gd — _on_enemy_killed()</span><span class="dots"><span></span><span></span><span></span></span></div>
+          <pre><code>func _on_enemy_killed(points: int, kind: int, variant_idx: int, was_carrying_captive: bool) -&gt; void:
+    if _ship._hyper_ammo: points *= 2
+    _score += points
+    _hud.set_score(_score)
+    while _extra_step &gt; 0 and _score &gt;= _next_extra and _lives &lt; MAX_LIVES_RUNTIME:
+        _next_extra += _extra_step
+        _lives = mini(_lives + 1, MAX_LIVES_RUNTIME)   <span class="c1"># Extra-Leben-Schwelle</span>
+    _check_boss_threshold()
+    _check_win()</code></pre>
+        </div>
+
+        <figure class="plate">
+          <img src="assets/fig-collision.jpg" alt="Anfliegende Gegner kurz vor dem Schiff">
+          <figcaption><b>FIG.&nbsp;04</b> Drei Zako nähern sich auf dem BOTTOM_UP-Einflugpfad — genau der Moment, den <code>enemy.gd::_is_invulnerable()</code> gegen die Kanonenmündung prüft</figcaption>
+        </figure>
+
+        <h3><span class="k">D</span>Animation — zwei Techniken je nach Sprite-Material</h3>
+        <div class="code">
+          <div class="tab"><span>enemy.gd — _animate_flap()</span><span class="dots"><span></span><span></span><span></span></span></div>
+          <pre><code>func _animate_flap(up: bool) -&gt; void:
+    if _flap_frames.size() == 2:
+        _sprite.texture = load(_flap_frames[1] if up else _flap_frames[0])  <span class="c1"># echtes 2. Frame (Gyaraga-Art)</span>
+        return
+    <span class="c1"># klassisches Einzelbild: Flügelschlag per Transform-Wobble faken</span>
+    _flap_tween.tween_property(_sprite, "skew", (0.16 if up else -0.16), 0.12)
+    _flap_tween.tween_property(_sprite, "scale:y", base_scale * (0.88 if up else 1.0), 0.12)</code></pre>
+        </div>
+
+        <h3><span class="k">E</span>Bedeutung wichtiger Variablen</h3>
+        <p>Ehrlicherweise verwendet dieses Projekt kaum echte <code>@export</code>-Felder
+        — die einzigen stecken im mitgeschleppten Thruster-Partikelmodul:</p>
+        <div class="code">
+          <div class="tab"><span>main_thruster.gd</span><span class="dots"><span></span><span></span><span></span></span></div>
+          <pre><code><span class="c1"># assets/ship_visual_effects/main_thruster/main_thruster.gd</span>
+@export var size_curve: Curve
+@export var max_length := 160.0
+@export var power = 1.0:          <span class="c1"># 0..1, wie stark die Flamme gerade brennt</span></code></pre>
+        </div>
+        <p>Der Rest der Balance-Werte steht bewusst als <strong>dokumentierte
+        <code>const</code>/<code>var</code></strong> direkt im Skript (nicht im
+        Godot-Inspector editierbar) — jede mit einem Kommentar, <em>warum</em>
+        genau dieser Wert:</p>
+        <div class="code">
+          <div class="tab"><span>ship.gd / enemy_kinds.gd</span><span class="dots"><span></span><span></span><span></span></span></div>
+          <pre><code>const FIRE_COOLDOWN := 0.15          <span class="c1"># ship.gd — Mindestabstand zwischen Schüssen</span>
+const CAPTURE_HOMING_SPEED := 640.0  <span class="c1"># enemy.gd — schneller als das Schiff (480), "kann nicht entkommen"</span>
+const HYPER_OFFSET := 14.0           <span class="c1"># ship.gd — Strahlabstand bei Hyper-Ammo</span>
+
+const DATA := {   <span class="c1"># enemy_kinds.gd — Punkte- UND Kollisionsradius-Hierarchie in einem Dictionary</span>
+    ZAKO: {"half": 13.0, "points": 50, ...},
+    GOEI: {"half": 15.0, "points": 80, ...},
+    BOSS: {"half": 18.0, "points": 150, ...},
+}</code></pre>
+        </div>
+      </section>
+
+      <!-- ============================================================= 04 -->
+      <section class="mod" id="sec-04">
+        <div class="mod__head"><span class="mod__num">04</span><h2>Wichtige Signale</h2></div>
+        <p class="mod__sub">wer meldet was an wen</p>
+
+        <div class="tbl-wrap">
+        <table class="pinout">
+          <thead><tr><th>Signal</th><th>Emitter</th><th>Empfänger</th><th>Bedeutung</th></tr></thead>
+          <tbody>
+          <tr>
+            <td><code>died(show_explosion)</code></td><td>Ship</td>
+            <td><code>Game._on_ship_died</code></td>
+            <td>Leben verloren; <code>show_explosion=false</code> bei Boss-Capture (kein Boom)</td>
+          </tr>
+          <tr>
+            <td><code>killed(points, kind, variant_idx, was_carrying_captive)</code></td><td>Enemy</td>
+            <td>StageDirector (leitet weiter) → <code>Game._on_enemy_killed</code></td>
+            <td>Auslöser für Punktevergabe</td>
+          </tr>
+          <tr>
+            <td><code>ship_rescued(at_position)</code></td><td>Enemy</td>
+            <td><code>Game._on_ship_rescued</code></td>
+            <td>Boss mit Gefangenem zerstört → Zwillingsjäger</td>
+          </tr>
+          <tr>
+            <td><code>resolved</code></td><td>Enemy</td>
+            <td><code>StageDirector._on_resolved</code></td>
+            <td>Zählt „noch offene Gegner"; löst <code>stage_populated</code> aus</td>
+          </tr>
+          <tr>
+            <td><code>stage_populated</code></td><td>StageDirector</td>
+            <td><code>Game._on_stage_populated</code></td>
+            <td>Fly-in fertig → Zustand <code>FORMATION</code>, Angriffe starten</td>
+          </tr>
+          <tr>
+            <td><code>caught</code></td><td>CaptureBeam</td>
+            <td>Enemy (inline Lambda)</td>
+            <td>Strahl hat Schiff getroffen → <code>_carrying_captive=true</code></td>
+          </tr>
+          <tr>
+            <td><code>collected(points, icon, icon_index, at_position)</code></td><td>BonusItem</td>
+            <td><code>Game._on_bonus_collected</code></td>
+            <td>Bonus eingesammelt (Berührung ODER Laser)</td>
+          </tr>
+          <tr>
+            <td><code>pause_pressed</code> / <code>mute_pressed</code></td><td>Hud</td>
+            <td><code>Game._request_pause</code> / <code>_toggle_mute</code></td>
+            <td>HUD-Buttons</td>
+          </tr>
+          <tr>
+            <td><code>start_game</code> / <code>resume_game</code> / <code>to_title</code> / <code>settings_changed</code></td><td>Menus</td>
+            <td>Game</td>
+            <td>Menü-Navigation</td>
+          </tr>
+          <tr>
+            <td><code>flap_toggled(state)</code></td><td>Formation</td>
+            <td>jeder <code>Enemy._on_flap</code></td>
+            <td>gemeinsamer Flügelschlag-Takt</td>
+          </tr>
+          </tbody>
+        </table>
+        </div>
+      </section>
+
+      <!-- ============================================================= 05 -->
+      <section class="mod" id="sec-05">
+        <div class="mod__head"><span class="mod__num">05</span><h2>Optional: UML-Übersicht</h2></div>
+        <p class="mod__sub">ging tatsächlich</p>
+
+        <p>Eine vereinfachte Klassen-/Beziehungsübersicht der oben genannten
+        Kernklassen — Rauten bedeuten „besitzt", gestrichelte Pfeile
+        „instanziiert zur Laufzeit", gepunktete Linien den Signal-Fluss.</p>
+
+        <figure class="plate">
+          <img src="assets/fig-uml.png" alt="Vereinfachtes Klassendiagramm">
+          <figcaption><b>FIG.&nbsp;05</b> Klassendiagramm der Kern-Gameplay-Klassen (Graphviz)</figcaption>
+        </figure>
+
+        <div class="callout">
+          <b>Hinweis:</b> Das Diagramm bildet bewusst nur die für Steuerung/
+          Formation/Kollision/Punkte relevanten Klassen ab — Utility-Klassen wie
+          <code>UiStyle</code>, <code>HallOfFame</code> oder die reinen
+          Kurven-Generatoren <code>EntryPaths</code>/<code>AttackPaths</code> sind
+          der Übersichtlichkeit halber ausgelassen.
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <footer>
+    <p>Galaga — Godot&nbsp;4.7.1 · GL&nbsp;Compatibility · erstellt von Claude Sonnet&nbsp;5</p>
+    <p>Quelle: aktueller Stand von projects/galaga/*.gd — kein archiviertes Wissen</p>
+  </footer>
+</div>
+
+<script>
+  // Experimental: recolor code text using the real Godot 4.7 default editor
+  // syntax palette (see the .gd-* CSS rules and the project CLAUDE.md entry
+  // for where the exact values came from), so the readability question can
+  // actually be judged instead of guessed at. A small hand-rolled tokenizer,
+  // not a real parser — good enough to color keywords/strings/numbers/
+  // comments/types/calls correctly for the GDScript shown here, not meant to
+  // be a general-purpose highlighter. Runs once per direction and caches
+  // both renderings on the element so flipping back and forth is instant.
+  var GD_FLOW = ["if","elif","else","for","while","return","break","continue","match","pass","await"];
+  var GD_DECL = ["var","const","func","class_name","extends","signal","enum","static",
+    "preload","load","and","or","not","in","is","as","void","self"];
+  var GD_TYPES = ["int","float","bool","String","Array","Dictionary","Vector2","Vector2i",
+    "Node2D","Area2D","Curve2D","Callable","Tween","Texture2D","PackedVector2Array",
+    "CircleShape2D","Color","CollisionShape2D","AudioStreamPlayer","Sprite2D","Line2D"];
+
+  function gdEscape(s){
+    return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+
+  function gdHighlight(src){
+    var out = "", i = 0, n = src.length;
+    var flow = {}, decl = {}, types = {};
+    GD_FLOW.forEach(function(w){ flow[w] = true; });
+    GD_DECL.forEach(function(w){ decl[w] = true; });
+    GD_TYPES.forEach(function(w){ types[w] = true; });
+    while (i < n){
+      var c = src[i];
+      if (c === "#"){
+        var j = src.indexOf("\n", i);
+        if (j === -1) j = n;
+        out += '<span class="gd-c">' + gdEscape(src.slice(i, j)) + '</span>';
+        i = j;
+        continue;
+      }
+      if (c === '"' || c === "'"){
+        var q = c, k = i + 1;
+        while (k < n && src[k] !== q) k++;
+        k = Math.min(k + 1, n);
+        out += '<span class="gd-s">' + gdEscape(src.slice(i, k)) + '</span>';
+        i = k;
+        continue;
+      }
+      if (c === "@"){
+        var a = i + 1;
+        while (a < n && /[A-Za-z_]/.test(src[a])) a++;
+        out += '<span class="gd-a">' + gdEscape(src.slice(i, a)) + '</span>';
+        i = a;
+        continue;
+      }
+      if (/[0-9]/.test(c) && !/[A-Za-z_0-9]/.test(src[i-1] || "")){
+        var m = i;
+        while (m < n && /[0-9.]/.test(src[m])) m++;
+        out += '<span class="gd-n">' + gdEscape(src.slice(i, m)) + '</span>';
+        i = m;
+        continue;
+      }
+      if (/[A-Za-z_]/.test(c)){
+        var w = i;
+        while (w < n && /[A-Za-z0-9_]/.test(src[w])) w++;
+        var word = src.slice(i, w);
+        var cls = null;
+        if (flow[word]) cls = "gd-kf";
+        else if (decl[word]) cls = "gd-kd";
+        else if (types[word]) cls = "gd-t";
+        else if (src[w] === "(") cls = (/func\s+$/.test(src.slice(Math.max(0, i - 5), i)) ? "gd-fd" : "gd-fn");
+        else if (/^[A-Z]/.test(word)) cls = "gd-t";
+        out += cls ? ('<span class="' + cls + '">' + gdEscape(word) + '</span>') : gdEscape(word);
+        i = w;
+        continue;
+      }
+      out += gdEscape(c);
+      i++;
+    }
+    return out;
+  }
+
+  function toggleGodotSyntax(){
+    var on = !document.body.classList.contains('godot-syntax');
+    document.body.classList.toggle('godot-syntax', on);
+    var btn = document.getElementById('syntaxToggleBtn');
+    btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    document.querySelectorAll('.code code').forEach(function(el){
+      if (on){
+        if (el.dataset.gdHtml === undefined){
+          el.dataset.dossierHtml = el.innerHTML;
+          el.dataset.gdHtml = gdHighlight(el.textContent);
+        }
+        el.innerHTML = el.dataset.gdHtml;
+      } else if (el.dataset.dossierHtml !== undefined){
+        el.innerHTML = el.dataset.dossierHtml;
+      }
+    });
+  }
+</script>
+<script>
+  // Section-highlight in the module rail — a plain, motion-respecting toggle,
+  // not an animated scroll effect.
+  (function(){
+    var links = Array.from(document.querySelectorAll('#rail a'));
+    var sections = links.map(function(a){ return document.querySelector(a.getAttribute('href')); });
+    if (!('IntersectionObserver' in window)) return;
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(entry){
+        var idx = sections.indexOf(entry.target);
+        if (idx === -1) return;
+        if (entry.isIntersecting){
+          links.forEach(function(l){ l.classList.remove('active'); });
+          links[idx].classList.add('active');
+        }
+      });
+    }, { rootMargin: '-15% 0px -70% 0px', threshold: 0 });
+    sections.forEach(function(s){ if (s) io.observe(s); });
+  })();
+</script>

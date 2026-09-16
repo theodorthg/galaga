@@ -2536,6 +2536,51 @@ Nutzer wählte **Variante A (Gegner)**.
   ersetzt sichtbar das alte Godot-Standard-Icon.
 - Version → **1.0.1**, getaggt, Windows-CI-Release durchgelaufen.
 
+**Vierunddreißigste Playtest-Runde (2026-09-16): technisches
+Architektur-Dossier als druckbares Claude-Artifact.** Nutzerwunsch: eine
+Übersicht über Steuerung/Gegner-Formationen/Kollisionserkennung/Punktevergabe
++ Signale, mit echten Code-Ausschnitten, Screenshots und Diagrammen, als
+Artifact — und am Ende als sauber paginiertes PDF druckbar.
+- `docs/architecture-dossier/index.html` — die Artifact-Quelle: fünf
+  nummerierte Module (Datei-Modularisierung, Szenenbaum + Kollisionsschichten,
+  Kern-Code-Ausschnitte, Signale, optionales UML), gestaltet als
+  „Ingenieurs-Service-Manual" (Orbitron-Titelfont, IBM-Plex-Sans/Mono-Body,
+  das echte `UiStyle.ACCENT`-Cyan als Dossier-Akzent) statt eines generischen
+  Doku-Templates — Details siehe die globale CLAUDE.md, „Technische
+  Dokumentation als Claude-Artifact".
+- **Kein eingebauter PDF-Export möglich** (Sandbox-iframe ohne
+  `allow-modals`/`allow-downloads`, siehe globale CLAUDE.md für die volle
+  Herleitung) — Lösung: `build_standalone.py` bettet alle Bilder als
+  Base64 ein und erzeugt `Galaga-Architektur-Dossier.html`, eine
+  eigenständige Datei, die der Nutzer lokal öffnet und dort per Strg/Cmd+P
+  druckt. `prepare_assets.py` regeneriert die Diagramme aus
+  `diagrams/*.dot` (Graphviz) und kopiert `fig-controls.png`/
+  `galaga-icon.png` aus echten Projekt-Assets; die beiden RG552-Screenshots
+  (`fig-formation.jpg`/`fig-collision.jpg`) bleiben als bereits aufbereitete
+  Dateien liegen (reale Geräte-Screenshots, nicht aus dem Repo regenerierbar).
+- **Zwei echte Bugs beim Druck-Stylesheet gefunden und behoben**: (1) eine
+  Zwischenüberschrift blieb im Druck fast unsichtbar, weil nur `.mod h2`
+  farblich überschrieben wurde, nicht die bare `h3` — behoben durch
+  Umstellung auf CSS-Custom-Property-Neudefinition im `@media print`-Block
+  statt Selektor-für-Selektor-Overrides. (2) Code-Panels mit `overflow:hidden`
+  (fürs Eckenabrunden) ließen Chrome `break-inside:avoid` beim Drucken
+  ignorieren (bekannter Chrome-Bug) — im Druck bekommen Code-Panels und
+  Abbildungen eckige statt runde Ecken und `overflow:visible`, dafür bricht
+  keiner mehr mitten durch.
+- **Screen-only Experiment**: ein Umschalter „Code-Farben: Dossier ⇄
+  Godot-Editor" rendert die Code-Panels testweise in Godots echten
+  Standard-Editor-Syntaxfarben um (Werte aus `editor_data/
+  editor_settings-4.7.tres` gelesen, nicht geraten — siehe globale CLAUDE.md).
+  Ein kleiner handgeschriebener Regex-Tokenizer (kein echter Parser, reicht
+  aber für die GDScript-Ausschnitte hier), cached beide Renderings pro
+  Code-Block fürs verzögerungsfreie Hin- und Herschalten. In `@media print`
+  bewusst neutralisiert (`color:inherit !important` auf allen `.gd-*`-Klassen)
+  — der Umschalter darf den Druck-Look nie beeinflussen, unabhängig vom
+  Bildschirm-Zustand beim Drucken.
+- Verifiziert per `google-chrome --headless --print-to-pdf` gegen die
+  tatsächliche `file://`-Datei (nicht nur gegen eine über `python3 -m
+  http.server` servierte Rohdatei) + `pdftoppm`-Sichtprüfung aller 11 Seiten.
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,

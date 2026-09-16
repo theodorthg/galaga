@@ -1,0 +1,55 @@
+digraph UML {
+  bgcolor="#0b0e1c";
+  rankdir=TB;
+  fontname="Helvetica";
+  splines=ortho;
+  node [shape=record, fontname="Helvetica", fontsize=11, color="#4db2ff", fontcolor="#eef4ff", style="filled,rounded", fillcolor="#161a30"];
+  edge [color="#6f7fa8", fontname="Helvetica", fontsize=10, fontcolor="#8fa3c8"];
+
+  Game [label="{Game (Node2D)\l|+ _state: TITLE\|READY\|ENTERING\|FORMATION\|GAME_OVER\|BONUS\l+ _score, _lives, _stage: int\l|+ _new_run()\l+ _start_ready()\l+ _on_enemy_killed(points, kind, variant_idx, was_carrying_captive)\l+ _on_ship_died(show_explosion)\l+ _check_win() / _check_boss_threshold()\l}"];
+
+  Formation [label="{Formation (Node2D)\l|+ ROWS: [[kind, count], ...]\l+ home: Vector2\l|+ slot_global(idx): Vector2\l+ assign(idx, enemy) / release(enemy)\l+ live_count(): int\l}"];
+
+  StageDirector [label="{StageDirector (Node2D)\l|+ _atk: Dictionary (Schwierigkeit)\l|+ start_stage(stage)\l+ begin_attacks() / stop_attacks()\l+ _launch_dive()\l+ _attempt_capture_dive(): bool\l|signals: stage_populated,\l  enemy_killed, ship_rescued\l}"];
+
+  Ship [label="{Ship (Area2D)\l|+ speed, ship_half_width: float\l+ _alive, _twin, _hyper_ammo: bool\l|+ shoot() / _fire_laser(x_offset)\l+ become_twin() / activate_hyper_ammo()\l+ _destroy(show_explosion)\l+ set_capture_invulnerable(on)\l|signal died(show_explosion)\l}"];
+
+  Enemy [label="{Enemy (Area2D)\l|+ kind: EnemyKinds.ZAKO\|GOEI\|BOSS\l+ _state: FLYING_IN...CAPTURE_BEAM\l|+ setup(kind, formation, slot, curve, ...)\l+ dive() / capture_dive()\l+ _explode()\l+ _is_invulnerable(): bool\l|signals: killed, ship_rescued,\l  locked_in, resolved\l}"];
+
+  EnemyKinds [label="{EnemyKinds (static)\l|+ DATA[kind] = \{half, points, texture, scale\}\l+ GOEI_VARIANTS / ZAKO_VARIANTS / BOSS_VARIANTS\l|+ pick_visual(kind, stage): Dictionary\l}"];
+
+  Laser [label="{Laser (Area2D)\l|+ speed, accent_color\l}"];
+  Bomb [label="{Bomb (Area2D)\l|+ _vel: Vector2 (homing x)\l}"];
+  CaptureBeam [label="{CaptureBeam (Area2D)\l|+ _len, _phase\l|signal caught\l}"];
+  BonusItem [label="{BonusItem (Area2D)\l|+ POINTS = 500\l|signal collected(points, icon,\l  icon_index, at_position)\l}"];
+
+  Hud [label="{Hud (Control)\l|+ set_score() / set_lives()\l+ add_bonus_icon(tex, idx): bool\l+ flash_banner(text)\l|signals: pause_pressed, mute_pressed\l}"];
+
+  Menus [label="{Menus (CanvasLayer)\l|+ show_title() / show_pause()\l+ show_run_summary(...)\l|signals: start_game, resume_game,\l  to_title, settings_changed\l}"];
+
+  GameSettings [label="{GameSettings (static)\l|+ DEF: Dictionary (Defaults)\l+ load_all() / save(data)\l+ dive_params(difficulty)\l}"];
+
+  SoundManager [label="{SoundManager \"Snd\" (Autoload)\l|+ SOUNDS / ORDER\l|+ play(key) / is_muted() / toggle_mute()\l}"];
+
+  Game -> Formation [label="besitzt", arrowhead=diamond];
+  Game -> StageDirector [label="besitzt", arrowhead=diamond];
+  Game -> Ship [label="besitzt", arrowhead=diamond];
+  Game -> Hud [label="besitzt", arrowhead=diamond];
+  Game -> Menus [label="besitzt", arrowhead=diamond];
+  Game -> GameSettings [label="liest/schreibt", style=dashed];
+  Game -> SoundManager [label="Autoload /root/Snd", style=dashed];
+
+  StageDirector -> Formation [label="slot_kind(), slot_global()"];
+  StageDirector -> Enemy [label="instanziiert + verbindet\nkilled/ship_rescued", arrowhead=vee];
+  Enemy -> Formation [label="assign()/release()"];
+  Enemy -> EnemyKinds [label="DATA[kind], pick_visual()"];
+  Enemy -> CaptureBeam [label="add_child()", arrowhead=diamond];
+  Enemy -> Bomb [label="instanziiert", arrowhead=vee];
+  Ship -> Laser [label="instanziiert", arrowhead=vee];
+  Ship -> Enemy [label="area_entered:\nis_active_diver()"];
+  Ship -> CaptureBeam [label="area_entered:\nis_in_group(capture_beam)"];
+  Ship -> Bomb [label="area_entered:\nis_in_group(enemy_shots)"];
+  Game -> BonusItem [label="instanziiert +\nverbindet collected", arrowhead=vee];
+  Game -> Enemy [label="enemy_killed ->\n_on_enemy_killed()", style=dotted];
+  StageDirector -> Ship [label="get_first_node_in_group(\"player\")"];
+}

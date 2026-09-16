@@ -1,0 +1,66 @@
+digraph SceneTree {
+  bgcolor="#0b0e1c";
+  rankdir=TB;
+  fontname="Helvetica";
+  node [fontname="Helvetica", fontsize=13, color="#4db2ff", fontcolor="#eef4ff", style=filled];
+  edge [color="#6f7fa8", fontname="Helvetica", fontsize=11, fontcolor="#8fa3c8"];
+
+  subgraph cluster_static {
+    label="game.tscn (fest verdrahtete Szene)";
+    fontcolor="#4db2ff"; color="#2a3358"; style="rounded"; bgcolor="#121631";
+
+    Game [label="Game : Node2D\n(game.gd)\nState-Machine", fillcolor="#1b2140", shape=box];
+    SpaceBackground [label="SpaceBackground\n(space_background.tscn)\nSternenhimmel-Shader", fillcolor="#161a30", shape=box];
+    Formation [label="Formation : Node2D\n(formation.gd)\n40 Slots, Sway, Flap-Takt", fillcolor="#161a30", shape=box];
+    StageDirector [label="StageDirector : Node2D\n(stage_director.gd)\nFly-in + Angriffs-Timer", fillcolor="#161a30", shape=box];
+    Ship [label="Ship : Area2D\n(ship.tscn / ship.gd)", fillcolor="#1b2140", shape=box];
+    ShipSprite [label="Sprite2D", fillcolor="#0d1226", shape=ellipse];
+    MainThruster [label="MainThruster\n(Line2D + Partikel)", fillcolor="#0d1226", shape=ellipse];
+    ShipCol [label="CollisionShape2D\n(layer 1 player)", fillcolor="#0d1226", shape=ellipse];
+    HUD [label="HUD : CanvasLayer", fillcolor="#161a30", shape=box];
+    HUDRoot [label="Root : Control\n(hud.gd)", fillcolor="#1b2140", shape=box];
+    Score [label="Score / Stage / Banner\n(Label)", fillcolor="#0d1226", shape=ellipse];
+    PauseButton [label="PauseButton", fillcolor="#0d1226", shape=ellipse];
+    MuteButton [label="MuteButton\n+ mute_icon.gd (Overlay)", fillcolor="#0d1226", shape=ellipse];
+    Menus [label="Menus : CanvasLayer\n(menus.gd)\nbaut alle Screens im Code", fillcolor="#161a30", shape=box];
+
+    Game -> SpaceBackground;
+    Game -> Formation;
+    Game -> StageDirector;
+    Game -> Ship;
+    Ship -> ShipSprite;
+    Ship -> MainThruster;
+    Ship -> ShipCol;
+    Game -> HUD;
+    HUD -> HUDRoot;
+    HUDRoot -> Score;
+    HUDRoot -> PauseButton;
+    HUDRoot -> MuteButton;
+    Game -> Menus;
+  }
+
+  subgraph cluster_dynamic {
+    label="zur Laufzeit instanziiert (preload().instantiate())";
+    fontcolor="#ff9d4d"; color="#4a2f1a"; style="rounded"; bgcolor="#241a10";
+
+    Enemy [label="Enemy : Area2D\n(enemy.tscn / enemy.gd)\nlayer 4 enemies", fillcolor="#2a1d10", shape=box];
+    CaptureBeam [label="CaptureBeam : Area2D\n(capture_beam.tscn)\nKind eines Boss-Enemy", fillcolor="#241a10", shape=ellipse];
+    Laser [label="Laser : Area2D\n(laser.tscn)\nlayer 8 player_shots", fillcolor="#2a1d10", shape=box];
+    Bomb [label="Bomb : Area2D\n(bomb.tscn)\nlayer 16 enemy_shots", fillcolor="#2a1d10", shape=box];
+    BonusItem [label="BonusItem : Area2D\n(bonus_item.tscn)\nlayer 2 collectibles", fillcolor="#2a1d10", shape=box];
+    BonusEnemy [label="BonusEnemy : Area2D\n(bonus_enemy.tscn)\nBonuslevel-Kette", fillcolor="#2a1d10", shape=box];
+    Reconstruct [label="ShipReconstruct\n(AnimatedSprite2D)", fillcolor="#2a1d10", shape=box];
+    Explosion [label="ShipExplosion\n(AnimatedSprite2D)", fillcolor="#2a1d10", shape=box];
+    ScorePopup [label="ScorePopup\n(reines Script, kein .tscn)", fillcolor="#2a1d10", shape=box];
+  }
+
+  StageDirector -> Enemy [label="spawnt (Fly-in-Gruppen)", style=dashed, color="#ff9d4d"];
+  Enemy -> CaptureBeam [label="add_child() bei\ncapture_dive()", style=dashed, color="#ff9d4d"];
+  Ship -> Laser [label="_fire_laser()", style=dashed, color="#ff9d4d"];
+  Enemy -> Bomb [label="_maybe_bomb()\nwährend DIVING", style=dashed, color="#ff9d4d"];
+  Game -> BonusItem [label="_spawn_bonus_item()", style=dashed, color="#ff9d4d"];
+  Game -> BonusEnemy [label="_run_bonus_wave()\n(Bonuslevel)", style=dashed, color="#ff9d4d"];
+  Game -> Reconstruct [label="_play_reconstruct()", style=dashed, color="#ff9d4d"];
+  Game -> Explosion [label="_play_explosion()", style=dashed, color="#ff9d4d"];
+  Game -> ScorePopup [label="_spawn_score_popup()", style=dashed, color="#ff9d4d"];
+}
