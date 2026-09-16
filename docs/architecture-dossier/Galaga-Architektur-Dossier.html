@@ -289,10 +289,24 @@
     *{ -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 
     .stars, nav.rail, .print-hint, .syntax-toggle{ display:none !important; }
-    /* the print palette always wins, regardless of whether the screen-only
-       Godot-editor-colors toggle was left on */
-    .code, .code code{ background:var(--code-bg) !important; color:var(--text) !important; }
-    .gd-kf, .gd-kd, .gd-t, .gd-s, .gd-n, .gd-fn, .gd-fd, .gd-a, .gd-c{ color:inherit !important; }
+    /* Print honors the on-screen Godot-editor-colors toggle instead of
+       silently dropping it — a comparison feature that vanishes the one
+       time you actually commit to a PDF isn't much of a comparison. Only
+       the code panels switch; the rest of the print "blueprint" theme
+       (headings, tables, page background) stays exactly as designed either
+       way. Default (toggle off) keeps the print-safe light scheme; toggle
+       on reproduces the real dark editor look, ink included (needs the
+       print-color-adjust above to actually paint the dark fill). */
+    body:not(.godot-syntax) .code{ background:var(--code-bg) !important; }
+    body:not(.godot-syntax) .code code{ color:var(--text) !important; }
+    body:not(.godot-syntax) .gd-kf, body:not(.godot-syntax) .gd-kd,
+    body:not(.godot-syntax) .gd-t, body:not(.godot-syntax) .gd-s,
+    body:not(.godot-syntax) .gd-n, body:not(.godot-syntax) .gd-fn,
+    body:not(.godot-syntax) .gd-fd, body:not(.godot-syntax) .gd-a,
+    body:not(.godot-syntax) .gd-c{ color:inherit !important; }
+    body.godot-syntax .code{ background:#1a1a1a !important; border-color:#000; }
+    body.godot-syntax .code .tab{ background:#232323; color:rgba(255,255,255,.6); border-bottom-color:#000; }
+    body.godot-syntax .code code{ color:rgba(255,255,255,.75) !important; }
     .layout{ display:block; }
     main{ max-width:none; }
     body{ padding:0; font-size:12.5px; background:var(--bg); } /* flat paper, no on-screen glow gradients */

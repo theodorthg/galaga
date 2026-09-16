@@ -2567,16 +2567,41 @@ Artifact — und am Ende als sauber paginiertes PDF druckbar.
   ignorieren (bekannter Chrome-Bug) — im Druck bekommen Code-Panels und
   Abbildungen eckige statt runde Ecken und `overflow:visible`, dafür bricht
   keiner mehr mitten durch.
-- **Screen-only Experiment**: ein Umschalter „Code-Farben: Dossier ⇄
-  Godot-Editor" rendert die Code-Panels testweise in Godots echten
-  Standard-Editor-Syntaxfarben um (Werte aus `editor_data/
-  editor_settings-4.7.tres` gelesen, nicht geraten — siehe globale CLAUDE.md).
-  Ein kleiner handgeschriebener Regex-Tokenizer (kein echter Parser, reicht
-  aber für die GDScript-Ausschnitte hier), cached beide Renderings pro
-  Code-Block fürs verzögerungsfreie Hin- und Herschalten. In `@media print`
-  bewusst neutralisiert (`color:inherit !important` auf allen `.gd-*`-Klassen)
-  — der Umschalter darf den Druck-Look nie beeinflussen, unabhängig vom
-  Bildschirm-Zustand beim Drucken.
+- **Umschalter „Code-Farben: Dossier ⇄ Godot-Editor"** rendert die
+  Code-Panels auf Knopfdruck in Godots echten Standard-Editor-Syntaxfarben um
+  (Werte aus `editor_data/editor_settings-4.7.tres` gelesen, nicht geraten —
+  siehe globale CLAUDE.md). Ein kleiner handgeschriebener Regex-Tokenizer
+  (kein echter Parser, reicht aber für die GDScript-Ausschnitte hier), cached
+  beide Renderings pro Code-Block fürs verzögerungsfreie Hin- und
+  Herschalten. **Vom Nutzer nach Live-Test ausdrücklich als „genial"
+  bestätigt** (2026-09-16) — ursprünglich als reines
+  „nur testweise"-Experiment gedacht, jetzt als bewährte Technik
+  einzustufen: bei künftigen technischen Artifact-Dossiers zu
+  GDScript-Code-Ausschnitten von Anfang an mit anbieten, nicht erst auf
+  Nachfrage nachrüsten (siehe globale CLAUDE.md für die projektübergreifende
+  Notiz dazu). Landet automatisch auch in jeder `build_standalone.py`-
+  erzeugten Datei, ohne eigenes Zutun — das Skript kopiert nur `img`-Pfade
+  um, lässt Script/CSS unangetastet.
+  **Nutzer-Nachtrag direkt danach**: der Umschalter-Zustand soll auch beim
+  Drucken sichtbar bleiben, nicht auf den Print-Blueprint-Look
+  zurückfallen ("nicht gar so experimentell") — erste Fassung hatte
+  `@media print` hart auf `color:inherit !important` zurückgesetzt,
+  unabhängig vom Bildschirm-Zustand. Fix: die Reset-Regeln laufen jetzt
+  unter `body:not(.godot-syntax) ...`, eine neue `body.godot-syntax .code`-
+  Regel gibt bei aktivem Umschalter echte dunkle Editor-Farben (inkl.
+  `#1a1a1a`-Hintergrund) auch im PDF — nur die Code-Panels wechseln,
+  Überschriften/Tabellen/Rest bleiben immer beim Blueprint-Print-Look.
+  **Test-Stolperfalle dabei**: ein Headless-Verifikationsskript, das den
+  Umschalter vor dem Drucken automatisch aktivieren sollte, ersetzte
+  `</body>` im String — die rohe Artifact-Quelle (`index.html`) ist aber nur
+  ein Body-Fragment ohne dieses Tag (das kommt erst durch
+  `build_standalone.py`s Wrapper hinzu), der Ersetzungsversuch griff also
+  nie und täuschte tagelang "der Fix wirkt nicht" vor. Behoben durch
+  einfaches Anhängen des Aktivierungs-Skripts ans Dateiende statt eines
+  String-Replace auf ein Tag, das in der Quelle gar nicht existiert — bei
+  der bereits fertig gebauten `Galaga-Architektur-Dossier.html` (echtes
+  volles HTML-Dokument mit `</body>`) funktionierte derselbe Replace-Ansatz
+  dagegen anstandslos.
 - Verifiziert per `google-chrome --headless --print-to-pdf` gegen die
   tatsächliche `file://`-Datei (nicht nur gegen eine über `python3 -m
   http.server` servierte Rohdatei) + `pdftoppm`-Sichtprüfung aller 11 Seiten.
