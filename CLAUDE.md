@@ -2441,6 +2441,67 @@ Dreißigste Runde.
   Touch-Tap ausgelöst, sauber sichtbar über dem Button) + Hilfeseiten-Hinweis
   live auf dem RG552 bestätigt (lesbar, kein Layout-Bruch).
 
+**Zweiunddreißigste Playtest-Runde (2026-09-16): Mute rechts von Pause,
+Milchglas-Nudge, HUD-Text weiß, Mausrad-Paging in der Hilfe, D-Pad-Wrap in
+Menüs.** Direkter Nachtrag zur Einunddreißigsten Runde, zwei Nutzer-Nachrichten
+in Folge.
+- **Mute/Pause-Tausch**: der Nutzer bemerkte, dass an der ursprünglichen
+  (weiter mittigen) Mute-Position gelegentlich Gegner sichtbar durch den
+  Milchglas-Layer schienen — `game.tscn` tauscht die beiden Button-Rects,
+  Mute sitzt jetzt außen rechts (Pauses alte Stelle), Pause daneben links.
+- **Milchglas-Nudge**: der Frosted-Glass-`ColorRect` des Mute-Buttons saß
+  sichtbar ein paar Pixel links vom eigentlichen Button/Icon (vermutlich ein
+  Artefakt des Backbuffer-Blur-Shaders, nicht ein Control-Layout-Fehler —
+  Glas UND Icon lasen zuvor exakt dieselben `_mute_btn`-Offsets). Neue
+  `hud.gd::MUTE_GLASS_NUDGE_X = 3.0` verschiebt nur das Glas-`ColorRect` um
+  3px nach rechts — eine benannte, leicht nachjustierbare Konstante statt
+  eines Magic Number, für den Fall, dass der Wert nochmal angepasst werden
+  muss.
+- **HUD-Text weiß statt Türkis**: Mute-Icon-Farbe (`mute_icon.gd`), sowie
+  `hud.gd`s „Laps N"- und „STAGE n"-Text (`BONUS_LAP_COLOR`,
+  `_stage`-Label) von `UiStyle.ACCENT` auf `Color.WHITE` — konsistent mit
+  dem seit jeher weißen Pause-Glyphen „II". Die Lebens-„× N"-Anzeige blieb
+  bewusst unangetastet (nicht Teil der Anfrage).
+- **Mausrad-Paging in der Hilfe**: `menus.gd::_unhandled_input()` fängt
+  jetzt zusätzlich zu `ui_left`/`ui_right` auch `InputEventMouseButton` mit
+  `MOUSE_BUTTON_WHEEL_DOWN`/`_UP` ab (nur auf der `pressed`-Hälfte, sonst
+  würde eine Wheel-Rasterstufe doppelt blättern) — Richtung wie die
+  `‹`/`›`-Buttons: runter = nächste Seite, hoch = vorherige. Live im Browser
+  bestätigt (Chrome via `chrome-devtools`-MCP, `WheelEvent` mit `deltaY`).
+- **D-Pad-Wrap in Menüs**: neue `menus.gd::_focusable_controls(screen)`
+  (Refactor aus `_grab_default_focus()`s bisheriger Inline-Logik, jetzt von
+  beiden Funktionen geteilt) liefert alle sichtbaren, aktivierten,
+  fokussierbaren Controls einer Screen in Tree-Reihenfolge. Neue
+  `_wrap_focus_vertically(screen)`, aufgerufen aus `_swap()` für JEDEN
+  Screen außer `"sound"` (explizite Nutzer-Ausnahme — eine lange, oft in der
+  Länge wechselnde Regler-Liste, wo „erstes/letztes Element" kein stabiles,
+  sinnvolles Paar ist): hat der Screen mehr als zwei solcher Controls, wird
+  `focus_neighbor_top` des ersten auf das letzte gesetzt und umgekehrt
+  `focus_neighbor_bottom` des letzten auf das erste — D-Pad hoch auf dem
+  ersten Button bzw. runter auf dem letzten springt jetzt ans andere Ende,
+  statt dass Godots eingebautes Geometrie-basiertes Fokus-System dort
+  einfach nichts findet und liegen bleibt. 2-Button-Bestätigungsdialoge
+  (Ja/Nein) bleiben unangetastet (dort ist „das jeweils andere" ohnehin
+  schon per Godots Default erreichbar — explizites Wrap wäre redundant).
+  Neu berechnet bei JEDEM `_swap()`-Aufruf (nicht einmalig beim Bauen der
+  Screens), da sich z. B. die Leben-Sperre (`_update_lives_lock()`) je
+  Aufruf-Kontext ändert und damit auch, welches Control tatsächlich „das
+  erste" ist. Betrifft automatisch auch die Einstellungen-Seite (GridContainer
+  aus Steppern + Defaults/Sound/Done-Buttons) — „erstes"/„letztes" ergibt
+  sich rein aus der Tree-Reihenfolge, keine Sonderbehandlung fürs Grid nötig.
+  Verifiziert per Headless-Test (`focus_neighbor_top`/`_bottom`-NodePaths
+  direkt aufgelöst und auf die erwarteten Ziel-Controls geprüft, für Title,
+  Settings, einen 2-Button-Dialog und den ausgeschlossenen Sound-Screen —
+  alle 12 Prüfungen grün). **Test-Stolperfalle dabei**: der allererste
+  Testlauf zeigte einen scheinbaren Mausrad-Bug (`wheel_down` ohne Wirkung),
+  der sich als Test-Fehler entpuppte — `_splash_active` war beim manuellen
+  `_unhandled_input()`-Aufruf noch `true` (der Splash-Screen war nie
+  tatsächlich beendet worden, nur sein `splash_done`-Signal abgeklemmt), was
+  das allererste synthetische Event komplett von der Splash-Skip-Logik
+  verschluckte, bevor es je die Hilfe-Seiten-Logik erreichte — `menus.
+  _finish_splash()` explizit im Test aufgerufen behebt es. Kein Bug im Spiel
+  selbst.
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,

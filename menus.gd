@@ -245,6 +245,18 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.is_action_pressed("ui_right"):
 			_help_go(1)
 			get_viewport().set_input_as_handled()
+		# Mouse-wheel paging (user request 2026-09-16) — same direction sense
+		# as the ‹/› buttons: wheel down advances (like scrolling further into
+		# a list), wheel up goes back. Godot reports each notch as its own
+		# pressed-then-released MouseButton event pair on WHEEL_UP/DOWN; only
+		# act on the press half, or a single notch would page twice.
+		elif event is InputEventMouseButton and event.pressed:
+			if event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+				_help_go(1)
+				get_viewport().set_input_as_handled()
+			elif event.button_index == MOUSE_BUTTON_WHEEL_UP:
+				_help_go(-1)
+				get_viewport().set_input_as_handled()
 
 func show_title() -> void:
 	_swap("title")
@@ -289,19 +301,55 @@ func _swap(name: String) -> void:
 	_glass.visible = true
 	_apply_screen_music(name)
 	_grab_default_focus(_screens[name])
+	# User request 2026-09-16: except the Sound screen (a long, frequently
+	# resized slider list where "first/last" isn't a stable, meaningful pair)
+	# every screen with more than two selectable controls gets D-pad up/down
+	# WRAP at its ends, instead of the built-in focus-neighbor system just
+	# doing nothing there.
+	if name != "sound":
+		_wrap_focus_vertically(_screens[name])
 
-## First enabled, focusable Control in the screen (tree order — i.e. the
-## first Button/LineEdit a builder added), for gamepad/keyboard users: without
-## SOME control holding focus when a screen appears, ui_accept has nothing to
-## trigger and D-pad up/down/left/right has nothing to move away from.
-## call_deferred() — grab_focus() the same frame a node turns visible is
-## unreliable (same reason _name_edit's own grab_focus already used it below).
-func _grab_default_focus(screen: Control) -> void:
+## Every enabled, focusable Control on the screen, in tree order (i.e. the
+## order a builder added them — reads top-to-bottom/left-to-right the same
+## way a player tabs through them). Shared by _grab_default_focus() (wants
+## just the first one) and _wrap_focus_vertically() (wants first AND last) —
+## computed fresh each call rather than cached, since which controls are
+## actually enabled can change between showings of the same screen (e.g. the
+## Lives stepper locked via _update_lives_lock()).
+func _focusable_controls(screen: Control) -> Array[Control]:
+	var list: Array[Control] = []
 	for n in screen.find_children("*", "", true, false):
 		if n is Control and n.visible and n.focus_mode != Control.FOCUS_NONE \
 				and not (n is BaseButton and n.disabled):
-			n.grab_focus.call_deferred()
-			return
+			list.append(n)
+	return list
+
+## First enabled, focusable Control in the screen, for gamepad/keyboard
+## users: without SOME control holding focus when a screen appears,
+## ui_accept has nothing to trigger and D-pad up/down/left/right has nothing
+## to move away from. call_deferred() — grab_focus() the same frame a node
+## turns visible is unreliable (same reason _name_edit's own grab_focus
+## already used it below).
+func _grab_default_focus(screen: Control) -> void:
+	var list := _focusable_controls(screen)
+	if not list.is_empty():
+		list[0].grab_focus.call_deferred()
+
+## User request 2026-09-16: on any screen with more than two selectable
+## controls, D-pad up on the very first one and down on the very last one
+## should WRAP to the other end, instead of the built-in focus-neighbor
+## system finding no geometric neighbor there and simply doing nothing.
+## Screens with two or fewer (Yes/No confirm dialogs) are left alone — with
+## only two, "wrap" and "the other one" are the same thing, so Godot's own
+## default up/down-to-the-only-neighbor behavior already covers it.
+func _wrap_focus_vertically(screen: Control) -> void:
+	var list := _focusable_controls(screen)
+	if list.size() <= 2:
+		return
+	var first := list[0]
+	var last := list[-1]
+	first.focus_neighbor_top = first.get_path_to(last)
+	last.focus_neighbor_bottom = last.get_path_to(first)
 
 ## Full-rect click-blocker (mouse_filter=STOP keeps clicks from reaching the
 ## game underneath) containing a centered, bordered panel — the frosted glass
