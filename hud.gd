@@ -46,7 +46,7 @@ const MANY_THRESHOLD := 3
 
 ## Bottom-centre row of collected bonus_item icons (see bonus_item.gd). A full
 ## row of BONUS_MAX_SHOWN is the most that fits without crowding — reaching it
-## grants a lap bonus (game.gd's BONUS_LAP_POINTS) and bumps the turquoise lap
+## grants a lap bonus (game.gd's BONUS_LAP_POINTS) and bumps the white lap
 ## counter right away, but the row itself keeps showing all 7 icons — it only
 ## clears once the NEXT achievement (any icon) is actually collected, which
 ## then starts the new row with just that one icon (user request: a fixed
@@ -56,11 +56,10 @@ const MANY_THRESHOLD := 3
 const BONUS_ICON_H := 22.0
 const BONUS_ICON_GAP := 6.0
 const BONUS_MAX_SHOWN := 7
-# Same colour as the Stage label right next to it (UiStyle.ACCENT — a
-# blue-leaning turquoise, per the user: "also a kind of turquoise", just not
-# the more saturated Laser.ACCENT_NORMAL this used at first) rather than the
-# gold it used to be, so the two neighbouring HUD elements read as one family.
-const BONUS_LAP_COLOR := UiStyle.ACCENT
+# White (2026-09-16, was UiStyle.ACCENT turquoise) — matches the Stage label
+# right next to it, which the user asked to switch to white in the same
+# request, for consistency with the now-white Pause/Mute button glyphs.
+const BONUS_LAP_COLOR := Color.WHITE
 ## Lap marker now sits at a FIXED spot near the right edge (user request: was
 ## drawn immediately after the icon row, which made it drift left/right with
 ## the row's own width) — anchored off the Stage label's own left edge
@@ -121,7 +120,9 @@ func _ready() -> void:
 	UiStyle.style_button(_mute_btn)
 	_add_mute_glass()
 	UiStyle.impact_label(_banner)
-	_stage.add_theme_color_override("font_color", UiStyle.ACCENT)
+	# White (2026-09-16, was UiStyle.ACCENT turquoise) — user request, for
+	# consistency with the white Pause/Mute button glyphs and the Laps text.
+	_stage.add_theme_color_override("font_color", Color.WHITE)
 	_stage.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
 	_stage.add_theme_constant_override("outline_size", 4)
 
@@ -196,6 +197,15 @@ func _add_pause_glass() -> void:
 	_pause_glass.offset_right = _pause_btn.offset_right
 	_pause_glass.offset_bottom = _pause_btn.offset_bottom
 
+## User-observed (2026-09-16): the frosted-glass chip renders a few pixels
+## left of the button/icon it's meant to back, even though it's built from
+## that exact same button rect below — likely a sampling quirk of the
+## backbuffer-blur shader rather than a Control-layout bug (glass and icon
+## both read the identical _mute_btn offsets). Nudging the glass ColorRect
+## itself right compensates empirically; revisit if a future look shows the
+## same drift on the (unaffected so far) Pause glass.
+const MUTE_GLASS_NUDGE_X := 3.0
+
 ## Same trick as _add_pause_glass(), sized to the mute button's own rect.
 func _add_mute_glass() -> void:
 	var g := UiStyle.make_glass_backdrop()
@@ -207,9 +217,9 @@ func _add_mute_glass() -> void:
 	_mute_glass = g.glass
 	_mute_glass.visible = true
 	_mute_glass.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
-	_mute_glass.offset_left = _mute_btn.offset_left
+	_mute_glass.offset_left = _mute_btn.offset_left + MUTE_GLASS_NUDGE_X
 	_mute_glass.offset_top = _mute_btn.offset_top
-	_mute_glass.offset_right = _mute_btn.offset_right
+	_mute_glass.offset_right = _mute_btn.offset_right + MUTE_GLASS_NUDGE_X
 	_mute_glass.offset_bottom = _mute_btn.offset_bottom
 	# On top of the button itself (see mute_icon.gd's doc comment for why
 	# that has to be a separate Control instead of drawn by this node) —

@@ -27,7 +27,7 @@ func _draw() -> void:
 	var r := Rect2(Vector2.ZERO, size)
 	var c := r.get_center()
 	var s := minf(r.size.x, r.size.y) * 0.34
-	var col := UiStyle.ACCENT
+	var col := Color.WHITE  # matches the Pause button's white "II" glyph
 	var cone_x := c.x - s * 0.25
 	var body_w := s * 0.45
 	var pts := PackedVector2Array([
