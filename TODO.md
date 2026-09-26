@@ -6,13 +6,12 @@ offene Punkte stehen ggf. noch in `CLAUDE.md`.
 
 ## Offen
 
-- [ ] RG552: installierte Galaga-Version ist anders signiert (debug) als
-      der release-Build → `adb install -r` scheitert
-      (`INSTALL_FAILED_UPDATE_INCOMPATIBLE`). Nutzer fragen: deinstallieren
-      (löscht Einstellungen/Highscores auf dem Gerät) und neu installieren?
 
 ## Erledigt
 
+- [x] 2026-09-27 RG552: alte, anders signierte Galaga-Version auf
+      Nutzerwunsch deinstalliert, release-Build installiert (APK im
+      Download-Ordner aktualisiert).
 - [x] 2026-09-27 Android-System-Startbildschirm (vor dem Splash) einheitlich
       reines Weiß: `splash_screen/icon` = transparentes
       `assets/icon/android_splash_blank.png`, `branding_image` leer (Nutzer-
