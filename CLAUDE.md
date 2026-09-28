@@ -3015,7 +3015,7 @@ bash projects/galaga/build.sh web        # einzeln: linux | web | android
 - **Linux:** `projects/galaga-linux.x86_64`
 - **Web:** `cd projects/web-release-galaga && python3 -m http.server 8099`
   (In-App-Browser hat kein WebGL → echtes Chrome). `chrome-devtools`-MCP ist
-  `-s local` für dieses Projekt registriert (`mcp__chrome-devtools__*`).
+  global registriert (`mcp__chrome-devtools__*`).
 - **Windows:** CI, Release-Tag `vX.Y.Z` pushen (`config/version` vorher setzen).
 
 ## Offen / als Nächstes
