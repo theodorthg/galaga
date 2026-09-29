@@ -6,9 +6,11 @@ offene Punkte stehen ggf. noch in `CLAUDE.md`.
 
 ## Offen
 
+- [ ] Alte, von Hand hochgeladene Dateien auf itch.io löschen (macht der Nutzer: https://itch.io/game/edit/…, Seite `galaga-clone`) und beim Upload des Channels `web` „This file will be played in the browser“ setzen.
 
 ## Erledigt
 
+- [x] 2026-09-29 itch.io jetzt per `butler` in die Channels linux / android / windows / web (`theodorthg/galaga-clone`, wie bei mario-clone)
 - [x] 2026-09-27 RG552: alte, anders signierte Galaga-Version auf
       Nutzerwunsch deinstalliert, release-Build installiert (APK im
       Download-Ordner aktualisiert).
