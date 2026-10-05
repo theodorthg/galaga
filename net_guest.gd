@@ -246,10 +246,13 @@ func _event(e) -> void:
 			game.add_child(x)
 			x.global_position = e[1]
 		"recon":
-			for at in e[1]:
+			var tints: Array = e[2] if e.size() > 2 else []
+			for i in e[1].size():
 				var r := Game.RECONSTRUCT_SCENE.instantiate()
+				if i < tints.size():
+					r.modulate = tints[i]
 				game.add_child(r)
-				r.global_position = at
+				r.global_position = e[1][i]
 		"popup":
 			game._spawn_score_popup(e[1], str(e[2]))
 		"snd":

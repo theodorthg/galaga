@@ -16,6 +16,9 @@ const RECONSTRUCT_SCENE := preload("res://ship_reconstruct.tscn")
 const EXPLOSION_SCENE := preload("res://ship_explosion.tscn")
 const BONUS_ITEM_SCENE := preload("res://bonus_item.tscn")
 const SHIP_SCENE := preload("res://ship.tscn")
+## Player 2's ship colour (also the tint of its materialize animation, so it does
+## not appear white first and turn green afterwards).
+const P2_TINT := Color(0.6, 1.0, 0.72)
 const SCORE_POPUP_SCRIPT := preload("res://score_popup.gd")
 # Tightened from 14-24s (2026-09-13 report: "one achievement in a 60000-point
 # run") — most of that scarcity was actually _on_stage_populated() resetting
@@ -584,13 +587,15 @@ func _new_run() -> void:
 			_snd.play("start-first-level-music")
 			_intro_gate_active = true
 	var spawn_at: Array = []
+	var tints: Array = []
 	for s in _ships:
+		tints.append(P2_TINT if s.player_index == 1 else Color.WHITE)
 		s.visible = false
 		s._alive = false  # blocks shoot() during the materialize animation below
 		s.set_deferred("monitoring", false)
 		spawn_at.append(_ship_spawn_pos(s))
 	_banner("READY")
-	await _play_reconstruct_many(spawn_at)
+	await _play_reconstruct_many(spawn_at, tints)
 	_hide_banner()
 	for s in _ships:
 		s.respawn()
@@ -599,9 +604,10 @@ func _new_run() -> void:
 ## Plays the ship-(re)construction.gif materialize animation at `at` and waits
 ## for it to finish — used at the start of every run (stage 1) and on every
 ## respawn, in place of a flat timer wait that showed nothing happening.
-func _play_reconstruct(at: Vector2) -> void:
-	_net_ev(["recon", [at]])
+func _play_reconstruct(at: Vector2, tint := Color.WHITE) -> void:
+	_net_ev(["recon", [at], [tint]])
 	var r := RECONSTRUCT_SCENE.instantiate()
+	r.modulate = tint
 	add_child(r)
 	r.global_position = at
 	await r.build_done
@@ -633,11 +639,14 @@ func _ship_spawn_pos(s: Ship = null) -> Vector2:
 ## them. `pending` is an Array so the lambdas share it by reference (a plain
 ## int would be captured by value, see the Bonus Level counter bug in
 ## CLAUDE.md).
-func _play_reconstruct_many(ats: Array) -> void:
-	_net_ev(["recon", ats])
+func _play_reconstruct_many(ats: Array, tints: Array = []) -> void:
+	_net_ev(["recon", ats, tints])
 	var pending := [ats.size()]
-	for at in ats:
+	for i in ats.size():
+		var at: Vector2 = ats[i]
 		var r := RECONSTRUCT_SCENE.instantiate()
+		if i < tints.size():
+			r.modulate = tints[i]
 		add_child(r)
 		r.global_position = at
 		r.build_done.connect(func(): pending[0] -= 1)
@@ -654,7 +663,7 @@ func _setup_ships() -> void:
 			_ship2.player_index = 1
 			add_child(_ship2)
 			_ship2.position = Vector2(DESIGN_WIDTH * 0.66, _ship.position.y)
-			(_ship2.get_node("Sprite2D") as Sprite2D).modulate = Color(0.6, 1.0, 0.72)
+			(_ship2.get_node("Sprite2D") as Sprite2D).modulate = P2_TINT
 			_ship2.died.connect(_on_coop_ship_died.bind(1))
 		if not InputMap.has_action("p1_left"):
 			CoopInput.build()
@@ -1126,7 +1135,7 @@ func _on_ship_rescued(at_position: Vector2, owner_idx: int = 0) -> void:
 			_snd.play("extra")
 		if _waiting[idx]:
 			_waiting[idx] = false
-			await _play_reconstruct(_ship_spawn_pos(_ships[idx]))
+			await _play_reconstruct(_ship_spawn_pos(_ships[idx]), P2_TINT if idx == 1 else Color.WHITE)
 			if is_instance_valid(self) and _state != GAME_OVER and _state != TITLE:
 				_ships[idx].respawn()
 		elif _ships[idx]._alive:
@@ -1272,7 +1281,7 @@ func _on_coop_ship_died(show_explosion: bool, idx: int) -> void:
 		return
 	_coop_lives[idx] -= 1
 	_hud.set_coop_lives(_coop_lives[0], _coop_lives[1])
-	await _play_reconstruct(_ship_spawn_pos(ship))
+	await _play_reconstruct(_ship_spawn_pos(ship), P2_TINT if idx == 1 else Color.WHITE)
 	if is_instance_valid(ship) and _state != GAME_OVER and _state != TITLE and not _out[idx]:
 		ship.respawn()
 		if _pending_twins[idx]:

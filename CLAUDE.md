@@ -2755,7 +2755,12 @@ Testwerkzeug-Eigenheit, kein Spielfehler).
   *Hilfe*: grünes P2-Schiff (`assets/help_src/player_p2.png`, wie die
   Spiel-Einfärbung `Color(0.6, 1, 0.72)`) in `coop.svg`/`online.svg`, weil
   Inkscape `filter: hue-rotate` ignoriert.
-- **Noch offen**: auf echten Geräten testen (LAN Handy/PC, Online Mobilnetz),
+- **v1.2.2 (2026-10-05)**: die Materialisier-Animation von Schiff 2 ist jetzt
+  grün getönt (`Game.P2_TINT`, auch im `recon`-Ereignis des Gasts) — vorher
+  erschienen beide Schiffe erst weiß und das zweite wurde danach grün
+  (Nutzerhinweis nach dem Online-Test). LAN RG552 ↔ PC in beide Richtungen
+  getestet, Online vom Nutzer bestätigt.
+- **Noch offen**: auf weiteren Geräten testen (Handy, Mobilnetz),
   ggf. unzuverlässige
   Übertragung für Schnappschüsse (aktuell zuverlässig/geordnet — bei schlechter
   Verbindung staut sich das).
