@@ -2760,6 +2760,11 @@ Testwerkzeug-Eigenheit, kein Spielfehler).
   erschienen beide Schiffe erst weiß und das zweite wurde danach grün
   (Nutzerhinweis nach dem Online-Test). LAN RG552 ↔ PC in beide Richtungen
   getestet, Online vom Nutzer bestätigt.
+- **v1.2.3 (2026-10-05)**: der Gast zeigte beim Ende des Hosts den Text des
+  Relays („Mario left the game“) — das Relay formuliert für mario-clone.
+  `NetGuest` ersetzt jeden `closed`/`error`-Text jetzt durch „The host left the
+  game or the connection was lost.“ (Lobby-Fehler beim Beitreten zeigen den
+  Relay-Text weiterhin, z. B. falscher Code).
 - **Noch offen**: auf weiteren Geräten testen (Handy, Mobilnetz),
   ggf. unzuverlässige
   Übertragung für Schnappschüsse (aktuell zuverlässig/geordnet — bei schlechter

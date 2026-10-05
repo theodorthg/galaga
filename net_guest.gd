@@ -80,7 +80,10 @@ func _process(delta: float) -> void:
 			"disconnect":
 				_lost("The host left the game.")
 			"closed", "error":
-				_lost(str(e[1]))
+				# The relay's own wording is written for Mario ("Mario left the game",
+				# "Your opponent ended the game") and is wrong here — we only know
+				# that the host is gone, by choice or by a dropped connection.
+				_lost("The host left the game or the connection was lost.")
 	if _closed:
 		return
 	# smooth the sprites toward their latest snapshot targets
