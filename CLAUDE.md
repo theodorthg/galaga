@@ -2741,8 +2741,22 @@ Testwerkzeug-Eigenheit, kein Spielfehler).
   **Fallstrick**: kein `pkill -f nettest` im selben Befehl (trifft die eigene
   Shell), und für Screenshots nur das Spielfenster per `xdotool search --name
   galaga` + `import -window <id>` aufnehmen, nie den ganzen Desktop.
+- **v1.2.1 (2026-10-05)**: *Triebwerksflamme beim Gast* — pro Schiff ein
+  Proxy-Node (`NetGuest._ship_fx`), der dem geglätteten Schiff folgt und die
+  echte `main_thruster.tscn` trägt (die zündet von selbst, wenn ihr Elternteil
+  sich seitlich bewegt; Zwillingsschiff = zweite Flamme, `sh` im Schnappschuss
+  liefert Position/sichtbar/twin). *Gemeinsame Pause*: Gast-Pause-Button/-Taste
+  schickt `pause`, der Host pausiert für beide (`pz` im Schnappschuss), der Gast
+  zeigt den Bildschirm `net_pause` (Resume / How to Play / Main Menu→Leave?);
+  Resume schickt `resume`; die Host-Pause zeigt dem Gast ebenfalls `net_pause`.
+  Nach einem eigenen Resume ignoriert der Gast 0,6 s lang veraltete `pz=1`
+  (`_pz_ignore_until`). Bug: der Gast blieb nach „Play Again“ des Hosts auf
+  `GAME_OVER` (Pause wirkungslos) — `_net_guest_started()` setzt `READY`.
+  *Hilfe*: grünes P2-Schiff (`assets/help_src/player_p2.png`, wie die
+  Spiel-Einfärbung `Color(0.6, 1, 0.72)`) in `coop.svg`/`online.svg`, weil
+  Inkscape `filter: hue-rotate` ignoriert.
 - **Noch offen**: auf echten Geräten testen (LAN Handy/PC, Online Mobilnetz),
-  Triebwerksflamme beim Gast, eigene Pause für den Gast, ggf. unzuverlässige
+  ggf. unzuverlässige
   Übertragung für Schnappschüsse (aktuell zuverlässig/geordnet — bei schlechter
   Verbindung staut sich das).
 

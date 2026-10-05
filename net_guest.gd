@@ -12,6 +12,11 @@ const SEND_INTERVAL := 1.0 / 30.0
 ## Exponential smoothing of sprite positions between 25 Hz snapshots.
 const SMOOTH := 28.0
 const LASER_SPEED := 850.0
+## The ship's engine flame (same scene ship.tscn uses; it lights up by itself when
+## its parent moves sideways — see main_thruster.gd). Offset/rotation as in ship.tscn.
+const THRUSTER_SCENE := preload("res://assets/ship_visual_effects/main_thruster/main_thruster.tscn")
+const THRUSTER_POS := Vector2(0, 50)
+const TWIN_OFFSET := 34.0   # Ship.TWIN_OFFSET
 
 signal left(reason: String)
 signal started
@@ -34,6 +39,8 @@ var _my_x := 270.0
 var _was_paused := false
 var _closed := false
 var _hud_cache := {}
+var _ship_fx := []         # per ship slot: {"n": Node2D, "a": Node2D, "b": Node2D, "pos": Vector2}
+var _pz_ignore_until := 0.0
 
 func setup(g: Game, l: NetLink) -> void:
 	game = g
@@ -51,6 +58,8 @@ func reset_view() -> void:
 	_have_snap = false
 	_hud_cache.clear()
 	_was_paused = false
+	for fx in _ship_fx:
+		fx.n.visible = false
 	queue_redraw()
 
 func shutdown() -> void:
@@ -81,6 +90,8 @@ func _process(delta: float) -> void:
 		var n: Sprite2D = d.n
 		n.position = n.position.lerp(d.pos, k)
 		n.rotation = lerp_angle(n.rotation, d.rot, k)
+	for fx in _ship_fx:
+		fx.n.position = fx.n.position.lerp(fx.pos, k)
 	_in_acc += delta
 	if _in_acc >= SEND_INTERVAL:
 		_in_acc = 0.0
@@ -125,6 +136,7 @@ func _apply(s: Dictionary) -> void:
 	_bombs = s.get("bm", PackedFloat32Array())
 	_beams = s.get("bc", PackedFloat32Array())
 	_apply_hud(s.get("h", []), s.get("bi", []))
+	_apply_ship_fx(s.get("sh", []))
 	_apply_sprites(s.get("sp", PackedFloat32Array()))
 	for e in s.get("ev", []):
 		_event(e)
@@ -148,13 +160,45 @@ func _apply_hud(h: Array, bi: Array) -> void:
 			idx.append(int(i))
 		hud.set_bonus_state({"icons": icons, "indices": idx, "laps": int(h[4]), "pending": int(h[5]) == 1})
 	var paused := int(h[6]) == 1
-	if paused and not _was_paused:
-		hud.flash_banner("PAUSED")
-	elif _was_paused and not paused:
-		hud.hide_banner()
-	_was_paused = paused
+	# the host's (or the partner's) pause: show/hide our pause screen. Right after
+	# WE resumed, snapshots that still say "paused" are stale — ignored briefly.
+	if Time.get_ticks_msec() / 1000.0 >= _pz_ignore_until:
+		if paused and not _was_paused:
+			game._net_guest_host_paused(true)
+		elif _was_paused and not paused:
+			game._net_guest_host_paused(false)
+		_was_paused = paused
 	_my_x = float(h[7]) if float(h[7]) >= 0.0 else _my_x
 	_hud_cache = {"score": h[0], "stage": h[1], "l0": h[2], "l1": h[3], "bonus": key}
+
+## Engine flames: one proxy node per ship that follows the (smoothed) ship, so the
+## thruster's own "parent moved sideways" logic drives the flame.
+func _apply_ship_fx(sh: Array) -> void:
+	for i in sh.size():
+		var d: Array = sh[i]
+		while _ship_fx.size() <= i:
+			var n := Node2D.new()
+			add_child(n)
+			var a := THRUSTER_SCENE.instantiate()
+			a.position = THRUSTER_POS
+			a.rotation = PI * 0.5
+			n.add_child(a)
+			var b := THRUSTER_SCENE.instantiate()
+			b.position = THRUSTER_POS + Vector2(TWIN_OFFSET, 0)
+			b.rotation = PI * 0.5
+			n.add_child(b)
+			n.visible = false
+			_ship_fx.append({"n": n, "a": a, "b": b, "pos": Vector2.ZERO})
+		var fx: Dictionary = _ship_fx[i]
+		var pos := Vector2(d[0], d[1])
+		var was_hidden: bool = not fx.n.visible
+		fx.pos = pos
+		fx.n.visible = int(d[2]) == 1
+		if was_hidden:
+			fx.n.position = pos
+		var twin := int(d[3]) == 1
+		fx.a.position.x = -TWIN_OFFSET if twin else 0.0
+		fx.b.visible = twin
 
 func _apply_sprites(a: PackedFloat32Array) -> void:
 	for id in _sprites:
@@ -254,6 +298,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		_mouse_aim = true
 	elif event is InputEventScreenDrag:
 		_touch_x = clampf(_touch_x + event.relative.x, 0.0, Game.DESIGN_WIDTH)
+
+## The guest's pause button: pauses the host's game for both (shared pause).
+func send_pause(on: bool) -> void:
+	if on:
+		link.send("pause", 0)
+	else:
+		_pz_ignore_until = Time.get_ticks_msec() / 1000.0 + 0.6
+		link.send("resume", 0)
 
 func _send_input() -> void:
 	var dir := Input.get_axis("move_left", "move_right")

@@ -69,6 +69,9 @@ func _host(link: NetLink, _transport: String) -> void:
 	DirAccess.remove_absolute("/tmp/galaga_code") if FileAccess.file_exists("/tmp/galaga_code") and _transport == "online" else null
 	check(await _wait_connect(link, 40.0), "host: guest connected")
 	game.net_start_host(link)
+	var pause_log := [0, 0]
+	game._net_host.pause_requested.connect(func(): pause_log[0] += 1)
+	game._net_host.resume_requested.connect(func(): pause_log[1] += 1)
 	await create_timer(1.0).timeout
 	check(game._coop and game._net_host != null, "host: co-op run with a NetHost")
 	check(is_instance_valid(game._ship2) and game._ship2.remote, "host: ship 2 is remote-controlled")
@@ -88,6 +91,8 @@ func _host(link: NetLink, _transport: String) -> void:
 			shots += 1
 	check(shots > 0 or game._score > 0, "host: guest's ship fires (%d lasers, score %d)" % [shots, game._score])
 	await create_timer(2.0).timeout
+	check(pause_log[0] >= 1 and pause_log[1] >= 1, "host: the guest's pause/resume arrived (%s)" % str(pause_log))
+	check(not game._paused and not paused, "host: running again after the guest resumed")
 	# both ships lost, no reserve -> game over -> the guest gets the results
 	game._coop_lives = [0, 0]
 	for sh in game._ships:
@@ -129,6 +134,19 @@ func _guest(link: NetLink) -> void:
 	check(hud._lives2 >= 0, "guest: co-op life rows on the HUD (%d/%d)" % [hud._lives, hud._lives2])
 	check(game._net_guest._lasers.size() > 0 or hud._score_value > 0, "guest: lasers or score arrive")
 	check(game._net_guest._snap_time > 0.0, "guest: snapshots arrive")
+	check(game._net_guest._ship_fx.size() == 2 and game._net_guest._ship_fx[1].n.visible, "guest: engine flames for both ships")
+	var fx0: Dictionary = game._net_guest._ship_fx[0]
+	for i in 12:
+		fx0.pos.x += 6.0          # the ship "moves": the flame must light up
+		await process_frame
+	check(fx0.a.power > 0.3, "guest: engine flame lights up while the ship moves (power %.2f)" % fx0.a.power)
+	game._request_pause()
+	await create_timer(1.0).timeout
+	check(game._paused and game._menus._screens["net_pause"].visible, "guest: own pause screen")
+	check(game._net_guest._was_paused, "guest: the host confirms the pause (pz)")
+	game._resume()
+	await create_timer(1.0).timeout
+	check(not game._paused and not game._menus._screens["net_pause"].visible, "guest: resumed")
 	t = 0.0
 	while game._state != Game.GAME_OVER and t < 40.0:
 		await create_timer(0.25).timeout
@@ -142,7 +160,7 @@ func _guest(link: NetLink) -> void:
 		t += 0.25
 	check(not game._menus._screens["summary"].visible, "guest: follows the host into the next run (%.1fs)" % t)
 	game._request_pause()
-	check(game._menus._screens["confirm_leave"].visible, "guest: pause opens the leave dialog")
+	check(game._menus._screens["net_pause"].visible, "guest: pause opens the pause screen")
 	Input.action_release("move_right")
 	Input.action_release("shoot")
 	await create_timer(5.0).timeout

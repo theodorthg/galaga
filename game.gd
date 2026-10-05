@@ -676,9 +676,13 @@ func _setup_ships() -> void:
 
 func _request_pause() -> void:
 	if _net_guest != null:
-		# no pausing somebody else's game — only the way out
+		# shared pause: the host's game stops for both until someone resumes
+		if _paused or _state == GAME_OVER:
+			return
+		_paused = true
+		_net_guest.send_pause(true)
 		_hud.set_playing(false)
-		_menus.show_leave()
+		_menus.show_net_pause()
 		return
 	if _paused or _state == TITLE or _state == GAME_OVER:
 		return
@@ -696,6 +700,8 @@ func _toggle_mute() -> void:
 	_hud.set_muted(_snd.toggle_mute())
 
 func _resume() -> void:
+	if _net_guest != null:
+		_net_guest.send_pause(false)
 	_paused = false
 	_menus.hide_all()
 	_menus.stop_menu_music()
@@ -1416,6 +1422,12 @@ func net_start_host(link: NetLink) -> void:
 	add_child(_net_host)
 	_net_host.setup(self, link)
 	_net_host.partner_left.connect(_net_partner_left)
+	_net_host.pause_requested.connect(func():
+		if not _paused and _state != TITLE and _state != GAME_OVER:
+			_request_pause())
+	_net_host.resume_requested.connect(func():
+		if _paused:
+			_resume())
 	_menus.hide_all()
 	_new_run()
 
@@ -1445,10 +1457,23 @@ func net_start_guest(link: NetLink) -> void:
 	get_tree().paused = false
 
 func _net_guest_started() -> void:
+	_state = READY       # not GAME_OVER any more (and _process() does nothing in READY)
+	_paused = false
 	_hud.set_playing(true)
 	_menus.hide_all()
 	_menus.stop_menu_music()
 	get_tree().paused = false
+
+## The host (or the partner) paused / resumed — mirror it on the guest's screen.
+func _net_guest_host_paused(on: bool) -> void:
+	if on and not _paused and _state != GAME_OVER:
+		_paused = true
+		_hud.set_playing(false)
+		_menus.show_net_pause()
+	elif not on and _paused:
+		_paused = false
+		_menus.hide_all()
+		_hud.set_playing(true)
 
 func _net_guest_over(results: Array) -> void:
 	for r in results:

@@ -104,6 +104,7 @@ func _ready() -> void:
 	_screens["join"] = _build_join()
 	_screens["notice"] = _build_notice()
 	_screens["confirm_leave"] = _build_confirm_leave()
+	_screens["net_pause"] = _build_net_pause()
 	for s in _screens.values():
 		_root.add_child(s)
 	_lobby = NetLobby.new()
@@ -302,9 +303,21 @@ func _build_notice() -> Control:
 	box.add_child(_button("OK", func(): _swap(_notice_back), true))
 	return s
 
-## The guest can't pause the host's game — only leave it.
-func show_leave() -> void:
-	_swap("confirm_leave")
+## Online/LAN guest's pause screen (the host's game is paused for both).
+func show_net_pause() -> void:
+	_swap("net_pause")
+
+func _build_net_pause() -> Control:
+	var s := _screen()
+	var box := _box(s)
+	box.add_child(_title_label("PAUSE", 40))
+	box.add_child(_spacer(14))
+	box.add_child(_button("Resume", func(): resume_game.emit()))
+	box.add_child(_button("How to Play", func(): _open_help("net_pause")))
+	box.add_child(_button("Main Menu", func(): _swap("confirm_leave")))
+	if not IS_WEB:
+		box.add_child(_button("Exit", func(): get_tree().quit()))
+	return s
 
 func _build_confirm_leave() -> Control:
 	var s := _screen()
@@ -318,7 +331,7 @@ func _build_confirm_leave() -> Control:
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 12)
-	var no_btn := _button("No", func(): resume_game.emit(), true)
+	var no_btn := _button("No", func(): _swap("net_pause"), true)
 	no_btn.custom_minimum_size = Vector2(130, TOUCH_H)
 	var yes_btn := _button("Yes", func(): to_title.emit())
 	yes_btn.custom_minimum_size = Vector2(130, TOUCH_H)

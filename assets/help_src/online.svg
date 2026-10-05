@@ -14,7 +14,7 @@
   <g transform="translate(110 160)">
     <rect x="0" y="0" width="260" height="300" rx="16" fill="#0b0e22" stroke="#4db2ff" stroke-width="3"/>
     <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/player_trim.png" x="60" y="200" width="60" height="74"/>
-    <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/player_trim.png" x="140" y="200" width="60" height="74" style="filter:hue-rotate(-60deg)"/>
+    <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/help_src/player_p2.png" x="140" y="200" width="60" height="74"/>
     <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/enemy4_trim.png" x="100" y="40" width="60" height="68"/>
     <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/enemy2_trim.png" x="40" y="120" width="50" height="50"/>
     <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/enemy3_trim.png" x="170" y="120" width="50" height="50"/>
@@ -24,12 +24,12 @@
   <g transform="translate(530 160)">
     <rect x="0" y="0" width="260" height="300" rx="16" fill="#0b0e22" stroke="#9dffb8" stroke-width="3"/>
     <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/player_trim.png" x="60" y="200" width="60" height="74"/>
-    <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/player_trim.png" x="140" y="200" width="60" height="74" style="filter:hue-rotate(-60deg)"/>
+    <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/help_src/player_p2.png" x="140" y="200" width="60" height="74"/>
     <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/enemy4_trim.png" x="100" y="40" width="60" height="68"/>
     <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/enemy2_trim.png" x="40" y="120" width="50" height="50"/>
     <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/enemy3_trim.png" x="170" y="120" width="50" height="50"/>
     <text x="130" y="340" text-anchor="middle" font-size="28" font-weight="700" fill="#9dffb8">Guest</text>
-    <text x="130" y="372" text-anchor="middle" font-size="20" fill="#8fa3c8">sees the same game, steers ship 2</text>
+    <text x="130" y="372" text-anchor="middle" font-size="20" fill="#8fa3c8">sees the same game, steers the green ship</text>
   </g>
   <line x1="390" y1="300" x2="510" y2="300" stroke="#4db2ff" stroke-width="5" stroke-dasharray="14 10"/>
   <path d="M390 284 L366 300 L390 316 z" fill="#4db2ff"/>

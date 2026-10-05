@@ -15,6 +15,7 @@ extends Node
 ##                   "over"  [...] results, same dicts as game.gd::_show_results()
 ##                   "bye"
 ##   guest -> host   "in"    [dir, shoot, x]   steering state, see ship.gd
+##                   "pause" / "resume"   the guest's pause button (shared pause)
 ##                   "bye"
 
 const SEND_INTERVAL := 1.0 / 25.0
@@ -22,6 +23,8 @@ const SEND_INTERVAL := 1.0 / 25.0
 const SKIP_SOUNDS := ["menu-music", "scoring-board-music"]
 
 signal partner_left
+signal pause_requested
+signal resume_requested
 
 var game: Game
 var link: NetLink
@@ -89,6 +92,10 @@ func _process(delta: float) -> void:
 					"in":
 						if e[2] is Array and e[2].size() >= 3:
 							_in = e[2]
+					"pause":
+						pause_requested.emit()
+					"resume":
+						resume_requested.emit()
 					"bye":
 						_partner_gone()
 			"disconnect", "closed":
@@ -152,6 +159,10 @@ func _snapshot() -> Dictionary:
 			beams.append_array([n.global_position.x, n.global_position.y, n._len])
 		else:
 			bombs.append_array([n.global_position.x, n.global_position.y, n._vel.x, n._vel.y])
+	var ships := []
+	for sh in game._ships:
+		ships.append([sh.global_position.x, sh.global_position.y,
+			1 if (sh.visible and sh._alive) else 0, 1 if sh._twin else 0])
 	var hud: Hud = game._hud
 	var p2x := -1.0
 	if is_instance_valid(game._ship2):
@@ -160,6 +171,7 @@ func _snapshot() -> Dictionary:
 		"h": [game._score, game._stage, game._coop_lives[0], game._coop_lives[1],
 			hud._bonus_laps, 1 if hud._lap_pending else 0, 1 if tree.paused else 0, p2x],
 		"bi": hud._bonus_icon_indices,
+		"sh": ships,
 		"sp": spr, "ls": lasers, "bm": bombs, "bc": beams,
 		"ev": _events,
 	}

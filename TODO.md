@@ -27,8 +27,8 @@ Mehrspieler (Einschätzung 2026-10-03; lokal umgesetzt am 2026-10-03, Rest offen
       Geräten (Handy/RG552/zwei PCs) noch nicht.
 - [ ] Netz-Coop auf echten Geräten testen: LAN zwischen zwei Rechnern/Handy,
       Online über das Mobilnetz; Verzögerung/Ruckeln beurteilen (Schnappschüsse
-      25/s, Glättung `SMOOTH` in `net_guest.gd`). Bekannte Lücken: keine
-      Triebwerksflamme beim Gast; Gast hat keine eigene Pause (nur „Leave“).
+      25/s, Glättung `SMOOTH` in `net_guest.gd`). (Triebwerksflamme
+      beim Gast und gemeinsame Pause: erledigt in v1.2.1.)
 
 Gemeinsam für die Serie (Vorlage: mario-clone v1.6–v1.9):
 - [ ] Bausteine aus mario-clone übernehmen statt neu erfinden: `CoopInput`
