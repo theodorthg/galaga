@@ -35,6 +35,16 @@ Mehrspieler (Einschätzung 2026-10-03; lokal umgesetzt am 2026-10-03, Rest offen
       Triebwerksflamme + gemeinsame Pause beim Gast (v1.2.1), grünes P2-Schiff
       von Anfang an (v1.2.2), Gast-Hinweistext (v1.2.3).
 
+- [ ] Lokaler Coop mit zwei Bluetooth-DPad-Controllern (Nutzer besorgt einen
+      zweiten): prüfen, ob zwei gleiche Pads (gleiche Tastencodes) sauber
+      getrennt werden — erst von Android (zwei Geräte-IDs?), dann vom Spiel
+      (Beitreten-Bildschirm ordnet per `event.device` zu, `CoopInput.build()`
+      bindet je Pad die Aktionen `p1_*`/`p2_*`). Zu beobachten: ändert sich die
+      Geräte-ID nach Wiederverbinden/Neustart, melden D-Pad und Knöpfe
+      verschiedene IDs (wie beim RG552), steuert ein Pad beide Schiffe.
+      Diagnose bei Problemen: Debug-Autoload mit `adb logcat` wie in der
+      globalen CLAUDE.md (Punkt 17) beschrieben.
+
 Gemeinsam für die Serie (Vorlage: mario-clone v1.6–v1.9):
 - [ ] Bausteine aus mario-clone übernehmen statt neu erfinden: `CoopInput`
       + Beitreten-Bildschirm (jeder drückt A auf seinem Gerät),
