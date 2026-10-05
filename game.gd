@@ -214,6 +214,11 @@ var _out: Array = [false, false]
 ## coroutine left over from before can tell it is stale and must stop.
 var _bonus_token := 0
 
+# --- online / LAN co-op (net_host.gd / net_guest.gd). Exactly one of the two is
+# set while such a game runs; both null = ordinary local play.
+var _net_host: NetHost
+var _net_guest: NetGuest
+
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	add_to_group("touch_layout_listeners")
@@ -277,6 +282,8 @@ func _ready() -> void:
 	_menus.resume_game.connect(_resume)
 	_menus.to_title.connect(_enter_title)
 	_menus.settings_changed.connect(_reload_settings)
+	_menus.net_host_start.connect(net_start_host)
+	_menus.net_guest_start.connect(net_start_guest)
 
 	_reload_settings()
 	_menus.splash_done.connect(_enter_title, CONNECT_ONE_SHOT)
@@ -452,6 +459,9 @@ func apply_touch_layout() -> void:
 # --- run lifecycle ----------------------------------------------------
 func _reload_settings() -> void:
 	_cfg = GameSettings.load_all()
+	if _net_host != null:
+		_cfg["players"] = 2   # an online/LAN game is always co-op, whatever the menu says
+		_cfg["coop"] = true
 	for s in _ships:
 		if is_instance_valid(s):
 			s.configure(int(_cfg.get("max_shots", 2)))
@@ -499,6 +509,7 @@ func _apply_boss_interval_setting(new_interval: int) -> void:
 	_next_boss_score = (new_interval * (floori(float(_score) / new_interval) + 1)) if new_interval > 0 else 0
 
 func _enter_title() -> void:
+	_net_teardown()
 	_state = TITLE
 	_paused = false
 	_director.abort()
@@ -508,7 +519,11 @@ func _enter_title() -> void:
 	get_tree().paused = true
 
 func _new_run() -> void:
+	if _net_guest != null:
+		return   # the host decides when a run starts
 	_reload_settings()
+	if _net_host != null:
+		_net_host.send_start()
 	_score = 0
 	_stage = 1
 	# _lives is the RESERVE count — ships still in the wings, not counting the
@@ -574,9 +589,9 @@ func _new_run() -> void:
 		s._alive = false  # blocks shoot() during the materialize animation below
 		s.set_deferred("monitoring", false)
 		spawn_at.append(_ship_spawn_pos(s))
-	_hud.flash_banner("READY")
+	_banner("READY")
 	await _play_reconstruct_many(spawn_at)
-	_hud.hide_banner()
+	_hide_banner()
 	for s in _ships:
 		s.respawn()
 	_start_ready()
@@ -585,6 +600,7 @@ func _new_run() -> void:
 ## for it to finish — used at the start of every run (stage 1) and on every
 ## respawn, in place of a flat timer wait that showed nothing happening.
 func _play_reconstruct(at: Vector2) -> void:
+	_net_ev(["recon", [at]])
 	var r := RECONSTRUCT_SCENE.instantiate()
 	add_child(r)
 	r.global_position = at
@@ -595,6 +611,7 @@ func _play_reconstruct(at: Vector2) -> void:
 ## this BEFORE any reconstruct/game-over handling runs, so the ship visibly
 ## blows up before it's allowed to start materializing again (user request).
 func _play_explosion(at: Vector2) -> void:
+	_net_ev(["boom", at])
 	var e := EXPLOSION_SCENE.instantiate()
 	add_child(e)
 	e.global_position = at
@@ -617,6 +634,7 @@ func _ship_spawn_pos(s: Ship = null) -> Vector2:
 ## int would be captured by value, see the Bonus Level counter bug in
 ## CLAUDE.md).
 func _play_reconstruct_many(ats: Array) -> void:
+	_net_ev(["recon", ats])
 	var pending := [ats.size()]
 	for at in ats:
 		var r := RECONSTRUCT_SCENE.instantiate()
@@ -643,18 +661,25 @@ func _setup_ships() -> void:
 		_ship2.unpark()
 		_ship.home_x_frac = 0.34
 		_ship2.home_x_frac = 0.66
-		_ship.set_coop_actions(true)
+		_ship.set_coop_actions(_net_host == null)   # online host: plain actions (arrows too)
 		_ship2.set_coop_actions(true)
+		_ship2.remote = _net_host != null
 		_ship2.configure(int(_cfg.get("max_shots", 2)))
 		_ships = [_ship, _ship2]
 	else:
 		if is_instance_valid(_ship2):
 			_ship2.park()
+			_ship2.remote = false
 		_ship.home_x_frac = 0.5
 		_ship.set_coop_actions(false)
 		_ships = [_ship]
 
 func _request_pause() -> void:
+	if _net_guest != null:
+		# no pausing somebody else's game — only the way out
+		_hud.set_playing(false)
+		_menus.show_leave()
+		return
 	if _paused or _state == TITLE or _state == GAME_OVER:
 		return
 	_paused = true
@@ -738,11 +763,11 @@ func _switch_player(was_bonus: bool) -> void:
 	_ship.deactivate_hyper_ammo()
 	_pending_twin = false
 	_clear_board()
-	_hud.flash_banner("PLAYER %d" % (_cur + 1))
+	_banner("PLAYER %d" % (_cur + 1))
 	await get_tree().create_timer(Hud.BANNER_TOTAL, false).timeout
 	if not is_instance_valid(self) or _state != READY:
 		return
-	_hud.hide_banner()
+	_hide_banner()
 	await _play_reconstruct(_ship_spawn_pos())
 	if not is_instance_valid(self) or _state != READY:
 		return
@@ -761,6 +786,8 @@ func _show_results(won: bool, heading_override := "") -> void:
 			"achievements": p.achievements, "laps": int(p.bonus.laps),
 			"kill_stats": p.kill_stats,
 			"heading": heading_override if heading_override != "" else (("PLAYER %d" % (i + 1)) if _players.size() > 1 else "")})
+	if _net_host != null:
+		_net_host.send_over(results)
 	if results.size() == 1:
 		var r: Dictionary = results[0]
 		_menus.show_run_summary(r.score, r.stage, r.won, r.rescues, r.rescue_points, r.achievements, r.laps, r.kill_stats, r.heading)
@@ -788,7 +815,7 @@ func _start_ready() -> void:
 	# case of interval == 1.
 	var interval := int(_cfg.get("bonus_level_interval", 0))
 	if interval > 0 and _stage % interval == 0:
-		_hud.flash_banner("BONUS LEVEL")
+		_banner("BONUS LEVEL")
 		if _snd:
 			_snd.play("stage")
 		await get_tree().create_timer(Hud.BANNER_TOTAL, false).timeout
@@ -796,11 +823,11 @@ func _start_ready() -> void:
 			return
 		if not await _wait_sound_then_gap("stage"):
 			return
-		_hud.hide_banner()
+		_hide_banner()
 		_state = BONUS
 		_start_bonus_level()
 		return
-	_hud.flash_banner("STAGE %d" % _stage)
+	_banner("STAGE %d" % _stage)
 	# Stage 1 of a fresh run has its own, much longer intro (6.9 s,
 	# start-first-level-music) — that IS the fanfare there, so the 2.6 s
 	# stage jingle stays silent instead of playing on top of it.
@@ -817,7 +844,7 @@ func _start_ready() -> void:
 	if not await _wait_sound_then_gap("start-first-level-music" if _intro_gate_active else "stage"):
 		return
 	_intro_gate_active = false
-	_hud.hide_banner()
+	_hide_banner()
 	_state = ENTERING
 	_director.start_stage(_stage)
 
@@ -940,13 +967,13 @@ func _finish_bonus_level(token: int) -> void:
 	# down (a since-fixed bug briefly double-counted some kills, e.g. "23/18"
 	# — user report) — showing the points actually earned instead sidesteps
 	# that confusion entirely and is more meaningful anyway (user request).
-	_hud.flash_banner(("PERFECT! +%d" % _bonus_points) if perfect else ("BONUS: +%d" % _bonus_points))
+	_banner(("PERFECT! +%d" % _bonus_points) if perfect else ("BONUS: +%d" % _bonus_points))
 	if _snd:
 		_snd.play("bonus-stage-cleared" if perfect else "level-cleared")
 	await get_tree().create_timer(Hud.BANNER_TOTAL, false).timeout
 	if not is_instance_valid(self) or _state != BONUS or token != _bonus_token:
 		return
-	_hud.hide_banner()
+	_hide_banner()
 	_stage += 1
 	_start_ready()
 
@@ -956,13 +983,13 @@ func _finish_bonus_level(token: int) -> void:
 ## completed on its own terms) and doesn't wait on the by-then-already-stopped
 ## wave coroutine (_bonus_abort took care of that in _on_ship_died()).
 func _finish_bonus_level_early(token: int) -> void:
-	_hud.flash_banner("BONUS: +%d" % _bonus_points)
+	_banner("BONUS: +%d" % _bonus_points)
 	if _snd:
 		_snd.play("level-cleared")
 	await get_tree().create_timer(Hud.BANNER_TOTAL, false).timeout
 	if not is_instance_valid(self) or _state != BONUS or token != _bonus_token:
 		return
-	_hud.hide_banner()
+	_hide_banner()
 	_stage += 1
 	_start_ready()
 
@@ -1227,6 +1254,8 @@ func _on_coop_ship_died(show_explosion: bool, idx: int) -> void:
 			return
 		_out[idx] = true
 		if not _coop_in_play(1 - idx):
+			if _state == GAME_OVER:
+				return   # the partner's loss already ended the run (both ships can die in the same moment)
 			_state = GAME_OVER
 			await get_tree().create_timer(GAME_OVER_DELAY, false).timeout
 			if not is_instance_valid(self) or _state != GAME_OVER:
@@ -1238,7 +1267,7 @@ func _on_coop_ship_died(show_explosion: bool, idx: int) -> void:
 	_coop_lives[idx] -= 1
 	_hud.set_coop_lives(_coop_lives[0], _coop_lives[1])
 	await _play_reconstruct(_ship_spawn_pos(ship))
-	if is_instance_valid(ship) and _state != GAME_OVER and _state != TITLE:
+	if is_instance_valid(ship) and _state != GAME_OVER and _state != TITLE and not _out[idx]:
 		ship.respawn()
 		if _pending_twins[idx]:
 			_pending_twins[idx] = false
@@ -1343,7 +1372,7 @@ func _on_bonus_collected(points: int, icon: Texture2D, icon_index: int, at_posit
 	if lap_done:
 		total += BONUS_LAP_POINTS
 		_score += BONUS_LAP_POINTS
-		_hud.flash_banner("LAP!")
+		_banner("LAP!")
 	_hud.set_score(_score)
 	_spawn_score_popup(at_position, "+%d" % total)
 	_check_boss_threshold()
@@ -1359,10 +1388,119 @@ func _on_bonus_collected(points: int, icon: Texture2D, icon_index: int, at_posit
 ## Small "+points" floating text at the exact catch point — bonus_item pickups
 ## only, deliberately not used for enemy kills.
 func _spawn_score_popup(at: Vector2, text: String) -> void:
+	_net_ev(["popup", at, text])
 	var p := SCORE_POPUP_SCRIPT.new()
 	p.text = text
 	add_child(p)
 	p.global_position = at
+
+# --- online / LAN co-op ---------------------------------------------------
+## HUD banners go through here so the guest sees them too.
+func _banner(text: String) -> void:
+	_net_ev(["banner", text])
+	_hud.flash_banner(text)
+
+func _hide_banner() -> void:
+	_net_ev(["hbanner"])
+	_hud.hide_banner()
+
+func _net_ev(e: Array) -> void:
+	if _net_host != null:
+		_net_host.ev(e)
+
+## The lobby (net_lobby.gd) hands over a connected link: this device hosts —
+## it runs the co-op game, the partner's ship is steered over the network.
+func net_start_host(link: NetLink) -> void:
+	_net_teardown()
+	_net_host = NetHost.new()
+	add_child(_net_host)
+	_net_host.setup(self, link)
+	_net_host.partner_left.connect(_net_partner_left)
+	_menus.hide_all()
+	_new_run()
+
+## ... or this device joins: it only shows what the host sends.
+func net_start_guest(link: NetLink) -> void:
+	_net_teardown()
+	_director.abort()
+	_clear_board()
+	_ship.park()
+	if is_instance_valid(_ship2):
+		_ship2.park()
+	_net_guest = NetGuest.new()
+	add_child(_net_guest)
+	_net_guest.setup(self, link)
+	_net_guest.started.connect(_net_guest_started)
+	_net_guest.over.connect(_net_guest_over)
+	_net_guest.left.connect(_net_guest_left)
+	_menus.net_guest_ui = true
+	_state = TITLE
+	_paused = false
+	_hud.set_player_tag("")
+	_hud.clear_bonus_icons()
+	_hud.set_score(0)
+	_hud.set_coop_lives(0, 0)
+	_hud.set_playing(true)
+	_menus.hide_all()
+	get_tree().paused = false
+
+func _net_guest_started() -> void:
+	_hud.set_playing(true)
+	_menus.hide_all()
+	_menus.stop_menu_music()
+	get_tree().paused = false
+
+func _net_guest_over(results: Array) -> void:
+	for r in results:
+		for k in r.kill_stats:
+			k["icon"] = RESCUE_ICON if k.is_rescue else load(EnemyKinds.icon_texture(k.kind, k.variant_idx))
+	_state = GAME_OVER
+	_hud.set_playing(false)
+	if results.size() == 1:
+		var r: Dictionary = results[0]
+		_menus.show_run_summary(r.score, r.stage, r.won, r.rescues, r.rescue_points, r.achievements, r.laps, r.kill_stats, r.heading)
+	else:
+		_menus.show_run_results(results)
+
+func _net_guest_left(why: String) -> void:
+	_enter_title()
+	_menus.show_notice(why)
+
+## The partner dropped out: their ship is gone for good, the game goes on with
+## the one still flying (it simply is a local co-op game with one player left).
+func _net_partner_left() -> void:
+	_banner("PARTNER LEFT")
+	if _net_host != null:
+		_net_host.shutdown()
+		_net_host.queue_free()
+		_net_host = null
+	_out[1] = true
+	_waiting[1] = false
+	_coop_lives[1] = 0
+	_hud.set_coop_lives(_coop_lives[0], 0)
+	if is_instance_valid(_ship2):
+		_ship2.remote = false
+		_ship2.park()
+	if _state == GAME_OVER:
+		return
+	if not _coop_in_play(0) and _state != TITLE:
+		_state = GAME_OVER
+		_show_results(false, "TEAM")
+		get_tree().paused = true
+
+func _net_teardown() -> void:
+	if _net_host != null:
+		_net_host.shutdown()
+		_net_host.queue_free()
+		_net_host = null
+	if _net_guest != null:
+		_net_guest.shutdown()
+		_net_guest.queue_free()
+		_net_guest = null
+		_menus.net_guest_ui = false
+		_ship.unpark()
+		if is_instance_valid(_ship2):
+			_ship2.unpark()
 
 # --- helpers -----------------------------------------------------
 func _clear_board() -> void:

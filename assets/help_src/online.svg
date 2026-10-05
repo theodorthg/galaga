@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="900" height="980" viewBox="0 0 900 980" font-family="DejaVu Sans, 'Liberation Sans', sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#121631"/><stop offset="1" stop-color="#05060c"/>
+    </linearGradient>
+  </defs>
+  <rect width="900" height="980" fill="url(#bg)"/>
+  <rect x="14" y="14" width="872" height="952" rx="18" fill="none" stroke="#4db2ff" stroke-opacity="0.18" stroke-width="2"/>
+
+  <text x="450" y="70" text-anchor="middle" font-size="32" font-weight="700" fill="#eef4ff">Co-op on two devices</text>
+  <text x="450" y="112" text-anchor="middle" font-size="24" fill="#8fa3c8">Main menu &gt; Online / LAN</text>
+
+  <!-- two screens -->
+  <g transform="translate(110 160)">
+    <rect x="0" y="0" width="260" height="300" rx="16" fill="#0b0e22" stroke="#4db2ff" stroke-width="3"/>
+    <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/player_trim.png" x="60" y="200" width="60" height="74"/>
+    <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/player_trim.png" x="140" y="200" width="60" height="74" style="filter:hue-rotate(-60deg)"/>
+    <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/enemy4_trim.png" x="100" y="40" width="60" height="68"/>
+    <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/enemy2_trim.png" x="40" y="120" width="50" height="50"/>
+    <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/enemy3_trim.png" x="170" y="120" width="50" height="50"/>
+    <text x="130" y="340" text-anchor="middle" font-size="28" font-weight="700" fill="#eef4ff">Host</text>
+    <text x="130" y="372" text-anchor="middle" font-size="20" fill="#8fa3c8">runs the game</text>
+  </g>
+  <g transform="translate(530 160)">
+    <rect x="0" y="0" width="260" height="300" rx="16" fill="#0b0e22" stroke="#9dffb8" stroke-width="3"/>
+    <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/player_trim.png" x="60" y="200" width="60" height="74"/>
+    <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/player_trim.png" x="140" y="200" width="60" height="74" style="filter:hue-rotate(-60deg)"/>
+    <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/enemy4_trim.png" x="100" y="40" width="60" height="68"/>
+    <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/enemy2_trim.png" x="40" y="120" width="50" height="50"/>
+    <image xlink:href="file:///home/bernd/GodotDev/learn_2d_gamedev_godot_4_0.57.0_linux/projects/galaga/assets/graphics/enemy3_trim.png" x="170" y="120" width="50" height="50"/>
+    <text x="130" y="340" text-anchor="middle" font-size="28" font-weight="700" fill="#9dffb8">Guest</text>
+    <text x="130" y="372" text-anchor="middle" font-size="20" fill="#8fa3c8">sees the same game, steers ship 2</text>
+  </g>
+  <line x1="390" y1="300" x2="510" y2="300" stroke="#4db2ff" stroke-width="5" stroke-dasharray="14 10"/>
+  <path d="M390 284 L366 300 L390 316 z" fill="#4db2ff"/>
+  <path d="M510 284 L534 300 L510 316 z" fill="#4db2ff"/>
+
+  <rect x="60" y="546" width="780" height="2" fill="#4db2ff" fill-opacity="0.2"/>
+
+  <!-- LAN -->
+  <text x="100" y="578" font-size="30" font-weight="700" fill="#eef4ff">LAN / same Wi-Fi</text>
+  <text x="100" y="620" font-size="23" fill="#8fa3c8">Host: "Host (same Wi-Fi / LAN)" and wait.</text>
+  <text x="100" y="654" font-size="23" fill="#8fa3c8">Guest: "Join (same Wi-Fi / LAN)", pick the host.</text>
+  <text x="100" y="688" font-size="23" fill="#8fa3c8">Not found? Allow UDP 47110-47111 on the host PC,</text>
+  <text x="100" y="720" font-size="23" fill="#8fa3c8">or type the host's address. Not available in a browser.</text>
+
+  <rect x="60" y="756" width="780" height="2" fill="#4db2ff" fill-opacity="0.2"/>
+
+  <!-- online -->
+  <text x="100" y="814" font-size="30" font-weight="700" fill="#eef4ff">Online (anywhere, also in a browser)</text>
+  <text x="100" y="856" font-size="23" fill="#8fa3c8">Host: "Host online (code)" - a 4-letter code appears.</text>
+  <text x="100" y="890" font-size="23" fill="#8fa3c8">Guest: "Join online (code)" - type that code.</text>
+  <text x="100" y="934" font-size="23" fill="#8fa3c8">The host decides when to play again; either can leave.</text>
+</svg>

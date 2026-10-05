@@ -106,7 +106,12 @@ func _find_stream(key: String) -> AudioStream:
 			return load(path)
 	return null
 
+## Emitted on every play(): the online/LAN host forwards gameplay sounds to the
+## guest (net_host.gd), who has no simulation of his own to trigger them.
+signal played(key: String)
+
 func play(key: String) -> void:
+	played.emit(key)
 	if key in LOOPING_KEYS:
 		_wanted[key] = true
 	var p = _players.get(key)

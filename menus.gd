@@ -10,6 +10,8 @@ signal resume_game      # pause Resume
 signal to_title         # pause Quit-to-title, game-over Title
 signal settings_changed # a gameplay setting was saved
 signal splash_done      # minimum time elapsed (or the player skipped it)
+signal net_host_start(link)   # online/LAN lobby: a partner connected, this device hosts
+signal net_guest_start(link)  # ... or this device joined a host
 
 ## See space_background.gd::set_cabinet_lane() for the full story.
 const DESIGN_WIDTH := 540.0
@@ -50,6 +52,7 @@ const HELP_PAGES_DESKTOP := [
 	{"file": "keyboard", "h": "Controls — Keyboard/Gamepad"},
 	{"file": "mouse", "h": "Controls — Mouse"},
 	{"file": "coop", "h": "2 Players"},
+	{"file": "online", "h": "Online / LAN Co-op"},
 	{"file": "goal", "h": "Goal & Points"},
 	{"file": "difficulty", "h": "Difficulty Levels"},
 	{"file": "capture", "h": "Boss Capture"},
@@ -57,6 +60,7 @@ const HELP_PAGES_DESKTOP := [
 ]
 const HELP_PAGES_TOUCH := [
 	{"file": "touch", "h": "Controls — Touch"},
+	{"file": "online", "h": "Online / LAN Co-op"},
 	{"file": "goal", "h": "Goal & Points"},
 	{"file": "difficulty", "h": "Difficulty Levels"},
 	{"file": "capture", "h": "Boss Capture"},
@@ -98,8 +102,15 @@ func _ready() -> void:
 	_screens["summary"] = _build_summary()
 	_screens["highscores"] = _build_highscores()
 	_screens["join"] = _build_join()
+	_screens["notice"] = _build_notice()
+	_screens["confirm_leave"] = _build_confirm_leave()
 	for s in _screens.values():
 		_root.add_child(s)
+	_lobby = NetLobby.new()
+	add_child(_lobby)
+	_lobby.setup(self)
+	_lobby.host_connected.connect(func(l): net_host_start.emit(l))
+	_lobby.guest_connected.connect(func(l): net_guest_start.emit(l))
 	hide_all()
 
 # ---------------------------------------------------------------- public
@@ -147,7 +158,8 @@ func set_cabinet_lane(active: bool, offset_x: float) -> void:
 ## SoundManager.preview_exclusive(), which ambient menu-music playing
 ## underneath would interfere with. Leaving "sound" for any other menu screen
 ## resumes menu-music normally (all of those ARE in this list).
-const MENU_MUSIC_SCREENS := ["title", "pause", "settings", "confirm_reset", "confirm_title", "highscores", "help"]
+const MENU_MUSIC_SCREENS := ["title", "pause", "settings", "confirm_reset", "confirm_title", "highscores", "help",
+	"net", "net_wait", "net_find", "net_code", "notice"]
 const SCORE_MUSIC_SCREENS := ["summary", "gameover"]
 var _active_menu_music := ""  # "" | "menu-music" | "scoring-board-music"
 
@@ -265,6 +277,55 @@ func show_title() -> void:
 
 func show_pause() -> void:
 	_swap("pause")
+
+## Online / LAN co-op: true on the GUEST's device — it only follows the host, so
+## "Play Again" is the host's call (see _fill_gameover()).
+var net_guest_ui := false
+var _lobby: NetLobby
+var _notice_label: Label
+var _notice_back := "title"
+
+## A plain message with one "OK" button (connection lost, host left, ...).
+func show_notice(text: String, back := "title") -> void:
+	_notice_label.text = text
+	_notice_back = back
+	_swap("notice")
+
+func _build_notice() -> Control:
+	var s := _screen()
+	var box := _box(s)
+	_notice_label = _title_label("", 20)
+	_notice_label.autowrap_mode = TextServer.AUTOWRAP_WORD
+	_notice_label.custom_minimum_size = Vector2(320, 0)
+	box.add_child(_notice_label)
+	box.add_child(_spacer(10))
+	box.add_child(_button("OK", func(): _swap(_notice_back), true))
+	return s
+
+## The guest can't pause the host's game — only leave it.
+func show_leave() -> void:
+	_swap("confirm_leave")
+
+func _build_confirm_leave() -> Control:
+	var s := _screen()
+	var box := _box(s)
+	box.add_child(_title_label("Leave?", 26))
+	box.add_child(_spacer(6))
+	var msg := _title_label("Leave the game?\nYour partner plays on alone.", 18)
+	msg.autowrap_mode = TextServer.AUTOWRAP_WORD
+	box.add_child(msg)
+	box.add_child(_spacer(10))
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
+	var no_btn := _button("No", func(): resume_game.emit(), true)
+	no_btn.custom_minimum_size = Vector2(130, TOUCH_H)
+	var yes_btn := _button("Yes", func(): to_title.emit())
+	yes_btn.custom_minimum_size = Vector2(130, TOUCH_H)
+	row.add_child(no_btn)
+	row.add_child(yes_btn)
+	box.add_child(row)
+	return s
 
 ## `won` distinguishes a "Sieg bei X Punkten" ending (GameSettings.win_score,
 ## game.gd::_check_win()) from a regular game over — same screen, same Hall
@@ -542,6 +603,7 @@ func _build_title() -> Control:
 	box.add_child(_title_label("GALAGA", 52, ACCENT))
 	box.add_child(_spacer(18))
 	box.add_child(_button("Play", func(): _play_pressed()))
+	box.add_child(_button("Online / LAN", func(): _lobby.open()))
 	box.add_child(_button("Settings", func(): _open_settings("title")))
 	box.add_child(_button("High Scores", func(): show_highscores("title")))
 	box.add_child(_button("How to Play", func(): _open_help("title")))
@@ -1245,7 +1307,7 @@ func _fill_gameover(score: int, stage: int, won := false) -> void:
 	(box.get_node("Sub") as Label).text = ("%s    " % who if who != "" else "") + "SCORE  %06d      STAGE  %d" % [score, stage]
 	var more := not _result_queue.is_empty()
 	_next_player_btn.visible = more
-	_play_again_btn.visible = not more
+	_play_again_btn.visible = not more and not net_guest_ui
 	_main_menu_btn.visible = not more
 	if _exit_btn:
 		_exit_btn.visible = not more

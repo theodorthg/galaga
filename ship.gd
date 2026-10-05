@@ -66,6 +66,13 @@ const DESIGN_WIDTH := 540.0
 ## builds p1_*/p2_* actions (coop_input.gd) and points `act` at them; otherwise
 ## the plain move_left/move_right/shoot actions apply, exactly as before.
 var player_index := 0
+## Online/LAN co-op: the guest's ship on the HOST is steered by messages from
+## the guest (net_host.gd), not by local input — remote_dir -1..1, remote_shoot,
+## remote_x >= 0 = absolute target x (mouse/touch of the guest).
+var remote := false
+var remote_dir := 0.0
+var remote_shoot := false
+var remote_x := -1.0
 var act := {"left": "move_left", "right": "move_right", "shoot": "shoot"}
 ## Where this ship (re)appears, as a fraction of the lane width — 0.5 alone,
 ## spread left/right in co-op.
@@ -155,8 +162,10 @@ func _process(delta: float) -> void:
 	if not _alive:
 		return
 
-	var dir := Input.get_axis(act.left, act.right)
-	if dir != 0.0:
+	var dir := remote_dir if remote else Input.get_axis(act.left, act.right)
+	if remote and dir == 0.0 and remote_x >= 0.0:
+		position.x = remote_x
+	elif dir != 0.0:
 		_mouse_aim = false
 		position.x += dir * speed * delta
 	elif _mouse_aim:
@@ -167,7 +176,7 @@ func _process(delta: float) -> void:
 		position.x = get_global_mouse_position().x
 	position.x = clampf(position.x, ship_half_width, viewport_width - ship_half_width)
 
-	if _touch_down or _mouse_down or Input.is_action_pressed(act.shoot):
+	if _touch_down or _mouse_down or (remote_shoot if remote else Input.is_action_pressed(act.shoot)):
 		shoot()
 
 func _unhandled_input(event: InputEvent) -> void:

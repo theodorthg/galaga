@@ -2684,6 +2684,68 @@ Beides nur **headless** geprüft (Wegwerf-Testskripte gegen das echte
 - **Offen** (siehe `TODO.md`): live spielen und nachjustieren, Coop-Belegung in die
   Hilfe, Coop per LAN/Online (mario-clone-Bausteine).
 
+**Sechsunddreißigste Playtest-Runde (2026-10-05): Coop über LAN und Online —
+v1.2.0.** Auftrag: „LAN und Online, beides“. Vorher Coop und Abwechseln im
+Editor live gespielt (alles wie erwartet; die MCP-Taste `simulate_key` setzt nur
+`keycode`, nicht `physical_keycode`, die Spieltasten reagieren darauf nicht —
+Testwerkzeug-Eigenheit, kein Spielfehler).
+- **Prinzip „Host rechnet, Gast zeigt“** (wie mario-clone): der Host spielt ein
+  ganz normales lokales Coop-Spiel (`game.gd`, `_coop = true`), Schiff 2 wird
+  aber nicht von Tasten, sondern von den Nachrichten des Gasts gelenkt
+  (`ship.gd`: `remote`, `remote_dir`, `remote_shoot`, `remote_x`). Der Gast
+  rechnet nichts.
+- **Neue Dateien**: `net_link.gd` (aus tetris kopiert: Relay-WebSocket + LAN-ENET
+  + `Discovery`; `GAME = "galaga"`, `MAGIC = "GALAGA-LAN-1"`, Umgebungsvariable
+  `GALAGA_RELAY`), `net_tex.gd` (Textur-Tabelle, Index statt Pfad im
+  Schnappschuss), `net_host.gd` (`NetHost`: 25 Schnappschüsse/s, nimmt die
+  Eingabe des Gasts an), `net_guest.gd` (`NetGuest`: zeichnet, schickt Eingabe
+  30×/s), `net_lobby.gd` (`NetLobby`: Menü „Online / LAN“ — Host/Join LAN mit
+  Hostliste und manueller Adresse, Host/Join Online mit 4-stelligem Code).
+  `menus.gd`: Titel-Button „Online / LAN“, Bildschirme `notice` und
+  `confirm_leave`, `net_guest_ui` (blendet beim Gast „Play Again“ aus).
+  `sound_manager.gd`: Signal `played(key)`. `project.godot`:
+  `application/config/relay_url`; Android-Export: `permissions/internet=true`.
+- **Schnappschuss** (`NetHost._snapshot()`): `sp` = alle Sprites (Stride 12:
+  id, Textur, x, y, Drehung, Skalierung x/y, Skew, Farbe — Gegner, Passagier,
+  Bonus-Items, Bonuslevel-Gegner, beide Schiffe), `ls` Laser, `bm` Bomben (mit
+  Geschwindigkeit, der Gast extrapoliert), `bc` Fangstrahlen, `h` HUD-Zahlen
+  (Score, Stage, beide Reserven, Laps, Pause-Flag, x von Schiff 2), `bi`
+  Achievement-Reihe, `ev` einmalige Ereignisse: `banner`, `hbanner`, `boom`,
+  `recon`, `popup`, `snd` (alle nicht-Menümusik-Sounds über `Snd.played`).
+  Der Gast glättet die Sprite-Positionen (`SMOOTH`) und spielt Explosion/
+  Rekonstruktion mit den echten Szenen selbst ab. Nachrichten: host→gast
+  `start {v}`, `snap`, `over [Ergebnisse]`, `bye`; gast→host `in [dir, shoot, x]`,
+  `bye`. Versionsprüfung Major.Minor (Relay bei „Online“, `start` bei LAN).
+- **Spielablauf**: Host wählt „Host …“, Gast „Join …“; sobald verbunden startet
+  der Host sofort (`Game.net_start_host`), der Gast folgt (`net_start_guest`,
+  parkt beide lokalen Schiffe). „Play Again“ entscheidet der Host; der Gast
+  sieht beim Ergebnis nur „Main Menu“. Gast-Pause öffnet nur „Leave?“ (Tree
+  wird nicht pausiert); die Host-Pause friert beide ein (`pz`-Flag → Banner
+  „PAUSED“). Verlässt der Gast das Spiel (oder reißt die Verbindung), ist Schiff
+  2 für den Rest des Laufs „out“ (`_net_partner_left()`), der Host spielt
+  allein weiter, Banner „PARTNER LEFT“. Der Gast bekommt bei Verbindungsverlust
+  einen Hinweis-Bildschirm (`show_notice`).
+- **Bug dabei gefunden (auch lokal im Coop möglich)**: starben beide Schiffe im
+  selben Moment, setzten beide `_on_coop_ship_died`-Coroutinen `GAME_OVER` und
+  zeigten die Ergebnisse doppelt; die zweite konnte nach „Play Again“ den Baum
+  wieder pausieren (flackernd, je nach Timing). Fix: die zweite Coroutine kehrt
+  zurück, wenn `_state == GAME_OVER` schon gilt.
+- **Test (headless, zwei Prozesse)**: `tools/nettest.gd` —
+  `godot --headless --audio-driver Dummy --path . --script res://tools/nettest.gd -- host lan`
+  und in einem zweiten Terminal `... -- guest lan` (für Online `host online`
+  zuerst, der Raumcode geht über `/tmp/galaga_code`; `GALAGA_RELAY=ws://127.0.0.1:8765`
+  für ein lokales Relay: `cd projects/mario-clone/server && PORT=8765 node relay.js`).
+  Prüft Verbinden, Schnappschüsse (31 Sprites), Steuerung von Schiff 2 über den
+  Gast, Game Over mit Ergebnis beim Gast, Neustart durch den Host, Verlassen.
+  Grün über LAN-Loopback, lokales und das echte Relay (broesel.net).
+  **Fallstrick**: kein `pkill -f nettest` im selben Befehl (trifft die eigene
+  Shell), und für Screenshots nur das Spielfenster per `xdotool search --name
+  galaga` + `import -window <id>` aufnehmen, nie den ganzen Desktop.
+- **Noch offen**: auf echten Geräten testen (LAN Handy/PC, Online Mobilnetz),
+  Triebwerksflamme beim Gast, eigene Pause für den Gast, ggf. unzuverlässige
+  Übertragung für Schnappschüsse (aktuell zuverlässig/geordnet — bei schlechter
+  Verbindung staut sich das).
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,
