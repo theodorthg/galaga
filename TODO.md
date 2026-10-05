@@ -25,7 +25,13 @@ Mehrspieler (Einschätzung 2026-10-03; lokal umgesetzt am 2026-10-03, Rest offen
       siehe CLAUDE.md „Sechsunddreißigste Playtest-Runde“. Headless mit zwei
       Prozessen geprüft (LAN-Loopback, lokales und echtes Relay); mit echten
       Geräten (Handy/RG552/zwei PCs) noch nicht.
-- [ ] Netz-Coop auf echten Geräten testen: LAN zwischen zwei Rechnern/Handy,
+- [x] 2026-10-05 LAN-Coop RG552 (Android, v1.2.1) ↔ Linux-PC in beide Richtungen
+      getestet: Hostliste findet den Host, Verbinden, Touch-Steuerung des Gasts
+      (Feuer + Ziehen), Pause des Gasts, Ergebnis-Bildschirm beim Gast. Alles ok.
+- [ ] Noch offen: itch.io-Web-Seite zeigt noch die alte Fassung, solange der
+      `web`-Channel nicht als „played in the browser“ markiert ist (alter
+      Handupload ist es noch) — Nutzer bzw. Claude per Chrome.
+- [ ] Netz-Coop auf weiteren Geräten testen (Handy, Mobilnetz): LAN zwischen zwei Rechnern/Handy,
       Online über das Mobilnetz; Verzögerung/Ruckeln beurteilen (Schnappschüsse
       25/s, Glättung `SMOOTH` in `net_guest.gd`). (Triebwerksflamme
       beim Gast und gemeinsame Pause: erledigt in v1.2.1.)
