@@ -8,7 +8,7 @@
   <rect x="14" y="14" width="872" height="952" rx="18" fill="none" stroke="#4db2ff" stroke-opacity="0.18" stroke-width="2"/>
 
   <text x="450" y="70" text-anchor="middle" font-size="32" font-weight="700" fill="#eef4ff">Co-op on two devices</text>
-  <text x="450" y="112" text-anchor="middle" font-size="24" fill="#8fa3c8">Main menu &gt; Online / LAN</text>
+  <text x="450" y="112" text-anchor="middle" font-size="24" fill="#8fa3c8">Play &gt; Online (code)  or  Wi-Fi / LAN</text>
 
   <!-- two screens -->
   <g transform="translate(110 160)">
@@ -39,8 +39,8 @@
 
   <!-- LAN -->
   <text x="100" y="578" font-size="30" font-weight="700" fill="#eef4ff">LAN / same Wi-Fi</text>
-  <text x="100" y="620" font-size="23" fill="#8fa3c8">Host: "Host (same Wi-Fi / LAN)" and wait.</text>
-  <text x="100" y="654" font-size="23" fill="#8fa3c8">Guest: "Join (same Wi-Fi / LAN)", pick the host.</text>
+  <text x="100" y="620" font-size="23" fill="#8fa3c8">Host: "Host a game" and wait.</text>
+  <text x="100" y="654" font-size="23" fill="#8fa3c8">Guest: "Join a game", pick the host.</text>
   <text x="100" y="688" font-size="23" fill="#8fa3c8">Not found? Allow UDP 47110-47111 on the host PC,</text>
   <text x="100" y="720" font-size="23" fill="#8fa3c8">or type the host's address. Not available in a browser.</text>
 
@@ -48,7 +48,7 @@
 
   <!-- online -->
   <text x="100" y="814" font-size="30" font-weight="700" fill="#eef4ff">Online (anywhere, also in a browser)</text>
-  <text x="100" y="856" font-size="23" fill="#8fa3c8">Host: "Host online (code)" - a 4-letter code appears.</text>
-  <text x="100" y="890" font-size="23" fill="#8fa3c8">Guest: "Join online (code)" - type that code.</text>
+  <text x="100" y="856" font-size="23" fill="#8fa3c8">Host: "Host a game" - a 4-letter code appears.</text>
+  <text x="100" y="890" font-size="23" fill="#8fa3c8">Guest: "Join with a code" - type that code.</text>
   <text x="100" y="934" font-size="23" fill="#8fa3c8">The host decides when to play again; either can leave.</text>
 </svg>

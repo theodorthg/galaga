@@ -26,31 +26,48 @@ var _find_hint: Label
 var _ip_edit: LineEdit
 var _code_edit: LineEdit
 var _found_key := ""
+var _origin := "net_online"   # the screen "Cancel" returns to
 
 func setup(menus: Menus) -> void:
 	m = menus
 	process_mode = Node.PROCESS_MODE_ALWAYS
-	m._screens["net"] = _build_choice()
+	m._screens["net_online"] = _build_online()
+	m._screens["net_lan"] = _build_lan()
 	m._screens["net_wait"] = _build_wait()
 	m._screens["net_find"] = _build_find()
 	m._screens["net_code"] = _build_code()
-	for k in ["net", "net_wait", "net_find", "net_code"]:
+	for k in ["net_online", "net_lan", "net_wait", "net_find", "net_code"]:
 		m._root.add_child(m._screens[k])
 
 # ---------------------------------------------------------------- screens
-func _build_choice() -> Control:
+func _build_online() -> Control:
 	var s := m._screen()
 	var box := m._box(s)
-	box.add_child(m._title_label("ONLINE / LAN", 34))
-	box.add_child(m._title_label("Co-op with a partner on another device", 15))
+	box.add_child(m._title_label("ONLINE", 34))
+	var t := m._title_label("Two players, each on their own device, anywhere (also in the browser). A 4-letter code connects you.", 15)
+	t.autowrap_mode = TextServer.AUTOWRAP_WORD
+	t.custom_minimum_size = Vector2(320, 0)
+	box.add_child(t)
 	box.add_child(m._spacer(8))
-	if NetLink.lan_possible():
-		box.add_child(m._button("Host (same Wi-Fi / LAN)", func(): _start_host_lan()))
-		box.add_child(m._button("Join (same Wi-Fi / LAN)", func(): _start_join_lan()))
-	box.add_child(m._button("Host online (code)", func(): _start_host_online()))
-	box.add_child(m._button("Join online (code)", func(): _open_code()))
+	box.add_child(m._button("Host a game (get a code)", func(): _start_host_online()))
+	box.add_child(m._button("Join with a code", func(): _open_code()))
 	box.add_child(m._spacer(4))
-	box.add_child(m._button("Back", func(): m._swap("title"), true))
+	box.add_child(m._button("Back", func(): m.show_mode(), true))
+	return s
+
+func _build_lan() -> Control:
+	var s := m._screen()
+	var box := m._box(s)
+	box.add_child(m._title_label("WI-FI / LAN", 34))
+	var t := m._title_label("Two players on the same network, no server needed.", 15)
+	t.autowrap_mode = TextServer.AUTOWRAP_WORD
+	t.custom_minimum_size = Vector2(320, 0)
+	box.add_child(t)
+	box.add_child(m._spacer(8))
+	box.add_child(m._button("Host a game", func(): _start_host_lan()))
+	box.add_child(m._button("Join a game", func(): _start_join_lan()))
+	box.add_child(m._spacer(4))
+	box.add_child(m._button("Back", func(): m.show_mode(), true))
 	return s
 
 func _build_wait() -> Control:
@@ -114,7 +131,7 @@ func _build_code() -> Control:
 	box.add_child(row)
 	box.add_child(m._spacer(6))
 	box.add_child(m._button("Join", func(): _join_online(_code_edit.text)))
-	box.add_child(m._button("Back", func(): m._swap("net"), true))
+	box.add_child(m._button("Back", func(): m._swap("net_online"), true))
 	return s
 
 func _line_edit(placeholder: String, max_len: int) -> LineEdit:
@@ -134,9 +151,11 @@ func _line_edit(placeholder: String, max_len: int) -> LineEdit:
 	return e
 
 # ---------------------------------------------------------------- flow
-func open() -> void:
+## kind: "online" or "lan" — the screen Play > Online / Wi-Fi LAN leads to.
+func open(kind: String) -> void:
 	cancel(false)
-	m._swap("net")
+	_origin = "net_lan" if kind == "lan" else "net_online"
+	m._swap(_origin)
 
 ## Closes whatever is being set up (not the link of a running game).
 func cancel(back_to_menu := true) -> void:
@@ -149,7 +168,7 @@ func cancel(back_to_menu := true) -> void:
 	_mode = ""
 	_found_key = ""
 	if back_to_menu:
-		m._swap("net")
+		m._swap(_origin)
 
 func _wait(title: String, text: String, code := "") -> void:
 	_wait_title.text = title
@@ -160,7 +179,7 @@ func _wait(title: String, text: String, code := "") -> void:
 
 func _fail(text: String) -> void:
 	cancel(false)
-	m.show_notice(text, "net")
+	m.show_notice(text, _origin)
 
 func _start_host_lan() -> void:
 	cancel(false)
@@ -173,7 +192,7 @@ func _start_host_lan() -> void:
 	_disc.start_host(NetLink.device_name())
 	_mode = "host_lan"
 	var ips := NetLink.local_ips()
-	_wait("HOSTING (LAN)", "Waiting for your partner…\nHe/she picks \"%s\" under Join (LAN) on the same Wi-Fi.\nYour address: %s\n\nIf nobody finds you, allow UDP ports %d–%d in the firewall." % [
+	_wait("HOSTING (LAN)", "Waiting for your partner…\nHe/she picks \"%s\" under \"Join a game\" on the same Wi-Fi.\nYour address: %s\n\nIf nobody finds you, allow UDP ports %d–%d in the firewall." % [
 		NetLink.device_name(), ", ".join(ips) if not ips.is_empty() else "?", NetLink.DISCOVERY_PORT, NetLink.PORT])
 
 func _start_join_lan() -> void:
@@ -237,7 +256,7 @@ func _process(delta: float) -> void:
 	for e in link.poll():
 		match str(e[0]):
 			"room":
-				_wait("HOSTING (ONLINE)", "Tell your partner this code\n(Join online):", str(e[1]))
+				_wait("HOSTING (ONLINE)", "Tell your partner this code\n(\"Join with a code\"):", str(e[1]))
 			"connect":
 				_handover()
 				return

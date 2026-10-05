@@ -105,6 +105,7 @@ func _ready() -> void:
 	_screens["notice"] = _build_notice()
 	_screens["confirm_leave"] = _build_confirm_leave()
 	_screens["net_pause"] = _build_net_pause()
+	_screens["mode"] = _build_mode()
 	for s in _screens.values():
 		_root.add_child(s)
 	_lobby = NetLobby.new()
@@ -160,7 +161,7 @@ func set_cabinet_lane(active: bool, offset_x: float) -> void:
 ## underneath would interfere with. Leaving "sound" for any other menu screen
 ## resumes menu-music normally (all of those ARE in this list).
 const MENU_MUSIC_SCREENS := ["title", "pause", "settings", "confirm_reset", "confirm_title", "highscores", "help",
-	"net", "net_wait", "net_find", "net_code", "notice"]
+	"mode", "net_online", "net_lan", "net_wait", "net_find", "net_code", "notice"]
 const SCORE_MUSIC_SCREENS := ["summary", "gameover"]
 var _active_menu_music := ""  # "" | "menu-music" | "scoring-board-music"
 
@@ -616,7 +617,6 @@ func _build_title() -> Control:
 	box.add_child(_title_label("GALAGA", 52, ACCENT))
 	box.add_child(_spacer(18))
 	box.add_child(_button("Play", func(): _play_pressed()))
-	box.add_child(_button("Online / LAN", func(): _lobby.open()))
 	box.add_child(_button("Settings", func(): _open_settings("title")))
 	box.add_child(_button("High Scores", func(): show_highscores("title")))
 	box.add_child(_button("How to Play", func(): _open_help("title")))
@@ -627,9 +627,45 @@ func _build_title() -> Control:
 ## Co-op needs to know who flies with which device first (join screen below);
 ## every other mode starts straight away.
 func _play_pressed() -> void:
-	var c := GameSettings.load_all()
-	if int(c.players) == 2 and bool(c.coop):
-		show_join()
+	show_mode()
+
+# ---------------------------------------------------------------- mode choice
+## "Play" opens this "how do you want to play" screen (like mario-clone/pacman):
+## 1 player, 2 players on this device (turns or co-op), or 2 players on their own
+## devices over the Internet / the local network. The local choice is remembered
+## (settings players/coop) and pre-selected next time.
+var _mode_btns := {}
+
+func _build_mode() -> Control:
+	var s := _screen()
+	var box := _box(s)
+	box.add_child(_title_label("HOW DO YOU\nWANT TO PLAY?", 26))
+	box.add_child(_spacer(6))
+	_mode_btns.clear()
+	_mode_btns[0] = _button("1 Player", func(): _pick_mode(1, false))
+	_mode_btns[1] = _button("2 Players - turns", func(): _pick_mode(2, false))
+	_mode_btns[2] = _button("2 Players - co-op", func(): _pick_mode(2, true))
+	for k in 3:
+		box.add_child(_mode_btns[k])
+	box.add_child(_title_label("on separate devices:", 15))
+	box.add_child(_button("Online (code)", func(): _lobby.open("online")))
+	if NetLink.lan_possible():
+		box.add_child(_button("Wi-Fi / LAN", func(): _lobby.open("lan")))
+	box.add_child(_spacer(4))
+	box.add_child(_button("Back", func(): _swap("title"), true))
+	return s
+
+func show_mode() -> void:
+	_swap("mode")
+	var btn: Button = _mode_btns[_players_mode()]
+	btn.grab_focus.call_deferred()
+
+func _pick_mode(players: int, coop: bool) -> void:
+	_cfg.players = players
+	_cfg.coop = coop
+	GameSettings.save(_cfg)
+	if players == 2 and coop:
+		show_join()   # co-op: who flies with which device
 	else:
 		start_game.emit()
 
@@ -655,7 +691,7 @@ func _build_join() -> Control:
 	box.add_child(_spacer(6))
 	box.add_child(_title_label("Keyboard: P1 Space / W (move A D),\nP2 Up / K (move arrows).\nGamepad: A button.", 15))
 	box.add_child(_spacer(12))
-	box.add_child(_button("Back", func(): _swap("title"), true))
+	box.add_child(_button("Back", func(): show_mode(), true))
 	return s
 
 func show_join() -> void:

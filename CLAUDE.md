@@ -2765,6 +2765,17 @@ Testwerkzeug-Eigenheit, kein Spielfehler).
   `NetGuest` ersetzt jeden `closed`/`error`-Text jetzt durch „The host left the
   game or the connection was lost.“ (Lobby-Fehler beim Beitreten zeigen den
   Relay-Text weiterhin, z. B. falscher Code).
+- **v1.3.0 (2026-10-05): Modus-Auswahl hinter „Play“ (Nutzerwunsch, wie
+  mario-clone/pacman).** Der Titel-Button „Online / LAN“ ist weg; „Play“ öffnet
+  den Bildschirm `mode` („HOW DO YOU WANT TO PLAY?“): 1 Player / 2 Players -
+  turns / 2 Players - co-op (→ Beitreten-Bildschirm) und darunter „on separate
+  devices“: Online (code) / Wi-Fi / LAN (nur nativ). Die lokale Wahl wird in
+  `players`/`coop` der Einstellungen gespeichert und beim nächsten Mal
+  vorausgewählt (der Stepper „Players“ in den Einstellungen bleibt, zeigt
+  denselben Wert). `NetLobby.open("online"|"lan")` öffnet `net_online` bzw.
+  `net_lan` (Host/Join), „Back“/„Cancel“ führen über `_origin` dorthin zurück,
+  die Zurück-Buttons dieser Bildschirme zu `mode`. Hilfe-Texte (`coop.svg`,
+  `online.svg`) auf die neuen Menüwege umgestellt.
 - **Noch offen**: auf weiteren Geräten testen (Handy, Mobilnetz),
   ggf. unzuverlässige
   Übertragung für Schnappschüsse (aktuell zuverlässig/geordnet — bei schlechter

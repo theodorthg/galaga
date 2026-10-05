@@ -7,9 +7,9 @@
   <rect width="900" height="980" fill="url(#bg)"/>
   <rect x="14" y="14" width="872" height="952" rx="18" fill="none" stroke="#4db2ff" stroke-opacity="0.18" stroke-width="2"/>
 
-  <text x="450" y="70" text-anchor="middle" font-size="32" font-weight="700" fill="#eef4ff">2 players: Settings &gt; Players</text>
-  <text x="450" y="112" text-anchor="middle" font-size="24" fill="#8fa3c8">2 (turns): each loses a ship, the other one plays</text>
-  <text x="450" y="144" text-anchor="middle" font-size="24" fill="#8fa3c8">2 (co-op): both fly at once, one team score</text>
+  <text x="450" y="70" text-anchor="middle" font-size="32" font-weight="700" fill="#eef4ff">2 players: Play &gt; 2 Players</text>
+  <text x="450" y="112" text-anchor="middle" font-size="24" fill="#8fa3c8">turns: each loses a ship, the other one plays</text>
+  <text x="450" y="144" text-anchor="middle" font-size="24" fill="#8fa3c8">co-op: both fly at once, one team score</text>
 
   <rect x="60" y="176" width="780" height="2" fill="#4db2ff" fill-opacity="0.2"/>
 
