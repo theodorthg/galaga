@@ -2606,6 +2606,84 @@ Artifact — und am Ende als sauber paginiertes PDF druckbar.
   tatsächliche `file://`-Datei (nicht nur gegen eine über `python3 -m
   http.server` servierte Rohdatei) + `pdftoppm`-Sichtprüfung aller 11 Seiten.
 
+**Fünfunddreißigste Playtest-Runde (2026-10-03): lokaler Mehrspieler — 2
+Spieler abwechselnd UND Coop gleichzeitig mit Befreien durch den Partner.**
+Auftrag aus `TODO.md` („Ideen für Mehrspieler“): erst abwechselnd, danach Coop.
+Beides nur **headless** geprüft (Wegwerf-Testskripte gegen das echte
+`game.tscn`, danach gelöscht), noch nicht live/auf Gerät gespielt.
+- **Einstellung „Players“** (`GameSettings.players` 1|2 + `coop`-Bool, Stepper in
+  `menus.gd` mit drei Stufen: `1` / `2 (turns)` / `2 (co-op)`; wie „Lives“ während
+  eines Laufs gesperrt, weil nur in `_new_run()` gelesen; „Defaults“ → 1).
+- **Abwechselnd** (`game.gd`): `_players[]` hält pro Spieler Score, Stage, Reserve,
+  Extra-Leben-/Boss-Schwellen, Kill-Statistik, Rettungszähler und die
+  Achievement-Reihe (`Hud.get_bonus_state()/set_bonus_state()`); die „live“-Variablen
+  gehören immer Spieler `_cur`. Verliert ein Spieler ein Schiff, wechselt
+  `_switch_player()` zum anderen (Brett räumen, `PLAYER n`-Banner, Reconstruct,
+  dessen Stage beginnt von vorn mit dem Einflug), sofern der andere nicht „out“
+  ist (`_out[]` — Schiff verloren, keine Reserve). Beide out → Game Over.
+  Score-Label bekommt „P1“/„P2“ (`Hud.set_player_tag()`). Am Ende je Spieler eine
+  Zusammenfassung + Namenseingabe nacheinander (`menus.gd::show_run_results()`,
+  Button „Next player“, solange weitere Ergebnisse anstehen; so geht kein
+  qualifizierender Score verloren). Bonuslevel bricht bei Schiffsverlust wie
+  bisher ab (zählt als gespielt, `_stage += 1`).
+  **Stolperfallen dabei**: (1) `_switch_player()` setzt `_state = READY` VOR dem
+  Räumen, sonst löst `_process()` auf dem leeren Brett einen Stage-Clear aus;
+  (2) Stage-Clear wartet jetzt auf ein lebendes Schiff (`Ship.any_alive()`), damit
+  ein Clear nicht mit dem Tod/Wechsel um die Wette läuft; (3) Bonuslevel-Coroutinen
+  tragen ein Token (`_bonus_token`), sonst läuft eine Welle des alten Spielers im
+  Bonuslevel des anderen weiter.
+- **Coop** (`players == 2` + `coop`): zweites `Ship` (`ship.gd` hat jetzt
+  `class_name Ship`, `player_index`, `act` = Aktionsnamen, `home_x_frac`), lazy
+  angelegt in `game.gd::_setup_ships()`, außerhalb von Coop „geparkt“
+  (`Ship.park()`: unsichtbar, ohne Kollision, aus Gruppe `player`). **Ein** Team:
+  gemeinsamer Score/Stage/Schwarm, aber eigene Reserve je Spieler (`_coop_lives`,
+  HUD mit zwei beschrifteten Reihen via `Hud.set_coop_lives()`), eigene Twin-/
+  Hyper-Buffs (liegen am Schiff). Extra-Leben gehen an den mit weniger Reserve
+  (Treffer werden keinem Schützen zugeordnet). Laser-Obergrenze **pro Schiff**
+  (`laser.owner_idx`). Gegner, Bomben und Boss-Fang zielen aufs **nächste
+  lebende Schiff** (`Ship.nearest()` statt `get_first_node_in_group("player")`).
+  Ergebnis ist ein „TEAM“-Eintrag in der Bestenliste.
+  - **Steuerung** (`coop_input.gd`, nach `mario-clone/coop_input.gd`): Tastatur
+    geteilt — P1 A/D + Space/W, P2 Pfeile + Up/K/Num0; Pads: der Beitreten-
+    Bildschirm (`menus.gd::_build_join()`/`_join_input()`, per `_input()` damit
+    Space nicht den fokussierten Back-Button drückt) ordnet das Pad, auf dem P2
+    Feuer drückt, `CoopInput.p2_pad` zu, P1 bekommt alle ANDEREN Geräte (wichtig,
+    wo D-Pad und Knöpfe als getrennte Geräte-IDs kommen). Maus/Touch steuern nur
+    Schiff 1. Solo/abwechselnd nutzen unverändert `move_left/move_right/shoot`.
+    „Play Again“ nach dem Game Over überspringt den Beitreten-Bildschirm
+    (Zuordnung bleibt), nur „Play“ im Titel zeigt ihn.
+  - **Fang + Befreien durch den Partner**: `capture_beam.gd` wird vom Schiff
+    „geclaimt“ (`try_claim(ship)` aus `ship.gd::_on_area_entered()` — dasselbe
+    Kollisionsereignis, aber deterministisch: genau ein Schiff wird gefangen, ein
+    zweites fliegt unbeschadet durch). Der Boss merkt sich, WESSEN Schiff er trägt
+    (`_captive_owner`) und sein Fangziel (`_capture_target`, nächstes lebendes
+    Schiff beim Start; nur dieses wird für die Dauer des Fangs unzerstörbar).
+    `ship_rescued(at, owner_idx)`: die Belohnung geht an den **Gefangenen**,
+    egal wer den Träger abschießt — Twin-Schiff, wenn er fliegt (bzw. beim
+    Respawn nachgereicht, `_pending_twins[]`). Ein Gefangener **ohne Reserve**
+    ist nicht „out“, sondern `_waiting[]`: das Spiel läuft mit dem Partner weiter,
+    und schießt der den Träger ab, kommt der Gefangene per Reconstruct zurück
+    (ohne Twin, Reserve bleibt 0). Game Over, sobald niemand mehr „in play“ ist
+    (kein lebendes/zurückkommendes Schiff): auch wenn der Partner stirbt, während
+    jemand wartet. Neben-Effekt, bewusst: ein Schiff im Respawn-Blinken ist für
+    den Strahl nur fangbar, wenn es das Ziel des Boss ist (vorher „fing“ der
+    Strahl es ohne Zerstörung → Boss trug einen Passagier, Schiff unversehrt =
+    gratis Twin, ein alter Exploit).
+  - Bonuslevel im Coop: ein Schiffsverlust beendet ihn nur, wenn danach kein
+    Schiff mehr fliegt; sonst respawnt der Verlierer mitten im Level. Twin
+    (irgendein Schiff) verdoppelt wie bisher die Spalten.
+- **Verifikation (headless, Wegwerfskripte)**: Alternierend 16 Prüfungen
+  (Wechsel/Zustand/Game-Over/Ergebnis-Warteschlange/Buttons); Coop ~30 Prüfungen
+  (Beitreten Tastatur+Pad, getrennte Steuerung, Laser-Cap pro Schiff, Strahl-
+  Claim, `Ship.nearest()`, Fang mit/ohne Reserve, Befreien, Twin nur für den
+  Gefangenen, echter Tod mit Twin-Verlust, Game Over inkl. „wartet + Partner
+  stirbt“, Rückfall auf Einzelspieler). Testartefakte, die wie Bugs aussahen:
+  ein leeres Brett löst Stage-Clear aus (Dummy-Gegner nötig), `_alive=false` von
+  Hand umgeht `_destroy()` (Twin bleibt), Wartezeiten kürzer als Explosion +
+  `ship-destroyed`-Ton + Reconstruct (≈ 5 s).
+- **Offen** (siehe `TODO.md`): live spielen und nachjustieren, Coop-Belegung in die
+  Hilfe, Coop per LAN/Online (mario-clone-Bausteine).
+
 ## Gameplay-Architektur (alles im Code, wie tetris)
 
 Main-Scene `game.tscn` (Node2D `Game` + `game.gd`): SpaceBackground, Formation,

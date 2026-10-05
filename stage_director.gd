@@ -53,7 +53,7 @@ var _capture_done_this_stage := false
 
 signal stage_populated
 signal enemy_killed(points, kind, variant_idx, was_carrying_captive)
-signal ship_rescued(at_position)
+signal ship_rescued(at_position, owner_idx)
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_PAUSABLE  # freeze on pause, not inherit Game's ALWAYS
@@ -112,7 +112,7 @@ func _spawn(idx: int, curve: Curve2D, delay: float, stage: int) -> void:
 	_spawn_parent.add_child(e)
 	e.resolved.connect(_on_resolved)
 	e.killed.connect(func(pts: int, k: int, vi: int, carrying: bool): enemy_killed.emit(pts, k, vi, carrying))
-	e.ship_rescued.connect(func(pos): ship_rescued.emit(pos))
+	e.ship_rescued.connect(func(pos, owner_idx): ship_rescued.emit(pos, owner_idx))
 	_pending += 1
 	e.setup(_formation.slot_kind(idx), _formation, idx, curve, delay, stage)
 
@@ -208,8 +208,7 @@ func _attempt_capture_dive() -> bool:
 	# or mid-reconstruct (ship.gd's _alive == false), there's nothing to catch,
 	# and a capture attempt right then reads as a Boss "capturing" a ship the
 	# player only just lost (user report: this condition wasn't checked at all).
-	var player := get_tree().get_first_node_in_group("player")
-	if player == null or not player._alive:
+	if Ship.any_alive(get_tree()) == null:
 		return false
 	var divers := 0
 	var bosses: Array = []

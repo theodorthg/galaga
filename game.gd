@@ -15,6 +15,7 @@ const GAME_OVER_DELAY := 1.0
 const RECONSTRUCT_SCENE := preload("res://ship_reconstruct.tscn")
 const EXPLOSION_SCENE := preload("res://ship_explosion.tscn")
 const BONUS_ITEM_SCENE := preload("res://bonus_item.tscn")
+const SHIP_SCENE := preload("res://ship.tscn")
 const SCORE_POPUP_SCRIPT := preload("res://score_popup.gd")
 # Tightened from 14-24s (2026-09-13 report: "one achievement in a 60000-point
 # run") — most of that scarcity was actually _on_stage_populated() resetting
@@ -89,7 +90,7 @@ var force_non_touch := false
 @onready var _hud_layer: CanvasLayer = $HUD
 @onready var _formation: Formation = $Formation
 @onready var _director: StageDirector = $StageDirector
-@onready var _ship: Area2D = $Ship
+@onready var _ship: Ship = $Ship
 @onready var _hud: Hud = $HUD/Root
 @onready var _menus: Menus = $Menus
 @onready var _space_bg := $SpaceBackground/ColorRect
@@ -184,6 +185,35 @@ var _achievements_collected := 0
 # see _kill_stat_entry().
 var _kill_stats: Array = []
 
+# --- 2 players, alternating (GameSettings.players == 2; user request 2026-10-03)
+# Like the arcade original: each player has their own score, stage, reserve
+# ships, extra-life/boss thresholds and achievement row. The ship that is lost
+# hands over to the other player (unless they are out); the other player's
+# stage restarts from its fly-in. A player is "out" once they lose a ship with
+# no reserve left; the game ends when both are out. The live variables above
+# always belong to player _cur — _save_player()/_load_player() swap them with
+# the stored dictionaries in _players.
+var _num_players := 1
+## Co-op (GameSettings.coop, 2 players at once): a second Ship (_ship2, created
+## on first use) flies next to _ship in ONE shared game — one score, stage and
+## enemy swarm; each player keeps their own reserve ships (_coop_lives) and
+## their own Twin/Hyper buffs (those live on the Ship). A player captured by a
+## Boss with no reserve left is "waiting": the partner can still get them
+## back by shooting the carrier (see _on_ship_rescued()). Enemies, bombs and
+## the capture attack aim at the nearest living ship (Ship.nearest()).
+var _coop := false
+var _ship2: Ship
+var _ships: Array = []          # the ships in play this run: [_ship] or [_ship, _ship2]
+var _coop_lives := [0, 0]
+var _waiting := [false, false]  # captured with no reserve left, until the carrier dies
+var _pending_twins := [false, false]
+var _cur := 0
+var _players: Array = []
+var _out: Array = [false, false]
+## Bumped by every _start_bonus_level() and every player switch, so a bonus-level
+## coroutine left over from before can tell it is stale and must stop.
+var _bonus_token := 0
+
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	add_to_group("touch_layout_listeners")
@@ -239,6 +269,7 @@ func _ready() -> void:
 	_director.stage_populated.connect(_on_stage_populated)
 	_director.enemy_killed.connect(_on_enemy_killed)
 	_director.ship_rescued.connect(_on_ship_rescued)
+	_ships = [_ship]
 	_ship.died.connect(_on_ship_died)
 	_hud.pause_pressed.connect(_request_pause)
 	_hud.mute_pressed.connect(_toggle_mute)
@@ -421,8 +452,9 @@ func apply_touch_layout() -> void:
 # --- run lifecycle ----------------------------------------------------
 func _reload_settings() -> void:
 	_cfg = GameSettings.load_all()
-	if is_instance_valid(_ship):
-		_ship.configure(int(_cfg.get("max_shots", 2)))
+	for s in _ships:
+		if is_instance_valid(s):
+			s.configure(int(_cfg.get("max_shots", 2)))
 	# Difficulty only ever fed StageDirector's dive timing (see game_settings.gd's
 	# dive_params: first-dive delay, min/max seconds between dives, max
 	# concurrent divers) — nothing else keys off it. configure() just merges
@@ -499,12 +531,29 @@ func _new_run() -> void:
 	_last_kill_points = 0
 	_achievements_collected = 0
 	_kill_stats = []
-	_ship.deactivate_hyper_ammo()  # a fresh game never starts with a leftover buff
+	_coop = int(_cfg.get("players", 1)) == 2 and bool(_cfg.get("coop", false))
+	_setup_ships()
+	# Co-op is ONE team game (shared score/stage), not two alternating players.
+	_num_players = 1 if _coop else clampi(int(_cfg.get("players", 1)), 1, GameSettings.PLAYERS_MAX)
+	_cur = 0
+	_out = [false, false]
+	_players = []
+	for i in _num_players:
+		_players.append(_fresh_player())
+	_hud.set_player_tag("P1" if _num_players == 2 else "")
+	for s in _ships:
+		s.deactivate_hyper_ammo()  # a fresh game never starts with a leftover buff
 	_director.configure(GameSettings.dive_params(int(_cfg.get("difficulty", 1))))
 
 	_clear_board()
 	_hud.set_score(0)
-	_hud.set_lives(_lives)
+	if _coop:
+		_coop_lives = [_lives, _lives]
+		_waiting = [false, false]
+		_pending_twins = [false, false]
+		_hud.set_coop_lives(_lives, _lives)
+	else:
+		_hud.set_single_lives(_lives)
 	_hud.clear_bonus_icons()
 	_hud.set_playing(true)
 	_menus.hide_all()
@@ -519,13 +568,17 @@ func _new_run() -> void:
 		if _snd.has_clip("start-first-level-music"):
 			_snd.play("start-first-level-music")
 			_intro_gate_active = true
-	_ship.visible = false
-	_ship._alive = false  # blocks shoot() during the materialize animation below
-	_ship.set_deferred("monitoring", false)
+	var spawn_at: Array = []
+	for s in _ships:
+		s.visible = false
+		s._alive = false  # blocks shoot() during the materialize animation below
+		s.set_deferred("monitoring", false)
+		spawn_at.append(_ship_spawn_pos(s))
 	_hud.flash_banner("READY")
-	await _play_reconstruct(_ship_spawn_pos())
+	await _play_reconstruct_many(spawn_at)
 	_hud.hide_banner()
-	_ship.respawn()
+	for s in _ships:
+		s.respawn()
 	_start_ready()
 
 ## Plays the ship-(re)construction.gif materialize animation at `at` and waits
@@ -555,8 +608,51 @@ func _play_explosion(at: Vector2) -> void:
 
 ## Where the ship reappears — always horizontally centered (respawn() does
 ## the same), at whatever y the ship scene was authored with.
-func _ship_spawn_pos() -> Vector2:
-	return Vector2(_ship.viewport_width * 0.5, _ship.position.y)
+func _ship_spawn_pos(s: Ship = null) -> Vector2:
+	var ship: Ship = s if s != null else _ship
+	return Vector2(ship.viewport_width * ship.home_x_frac, ship.position.y)
+
+## Both ships materialize at once at a co-op run start — one wait for all of
+## them. `pending` is an Array so the lambdas share it by reference (a plain
+## int would be captured by value, see the Bonus Level counter bug in
+## CLAUDE.md).
+func _play_reconstruct_many(ats: Array) -> void:
+	var pending := [ats.size()]
+	for at in ats:
+		var r := RECONSTRUCT_SCENE.instantiate()
+		add_child(r)
+		r.global_position = at
+		r.build_done.connect(func(): pending[0] -= 1)
+	while pending[0] > 0:
+		await get_tree().process_frame
+
+## Which ships fly this run: [_ship] alone, or [_ship, _ship2] in co-op. The
+## second Ship is created lazily and parked (out of the "player" group, hidden,
+## no collisions) whenever a non-co-op game runs.
+func _setup_ships() -> void:
+	if _coop:
+		if not is_instance_valid(_ship2):
+			_ship2 = SHIP_SCENE.instantiate()
+			_ship2.player_index = 1
+			add_child(_ship2)
+			_ship2.position = Vector2(DESIGN_WIDTH * 0.66, _ship.position.y)
+			(_ship2.get_node("Sprite2D") as Sprite2D).modulate = Color(0.6, 1.0, 0.72)
+			_ship2.died.connect(_on_coop_ship_died.bind(1))
+		if not InputMap.has_action("p1_left"):
+			CoopInput.build()
+		_ship2.unpark()
+		_ship.home_x_frac = 0.34
+		_ship2.home_x_frac = 0.66
+		_ship.set_coop_actions(true)
+		_ship2.set_coop_actions(true)
+		_ship2.configure(int(_cfg.get("max_shots", 2)))
+		_ships = [_ship, _ship2]
+	else:
+		if is_instance_valid(_ship2):
+			_ship2.park()
+		_ship.home_x_frac = 0.5
+		_ship.set_coop_actions(false)
+		_ships = [_ship]
 
 func _request_pause() -> void:
 	if _paused or _state == TITLE or _state == GAME_OVER:
@@ -580,6 +676,96 @@ func _resume() -> void:
 	_menus.stop_menu_music()
 	_hud.set_playing(true)
 	get_tree().paused = false
+
+# --- 2-player state ---------------------------------------------------
+func _fresh_player() -> Dictionary:
+	return {"score": 0, "stage": 1, "lives": int(_cfg.get("lives", 3)) - 1,
+		"next_extra": _extra_step, "next_boss": _boss_interval,
+		"extra_step": _extra_step, "boss_interval": _boss_interval,
+		"rescues": 0, "rescue_points": 0, "achievements": 0, "kill_stats": [],
+		"bonus": {"icons": [], "indices": [], "laps": 0, "pending": false}}
+
+func _save_player() -> void:
+	var p: Dictionary = _players[_cur]
+	p.score = _score
+	p.stage = _stage
+	p.lives = _lives
+	p.next_extra = _next_extra
+	p.next_boss = _next_boss_score
+	p.extra_step = _extra_step
+	p.boss_interval = _boss_interval
+	p.rescues = _rescues
+	p.rescue_points = _rescue_points
+	p.achievements = _achievements_collected
+	p.kill_stats = _kill_stats
+	p.bonus = _hud.get_bonus_state()
+
+func _load_player() -> void:
+	var p: Dictionary = _players[_cur]
+	_score = p.score
+	_stage = p.stage
+	_lives = p.lives
+	_next_extra = p.next_extra
+	_next_boss_score = p.next_boss
+	# Settings may have been edited (pause menu) while the other player was
+	# up — their stored thresholds then no longer mean anything.
+	if int(p.extra_step) != _extra_step:
+		_next_extra = (_extra_step * (floori(float(_score) / _extra_step) + 1)) if _extra_step > 0 else 0
+	if int(p.boss_interval) != _boss_interval:
+		_next_boss_score = (_boss_interval * (floori(float(_score) / _boss_interval) + 1)) if _boss_interval > 0 else 0
+	_rescues = p.rescues
+	_rescue_points = p.rescue_points
+	_achievements_collected = p.achievements
+	_kill_stats = p.kill_stats
+	_hud.set_player_tag("P%d" % (_cur + 1))
+	_hud.set_score(_score)
+	_hud.set_lives(_lives)
+	_hud.set_bonus_state(p.bonus)
+
+## Hands the game over to the other player: the lost ship's owner is saved,
+## the board is wiped, and the other player's stage starts from its fly-in
+## behind a "PLAYER n" banner.
+func _switch_player(was_bonus: bool) -> void:
+	_state = READY  # BEFORE clearing: keeps _process()'s stage-clear check out of the empty board
+	_bonus_token += 1
+	_director.abort()
+	_intro_gate_active = false
+	if was_bonus:
+		_stage += 1  # the cut-short bonus level still counts as played, like in single-player
+	_save_player()
+	_cur = 1 - _cur
+	_load_player()
+	_ship.deactivate_hyper_ammo()
+	_pending_twin = false
+	_clear_board()
+	_hud.flash_banner("PLAYER %d" % (_cur + 1))
+	await get_tree().create_timer(Hud.BANNER_TOTAL, false).timeout
+	if not is_instance_valid(self) or _state != READY:
+		return
+	_hud.hide_banner()
+	await _play_reconstruct(_ship_spawn_pos())
+	if not is_instance_valid(self) or _state != READY:
+		return
+	_ship.respawn()
+	_start_ready()
+
+## End of the run (all ships gone, or the win score reached): one summary per
+## player in 2-player mode (see menus.gd::show_run_results()).
+func _show_results(won: bool, heading_override := "") -> void:
+	_save_player()
+	var results: Array = []
+	for i in _players.size():
+		var p: Dictionary = _players[i]
+		results.append({"score": p.score, "stage": p.stage, "won": won and i == _cur,
+			"rescues": p.rescues, "rescue_points": p.rescue_points,
+			"achievements": p.achievements, "laps": int(p.bonus.laps),
+			"kill_stats": p.kill_stats,
+			"heading": heading_override if heading_override != "" else (("PLAYER %d" % (i + 1)) if _players.size() > 1 else "")})
+	if results.size() == 1:
+		var r: Dictionary = results[0]
+		_menus.show_run_summary(r.score, r.stage, r.won, r.rescues, r.rescue_points, r.achievements, r.laps, r.kill_stats, r.heading)
+	else:
+		_menus.show_run_results(results)
 
 # --- stage flow -----------------------------------------------------
 ## Breathing room between the jingles of a stage change: level-cleared ->
@@ -642,7 +828,12 @@ func _start_ready() -> void:
 ## to the next normal stage. Aborts cleanly if the run leaves BONUS meanwhile
 ## (pause doesn't count — the tree itself freezes then; this only guards
 ## against title/game-over).
+func _bonus_stale(token: int) -> bool:
+	return token != _bonus_token or _state != BONUS or _bonus_abort
+
 func _start_bonus_level() -> void:
+	_bonus_token += 1
+	var token := _bonus_token
 	_bonus_hits = 0
 	# Not a fixed BONUS_WAVE_COUNT * BONUS_ENEMIES_PER_WAVE any more — a Twin
 	# ship doubles a wave's actual enemy count (see _run_bonus_wave()), and
@@ -665,14 +856,14 @@ func _start_bonus_level() -> void:
 		{"kind": EnemyKinds.ZAKO, "x": vp.x * 0.50, "speed": BONUS_WAVE_SPEEDS[2]},
 	]
 	for wd in wave_defs:
-		if _state != BONUS or _bonus_abort:
+		if _bonus_stale(token):
 			return
-		await _run_bonus_wave(wd["kind"], wd["x"], wd["speed"])
-	if _state != BONUS or _bonus_abort:
+		await _run_bonus_wave(wd["kind"], wd["x"], wd["speed"], token)
+	if _bonus_stale(token):
 		return
-	_finish_bonus_level()
+	_finish_bonus_level(token)
 
-func _run_bonus_wave(kind: int, column_x: float, base_speed: float) -> void:
+func _run_bonus_wave(kind: int, column_x: float, base_speed: float, token: int) -> void:
 	if _snd:
 		_snd.play("enemy-wave1")
 	var vis := EnemyKinds.pick_visual(kind, _stage)
@@ -684,7 +875,10 @@ func _run_bonus_wave(kind: int, column_x: float, base_speed: float) -> void:
 	# line. Twin ship (two guns) gets a second parallel column instead of one
 	# (user request) — checked fresh per wave since a ram can revert the Twin
 	# bonus mid-level.
-	var twin: bool = is_instance_valid(_ship) and _ship._twin
+	var twin := false
+	for s in _ships:
+		if s._twin:
+			twin = true
 	var columns: Array[float] = [column_x]
 	if twin:
 		columns = [column_x - BONUS_TWIN_ROW_GAP * 0.5, column_x + BONUS_TWIN_ROW_GAP * 0.5]
@@ -696,7 +890,7 @@ func _run_bonus_wave(kind: int, column_x: float, base_speed: float) -> void:
 		curves.append(curve)
 	_bonus_total += BONUS_ENEMIES_PER_WAVE * columns.size()
 	for i in BONUS_ENEMIES_PER_WAVE:
-		if _state != BONUS or _bonus_abort:
+		if _bonus_stale(token):
 			return
 		for curve in curves:
 			var e := BONUS_ENEMY_SCENE.instantiate()
@@ -723,13 +917,13 @@ func _run_bonus_wave(kind: int, column_x: float, base_speed: float) -> void:
 	# notices a wave got cleared" bug the user reported.
 	while not get_tree().get_nodes_in_group("bonus_wave_active").is_empty():
 		await get_tree().process_frame
-		if _state != BONUS or _bonus_abort:
+		if _bonus_stale(token):
 			return
 	await get_tree().create_timer(BONUS_WAVE_PAUSE, false).timeout
 
 func _on_bonus_enemy_killed(points: int) -> void:
 	_bonus_hits += 1
-	if _ship._hyper_ammo:
+	if _any_hyper():
 		points *= 2
 	_bonus_points += points
 	_score += points
@@ -740,7 +934,7 @@ func _on_bonus_enemy_killed(points: int) -> void:
 ## ship never actually left the screen during a Bonus Level, so there's
 ## nothing to materialize; just show the banner and go straight to the next
 ## stage's "STAGE n" sequence.
-func _finish_bonus_level() -> void:
+func _finish_bonus_level(token: int) -> void:
 	var perfect := _bonus_hits == _bonus_total
 	# A raw "N/18" hit count could read wrong even when every enemy WAS shot
 	# down (a since-fixed bug briefly double-counted some kills, e.g. "23/18"
@@ -750,7 +944,7 @@ func _finish_bonus_level() -> void:
 	if _snd:
 		_snd.play("bonus-stage-cleared" if perfect else "level-cleared")
 	await get_tree().create_timer(Hud.BANNER_TOTAL, false).timeout
-	if not is_instance_valid(self) or _state != BONUS:
+	if not is_instance_valid(self) or _state != BONUS or token != _bonus_token:
 		return
 	_hud.hide_banner()
 	_stage += 1
@@ -761,12 +955,12 @@ func _finish_bonus_level() -> void:
 ## above, except it never shows "PERFECT!" (the level was cut short, not
 ## completed on its own terms) and doesn't wait on the by-then-already-stopped
 ## wave coroutine (_bonus_abort took care of that in _on_ship_died()).
-func _finish_bonus_level_early() -> void:
+func _finish_bonus_level_early(token: int) -> void:
 	_hud.flash_banner("BONUS: +%d" % _bonus_points)
 	if _snd:
 		_snd.play("level-cleared")
 	await get_tree().create_timer(Hud.BANNER_TOTAL, false).timeout
-	if not is_instance_valid(self) or _state != BONUS:
+	if not is_instance_valid(self) or _state != BONUS or token != _bonus_token:
 		return
 	_hud.hide_banner()
 	_stage += 1
@@ -798,7 +992,7 @@ const MAX_LIVES_RUNTIME := 99
 func _on_enemy_killed(points: int, kind: int, variant_idx: int, was_carrying_captive: bool) -> void:
 	# Hyper-Ammo (see ship.gd::activate_hyper_ammo) doubles points per kill too,
 	# not just the shot count — user request, on top of the existing beam buff.
-	if _ship._hyper_ammo:
+	if _any_hyper():
 		points *= 2
 	_last_kill_points = points
 	var stat := _kill_stat_entry(kind, variant_idx, was_carrying_captive)
@@ -806,10 +1000,9 @@ func _on_enemy_killed(points: int, kind: int, variant_idx: int, was_carrying_cap
 	stat.points += points
 	_score += points
 	_hud.set_score(_score)
-	while _extra_step > 0 and _score >= _next_extra and _lives < MAX_LIVES_RUNTIME:
+	while _extra_step > 0 and _score >= _next_extra and _extra_life_has_room():
 		_next_extra += _extra_step
-		_lives = mini(_lives + 1, MAX_LIVES_RUNTIME)
-		_hud.set_lives(_lives)
+		_grant_extra_life()
 		if _snd:
 			_snd.play("extra")
 	_check_boss_threshold()
@@ -856,7 +1049,7 @@ func _check_win() -> void:
 	_state = GAME_OVER
 	_director.stop_attacks()
 	_hud.set_playing(false)
-	_menus.show_run_summary(_score, _stage, true, _rescues, _rescue_points, _achievements_collected, _hud._bonus_laps, _kill_stats)
+	_show_results(true, "TEAM" if _coop else "")
 	get_tree().paused = true
 
 ## Undoes _check_win() above if the win screen's own "Einstellungen" button
@@ -869,6 +1062,7 @@ func _check_win() -> void:
 ## never cleared the board or touched the ship, only paused/stopped things.
 func _revive_after_win_edit() -> void:
 	_ended_by_win = false
+	_menus.cancel_results()  # 2 players: the other player's queued summary is moot
 	_state = FORMATION
 	_director.begin_attacks()
 	_hud.set_playing(true)
@@ -878,7 +1072,7 @@ func _revive_after_win_edit() -> void:
 
 var _pending_twin := false
 
-func _on_ship_rescued(at_position: Vector2) -> void:
+func _on_ship_rescued(at_position: Vector2, owner_idx: int = 0) -> void:
 	# The Boss that had been carrying a captured ship just got destroyed — the
 	# prisoner comes home. Common edge case: a laser fired just before you got
 	# captured lands on that same boss a moment later, so the ship rescue
@@ -890,6 +1084,23 @@ func _on_ship_rescued(at_position: Vector2) -> void:
 	_spawn_score_popup(at_position, "+%d" % _last_kill_points)
 	if _state == GAME_OVER:
 		return
+	if _coop:
+		# The reward goes to the player whose ship was captured, whoever fired
+		# the freeing shot: back into the game if they were waiting, a Twin ship
+		# if they are flying, or queued for their respawn already on its way.
+		var idx := clampi(owner_idx, 0, 1)
+		if _snd:
+			_snd.play("extra")
+		if _waiting[idx]:
+			_waiting[idx] = false
+			await _play_reconstruct(_ship_spawn_pos(_ships[idx]))
+			if is_instance_valid(self) and _state != GAME_OVER and _state != TITLE:
+				_ships[idx].respawn()
+		elif _ships[idx]._alive:
+			_ships[idx].become_twin()
+		else:
+			_pending_twins[idx] = true
+		return
 	if is_instance_valid(_ship) and _ship._alive:
 		_ship.become_twin()
 	else:
@@ -898,6 +1109,9 @@ func _on_ship_rescued(at_position: Vector2) -> void:
 		_snd.play("extra")
 
 func _on_ship_died(show_explosion: bool) -> void:
+	if _coop:
+		await _on_coop_ship_died(show_explosion, 0)
+		return
 	# Stop the dive/capture lottery for the whole death sequence (explosion +
 	# reconstruct/respawn) — enemies previously kept diving, throwing bombs,
 	# and making noise the entire time despite the player having no ship to
@@ -911,6 +1125,7 @@ func _on_ship_died(show_explosion: bool) -> void:
 	# see _bonus_abort's own doc comment for why) and acted on further down,
 	# once the ship has actually respawned.
 	var was_bonus := _state == BONUS
+	var bonus_token := _bonus_token
 	if was_bonus:
 		_bonus_abort = true
 		for n in get_tree().get_nodes_in_group("bonus_wave_active"):
@@ -925,17 +1140,26 @@ func _on_ship_died(show_explosion: bool) -> void:
 	# the reserve), so game-over is "no reserve left to draw from", checked
 	# BEFORE decrementing — decrementing an already-zero reserve would send it
 	# negative and misreport as "one ship left" on the next run's display.
-	if _lives <= 0:
+	var cur_out := _lives <= 0
+	if cur_out:
+		_out[_cur] = true
+	var other_up: bool = _num_players == 2 and not _out[1 - _cur]
+	if cur_out and not other_up:
 		_state = GAME_OVER
 		await get_tree().create_timer(GAME_OVER_DELAY, false).timeout
 		if not is_instance_valid(self) or _state != GAME_OVER:
 			return
 		_hud.set_playing(false)
-		_menus.show_run_summary(_score, _stage, false, _rescues, _rescue_points, _achievements_collected, _hud._bonus_laps, _kill_stats)
+		_show_results(false)
 		get_tree().paused = true
 		return
-	_lives -= 1
-	_hud.set_lives(_lives)
+	if not cur_out:
+		_lives -= 1
+		_hud.set_lives(_lives)
+	if other_up:
+		# 2 players: every lost ship hands the game to the other player.
+		await _switch_player(was_bonus)
+		return
 	await _play_reconstruct(_ship_spawn_pos())
 	if is_instance_valid(_ship) and _state != GAME_OVER and _state != TITLE:
 		_ship.respawn()
@@ -944,7 +1168,84 @@ func _on_ship_died(show_explosion: bool) -> void:
 			_ship.become_twin()
 		_director.resume_attacks()
 		if was_bonus:
-			await _finish_bonus_level_early()
+			await _finish_bonus_level_early(bonus_token)
+
+# --- co-op ------------------------------------------------------------
+func _any_hyper() -> bool:
+	for s in _ships:
+		if s._hyper_ammo:
+			return true
+	return false
+
+func _extra_life_has_room() -> bool:
+	if _coop:
+		return _coop_lives[0] < MAX_LIVES_RUNTIME or _coop_lives[1] < MAX_LIVES_RUNTIME
+	return _lives < MAX_LIVES_RUNTIME
+
+## An extra life goes to whichever player has fewer reserve ships (player 1 on
+## a tie) — kills aren't attributed to a shooter, and this evens things out.
+func _grant_extra_life() -> void:
+	if _coop:
+		var i := 0 if _coop_lives[0] <= _coop_lives[1] else 1
+		if _coop_lives[i] >= MAX_LIVES_RUNTIME:
+			i = 1 - i
+		_coop_lives[i] += 1
+		_hud.set_coop_lives(_coop_lives[0], _coop_lives[1])
+	else:
+		_lives = mini(_lives + 1, MAX_LIVES_RUNTIME)
+		_hud.set_lives(_lives)
+
+## "In play" = alive, or on its way back (respawning, or being revived) — i.e.
+## not out of ships and not waiting to be freed.
+func _coop_in_play(idx: int) -> bool:
+	return not _out[idx] and not _waiting[idx]
+
+## A co-op ship was lost (ship 2 is wired to this directly, ship 1 via
+## _on_ship_died()). Each player runs their own death sequence while the other
+## keeps flying; the game ends only when nobody is left to fly.
+func _on_coop_ship_died(show_explosion: bool, idx: int) -> void:
+	var ship: Ship = _ships[idx]
+	var partner_up: bool = _coop_in_play(1 - idx) and _ships[1 - idx]._alive
+	# The Bonus Level only ends early when this loss leaves no ship flying (in
+	# single-player any loss ends it — see _on_ship_died()'s original comment).
+	var was_bonus: bool = _state == BONUS and not partner_up
+	var bonus_token := _bonus_token
+	if was_bonus:
+		_bonus_abort = true
+		for n in get_tree().get_nodes_in_group("bonus_wave_active"):
+			n.queue_free()
+	if not partner_up:
+		_director.stop_attacks()  # nobody left to shoot back with
+	if show_explosion:
+		await _play_explosion(ship.global_position)
+	var captured := not show_explosion
+	if _coop_lives[idx] <= 0:
+		if captured and _coop_in_play(1 - idx):
+			# No reserve left, but the partner is still flying and can free this
+			# ship by shooting the carrier — wait instead of being out.
+			_waiting[idx] = true
+			return
+		_out[idx] = true
+		if not _coop_in_play(1 - idx):
+			_state = GAME_OVER
+			await get_tree().create_timer(GAME_OVER_DELAY, false).timeout
+			if not is_instance_valid(self) or _state != GAME_OVER:
+				return
+			_hud.set_playing(false)
+			_show_results(false, "TEAM")
+			get_tree().paused = true
+		return
+	_coop_lives[idx] -= 1
+	_hud.set_coop_lives(_coop_lives[0], _coop_lives[1])
+	await _play_reconstruct(_ship_spawn_pos(ship))
+	if is_instance_valid(ship) and _state != GAME_OVER and _state != TITLE:
+		ship.respawn()
+		if _pending_twins[idx]:
+			_pending_twins[idx] = false
+			ship.become_twin()
+		_director.resume_attacks()
+		if was_bonus:
+			await _finish_bonus_level_early(bonus_token)
 
 # --- input --------------------------------------------------------
 func _input(event: InputEvent) -> void:
@@ -993,8 +1294,12 @@ func _process(delta: float) -> void:
 	# an achievement shouldn't be able to linger into — or get orphaned by —
 	# the next stage's fly-in) — it either gets collected or falls off-screen
 	# and frees itself (bonus_item.gd), either way leaving the group.
+	# `_ship._alive`: no stage clear while the ship is dead/respawning — with 2
+	# players the death is about to hand the game over, and a clear racing it
+	# would start a second stage sequence on the other player's board.
 	if get_tree().get_nodes_in_group("enemy").is_empty() \
-		and get_tree().get_nodes_in_group("bonus_item").is_empty():
+		and get_tree().get_nodes_in_group("bonus_item").is_empty() \
+		and Ship.any_alive(get_tree()) != null:
 		# Bombs already in flight from this stage are independent of the enemy
 		# that threw them (see bomb.gd) and would otherwise keep falling —
 		# and keep being able to hit the ship — into the next stage's "STAGE n"
@@ -1004,7 +1309,8 @@ func _process(delta: float) -> void:
 		if _snd:
 			_snd.play("level-cleared")
 		_stage += 1
-		_ship.deactivate_hyper_ammo()  # Hyper-Ammo only lasts "for the rest of this stage"
+		for s in _ships:
+			s.deactivate_hyper_ammo()  # Hyper-Ammo only lasts "for the rest of this stage"
 		_start_ready()
 		return
 	_bonus_t -= delta
@@ -1045,7 +1351,8 @@ func _on_bonus_collected(points: int, icon: Texture2D, icon_index: int, at_posit
 	# achievement_00 specifically ("the flagship one") grants Hyper-Ammo — two
 	# closely-spaced beams per shot — for the rest of the current stage.
 	if icon_index == 0:
-		_ship.activate_hyper_ammo()
+		for s in _ships:
+			s.activate_hyper_ammo()
 	if _snd:
 		_snd.play("bonus-stage-cleared" if lap_done else "extra")
 

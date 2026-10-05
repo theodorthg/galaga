@@ -49,6 +49,7 @@ const HELP_DIR := "res://assets/graphics/help/"
 const HELP_PAGES_DESKTOP := [
 	{"file": "keyboard", "h": "Controls — Keyboard/Gamepad"},
 	{"file": "mouse", "h": "Controls — Mouse"},
+	{"file": "coop", "h": "2 Players"},
 	{"file": "goal", "h": "Goal & Points"},
 	{"file": "difficulty", "h": "Difficulty Levels"},
 	{"file": "capture", "h": "Boss Capture"},
@@ -96,6 +97,7 @@ func _ready() -> void:
 	_screens["gameover"] = _build_gameover()
 	_screens["summary"] = _build_summary()
 	_screens["highscores"] = _build_highscores()
+	_screens["join"] = _build_join()
 	for s in _screens.values():
 		_root.add_child(s)
 	hide_all()
@@ -277,10 +279,27 @@ func show_game_over(score: int, stage: int, won := false) -> void:
 ## Fame rank if they'd qualify. Only after "Weiter" does the player reach the
 ## actual name-entry screen. `won` distinguishes the "Sieg bei X Punkten"
 ## ending from a regular game over, same as show_game_over().
-func show_run_summary(score: int, stage: int, won: bool, rescues: int, rescue_points: int, achievements: int, laps: int, kill_stats: Array) -> void:
-	_pending = {"score": score, "stage": stage, "won": won}
-	_fill_summary(score, won, rescues, rescue_points, achievements, laps, kill_stats)
+func show_run_summary(score: int, stage: int, won: bool, rescues: int, rescue_points: int, achievements: int, laps: int, kill_stats: Array, heading := "") -> void:
+	_pending = {"score": score, "stage": stage, "won": won, "heading": heading}
+	_fill_summary(score, won, rescues, rescue_points, achievements, laps, kill_stats, heading)
 	_swap("summary")
+
+## 2-player game over: one summary + name-entry round per player, in order
+## (each dict has the show_run_summary() arguments plus "heading"). While more
+## results are queued, the game-over screen only offers "Next player" so no
+## qualifying score can be skipped.
+var _result_queue: Array = []
+
+func show_run_results(results: Array) -> void:
+	_result_queue = results.duplicate()
+	_show_next_result()
+
+func cancel_results() -> void:
+	_result_queue.clear()
+
+func _show_next_result() -> void:
+	var r: Dictionary = _result_queue.pop_front()
+	show_run_summary(r.score, r.stage, r.won, r.rescues, r.rescue_points, r.achievements, r.laps, r.kill_stats, r.heading)
 
 ## Reachable from the title screen AND, since the twelfth playtest round, the
 ## in-game pause menu (user request) — a read-only look at the board, no name
@@ -522,13 +541,107 @@ func _build_title() -> Control:
 	var box := _box(s)
 	box.add_child(_title_label("GALAGA", 52, ACCENT))
 	box.add_child(_spacer(18))
-	box.add_child(_button("Play", func(): start_game.emit()))
+	box.add_child(_button("Play", func(): _play_pressed()))
 	box.add_child(_button("Settings", func(): _open_settings("title")))
 	box.add_child(_button("High Scores", func(): show_highscores("title")))
 	box.add_child(_button("How to Play", func(): _open_help("title")))
 	if not IS_WEB:
 		box.add_child(_button("Exit", func(): get_tree().quit()))
 	return s
+
+## Co-op needs to know who flies with which device first (join screen below);
+## every other mode starts straight away.
+func _play_pressed() -> void:
+	var c := GameSettings.load_all()
+	if int(c.players) == 2 and bool(c.coop):
+		show_join()
+	else:
+		start_game.emit()
+
+# ---------------------------------------------------------------- co-op join
+## Each player presses fire on THEIR OWN device (keyboard half or gamepad) —
+## see coop_input.gd. The slots fill independently; once both are taken the
+## p1_*/p2_* actions are built and the game starts.
+var _join_p1 := ""   # "" = still free, else a short description
+var _join_p2 := ""
+var _join_p1_pad := -1
+var _join_label: Label
+var _join_done := false
+
+func _build_join() -> Control:
+	var s := _screen()
+	var box := _box(s)
+	box.add_child(_title_label("CO-OP", 36))
+	box.add_child(_spacer(6))
+	box.add_child(_title_label("Both players: press FIRE\non your own device", 20))
+	box.add_child(_spacer(6))
+	_join_label = _title_label("", 20, ACCENT)
+	box.add_child(_join_label)
+	box.add_child(_spacer(6))
+	box.add_child(_title_label("Keyboard: P1 Space / W (move A D),\nP2 Up / K (move arrows).\nGamepad: A button.", 15))
+	box.add_child(_spacer(12))
+	box.add_child(_button("Back", func(): _swap("title"), true))
+	return s
+
+func show_join() -> void:
+	_join_p1 = ""
+	_join_p2 = ""
+	_join_p1_pad = -1
+	_join_done = false
+	_refresh_join()
+	_swap("join")
+
+func _refresh_join() -> void:
+	_join_label.text = "Player 1:  %s\nPlayer 2:  %s" % [
+		_join_p1 if _join_p1 != "" else "press fire…",
+		_join_p2 if _join_p2 != "" else "press fire…"]
+
+## Runs from _input() (before the GUI, so Space doesn't also press the focused
+## "Back" button). Pure and re-entrant so it can be driven with synthetic
+## events in tests.
+func _join_input(event: InputEvent) -> void:
+	if _join_done:
+		return
+	var p1_key := false
+	var p2_key := false
+	var pad := -1
+	if event is InputEventKey and event.pressed and not event.echo:
+		var code: int = event.physical_keycode if event.physical_keycode != KEY_NONE else event.keycode
+		p1_key = code in CoopInput.JOIN_P1_KEYS
+		p2_key = code in CoopInput.JOIN_P2_KEYS
+	elif event is InputEventJoypadButton and event.pressed and event.button_index == JOY_BUTTON_A:
+		pad = event.device
+	else:
+		return
+	if p1_key and _join_p1 == "":
+		_join_p1 = "keyboard"
+	elif p2_key and _join_p2 == "":
+		_join_p2 = "keyboard"
+		CoopInput.p2_pad = -1
+	elif pad >= 0:
+		if _join_p1 == "":
+			_join_p1 = "gamepad"
+			_join_p1_pad = pad
+		elif _join_p2 == "" and pad != _join_p1_pad:
+			_join_p2 = "gamepad"
+			CoopInput.p2_pad = pad
+		else:
+			return
+	else:
+		return
+	get_viewport().set_input_as_handled()
+	_refresh_join()
+	if _join_p1 != "" and _join_p2 != "":
+		_join_done = true
+		# a short beat so both players see the confirmation
+		await get_tree().create_timer(0.6, true).timeout
+		if is_instance_valid(self) and _screens["join"].visible:
+			CoopInput.build()
+			start_game.emit()
+
+func _input(event: InputEvent) -> void:
+	if _screens.has("join") and _screens["join"].visible:
+		_join_input(event)
 
 # ---------------------------------------------------------------- pause
 func _build_pause() -> Control:
@@ -589,6 +702,7 @@ func _build_settings() -> Control:
 	grid.add_theme_constant_override("h_separation", 8)
 	grid.add_theme_constant_override("v_separation", 12)
 	box.add_child(grid)
+	_players_stepper = _add_stepper(grid, "Players", _fmt_players, _step_players)
 	_lives_stepper = _add_stepper(grid, "Lives", _fmt_lives, _step_lives, _set_lives_text)
 	_add_stepper(grid, "Extra life", _fmt_extra, _step_extra, _set_extra_text)
 	_add_stepper(grid, "Boss every X points", _fmt_boss_interval, _step_boss_interval, _set_boss_interval_text)
@@ -615,6 +729,8 @@ func _build_settings() -> Control:
 func _reset_defaults() -> void:
 	if _return_to != "pause" and _return_to != "summary":
 		_cfg.lives = 3
+		_cfg.players = 1
+		_cfg.coop = false
 	_cfg.extra_life = 5000
 	_cfg.boss_interval = 10000
 	_cfg.win_score = 0
@@ -653,6 +769,20 @@ func _open_settings(from: String) -> void:
 	_swap("settings")
 
 var _lives_stepper := {}
+var _players_stepper := {}
+
+## Three modes in one stepper: 1 player / 2 players taking turns (the arcade
+## way) / 2 players at once (co-op). Stored as players (1|2) + coop (bool).
+func _players_mode() -> int:
+	if int(_cfg.players) < 2:
+		return 0
+	return 2 if bool(_cfg.coop) else 1
+func _fmt_players() -> String:
+	return ["1", "2 (turns)", "2 (co-op)"][_players_mode()]
+func _step_players(d: int) -> void:
+	var m := clampi(_players_mode() + d, 0, 2)
+	_cfg.players = 1 if m == 0 else 2
+	_cfg.coop = m == 2
 
 func _refresh_settings() -> void:
 	var grid := _box(_screens["settings"]).get_node("Grid")
@@ -683,6 +813,10 @@ func _update_lives_lock() -> void:
 		val.editable = not locked
 		val.focus_mode = Control.FOCUS_NONE if locked else Control.FOCUS_ALL
 	val.modulate = Color(1, 1, 1, 0.4) if locked else Color(1, 1, 1, 1)
+	# Player count is likewise only read once per run (game.gd::_new_run()).
+	_players_stepper.left.disabled = locked
+	_players_stepper.right.disabled = locked
+	_players_stepper.val.modulate = val.modulate
 
 func _close_sub() -> void:
 	GameSettings.save(_cfg)
@@ -986,11 +1120,15 @@ func _build_gameover() -> Control:
 	box.add_child(_hof_box)
 
 	box.add_child(_spacer(8))
+	_next_player_btn = _button("Next player", func(): _maybe_auto_commit(); _show_next_result())
+	box.add_child(_next_player_btn)
 	_play_again_btn = _button("Play Again", func(): _maybe_auto_commit(); start_game.emit())
 	box.add_child(_play_again_btn)
-	box.add_child(_button("Main Menu", func(): _maybe_auto_commit(); to_title.emit()))
+	_main_menu_btn = _button("Main Menu", func(): _maybe_auto_commit(); to_title.emit())
+	box.add_child(_main_menu_btn)
 	if not IS_WEB:
-		box.add_child(_button("Exit", func(): _maybe_auto_commit(); get_tree().quit()))
+		_exit_btn = _button("Exit", func(): _maybe_auto_commit(); get_tree().quit())
+		box.add_child(_exit_btn)
 	return s
 
 ## A qualifying score that's never actually entered (player leaves the screen
@@ -1004,6 +1142,9 @@ func _maybe_auto_commit() -> void:
 		_commit_score()
 
 var _pending := {}
+var _next_player_btn: Button
+var _main_menu_btn: Button
+var _exit_btn: Button
 
 # ---------------------------------------------------------------- run summary
 func _build_summary() -> Control:
@@ -1065,9 +1206,10 @@ func _kill_stat_col(icon: Texture2D, count: int, points: int) -> VBoxContainer:
 	col.add_child(_title_label("%d×\n%d pts" % [count, points], 14))
 	return col
 
-func _fill_summary(score: int, won: bool, rescues: int, rescue_points: int, achievements: int, laps: int, kill_stats: Array) -> void:
+func _fill_summary(score: int, won: bool, rescues: int, rescue_points: int, achievements: int, laps: int, kill_stats: Array, heading := "") -> void:
 	var box := _box(_screens["summary"])
-	(box.get_node("Title") as Label).text = "YOU WIN!" if won else "GAME OVER"
+	var head := "YOU WIN!" if won else "GAME OVER"
+	(box.get_node("Title") as Label).text = (heading + (" WINS!" if won else "")) if (heading != "" and heading != "TEAM") else head
 	var kills_grid := box.get_node("Kills") as GridContainer
 	for c in kills_grid.get_children():
 		c.queue_free()
@@ -1096,10 +1238,17 @@ func _fill_summary(score: int, won: bool, rescues: int, rescue_points: int, achi
 		rank_l.text = "New high score — rank %d!" % rank
 
 func _fill_gameover(score: int, stage: int, won := false) -> void:
-	_pending = {"score": score, "stage": stage}
+	_pending = {"score": score, "stage": stage, "heading": _pending.get("heading", "")}
 	var box := _box(_screens["gameover"])
 	(box.get_node("Title") as Label).text = "YOU WIN!" if won else "GAME OVER"
-	(box.get_node("Sub") as Label).text = "SCORE  %06d      STAGE  %d" % [score, stage]
+	var who := str(_pending.get("heading", ""))
+	(box.get_node("Sub") as Label).text = ("%s    " % who if who != "" else "") + "SCORE  %06d      STAGE  %d" % [score, stage]
+	var more := not _result_queue.is_empty()
+	_next_player_btn.visible = more
+	_play_again_btn.visible = not more
+	_main_menu_btn.visible = not more
+	if _exit_btn:
+		_exit_btn.visible = not more
 	var qualifies := HallOfFame.qualifies(score)
 	box.get_node("Entry").visible = qualifies
 	if qualifies:
@@ -1122,7 +1271,7 @@ func _commit_score() -> void:
 	# The name field just disappeared out from under whatever had focus (often
 	# itself) — hand focus to Play Again so a gamepad/keyboard user can carry
 	# straight on instead of focus hanging on a now-invisible control.
-	_play_again_btn.grab_focus()
+	(_next_player_btn if _next_player_btn.visible else _play_again_btn).grab_focus()
 	var mine := -1
 	for i in list.size():
 		if list[i].name == who and int(list[i].score) == int(_pending.score):

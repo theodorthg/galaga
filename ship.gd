@@ -1,3 +1,4 @@
+class_name Ship
 extends Area2D
 
 ## Player fighter.
@@ -59,6 +60,16 @@ const FIRE_COOLDOWN := 0.15
 ## never touch the x-axis, so this was already numerically identical to
 ## get_viewport_rect().size.x in every case that existed before that mode.
 const DESIGN_WIDTH := 540.0
+
+## 0 = the only ship (single player / alternating) or co-op player 1, 1 = co-op
+## player 2 (game.gd creates the second Ship instance only for co-op). Co-op
+## builds p1_*/p2_* actions (coop_input.gd) and points `act` at them; otherwise
+## the plain move_left/move_right/shoot actions apply, exactly as before.
+var player_index := 0
+var act := {"left": "move_left", "right": "move_right", "shoot": "shoot"}
+## Where this ship (re)appears, as a fraction of the lane width — 0.5 alone,
+## spread left/right in co-op.
+var home_x_frac := 0.5
 
 var speed := 480.0
 var ship_half_width := 34.0
@@ -144,7 +155,7 @@ func _process(delta: float) -> void:
 	if not _alive:
 		return
 
-	var dir := Input.get_axis("move_left", "move_right")
+	var dir := Input.get_axis(act.left, act.right)
 	if dir != 0.0:
 		_mouse_aim = false
 		position.x += dir * speed * delta
@@ -156,7 +167,7 @@ func _process(delta: float) -> void:
 		position.x = get_global_mouse_position().x
 	position.x = clampf(position.x, ship_half_width, viewport_width - ship_half_width)
 
-	if _touch_down or _mouse_down or Input.is_action_pressed("shoot"):
+	if _touch_down or _mouse_down or Input.is_action_pressed(act.shoot):
 		shoot()
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -165,6 +176,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	# death leave _touch_down/_mouse_down stuck true (the release event during
 	# the reconstruct animation was swallowed), which would auto-fire the
 	# instant the new ship became alive again with no fresh press at all.
+	# Mouse and touch steer ship 1 only — in co-op the second ship is keys/pad.
+	if player_index != 0:
+		return
 	if event is InputEventScreenTouch:
 		_touch_down = event.pressed
 	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
@@ -185,7 +199,11 @@ func shoot() -> void:
 	# filled a 2-shot cap and the "bonus" fired at HALF the normal rate — a
 	# downgrade (user report). Twin ships already double _max_lasers itself.
 	var cap := _max_lasers * (2 if _hyper_ammo else 1)
-	if get_tree().get_nodes_in_group("player_lasers").size() >= cap:
+	var in_flight := 0
+	for l in get_tree().get_nodes_in_group("player_lasers"):
+		if l.owner_idx == player_index:
+			in_flight += 1
+	if in_flight >= cap:
 		return
 	_fire_cooldown_t = FIRE_COOLDOWN
 	for gun_x in ([-TWIN_OFFSET, TWIN_OFFSET] if _twin else [0.0]):
@@ -199,21 +217,32 @@ func _fire_laser(x_offset: float) -> void:
 	var laser := LASER_SCENE.instantiate()
 	laser.add_to_group("player_lasers")
 	laser.accent_color = Laser.ACCENT_HYPER if _hyper_ammo else Laser.ACCENT_NORMAL
+	laser.owner_idx = player_index
 	get_parent().add_child(laser)
 	laser.global_position = global_position + Vector2(x_offset, GUN_MUZZLE_OFFSET_Y)
 	if _snd:
 		_snd.play("shoot")
 
 func _on_area_entered(area: Area2D) -> void:
-	if not _alive or _invuln > 0.0:
+	if not _alive:
 		return
 	var is_capture := area.is_in_group("capture_beam")
+	# The beam's own contact still counts during the post-respawn blink when
+	# this ship is the Boss's chosen target (_capture_invuln stops _invuln from
+	# counting down, see _process()) — otherwise a freshly respawned ship would
+	# be un-catchable and the attempt would end empty-handed.
+	if _invuln > 0.0 and not (is_capture and _capture_invuln):
+		return
 	# _capture_invuln blocks everything EXCEPT the capture beam's own contact —
 	# that contact is the capture itself (still needs to reach _destroy() below
 	# to hide the ship / trigger the respawn flow, just without an explosion).
 	# Only bombs, rams, or (in principle) some other Boss's beam get ignored
 	# during this window — see set_capture_invulnerable().
 	if _capture_invuln and not is_capture:
+		return
+	# The beam is claimed by the first ship that reaches it; a second ship
+	# wandering into the same beam just passes through (co-op).
+	if is_capture and not area.try_claim(self):
 		return
 	if area.is_in_group("enemy_shots"):
 		area.queue_free()
@@ -267,7 +296,7 @@ func set_capture_invulnerable(on: bool) -> void:
 		modulate.a = 1.0
 
 func respawn() -> void:
-	position.x = viewport_width * 0.5
+	position.x = viewport_width * home_x_frac
 	_alive = true
 	visible = true
 	_invuln = RESPAWN_INVULN
@@ -327,3 +356,50 @@ func _revert_twin() -> void:
 		_sprite2.queue_free()
 	if is_instance_valid(_thruster2):
 		_thruster2.queue_free()
+
+# --- finding ships (enemies, bombs and the Boss capture attack aim at "the
+# player" — with a second ship that means "the nearest living one") ----------
+## Nearest ship that is alive, or the nearest one at all when none is (so
+## aiming code never gets a bare null while a ship merely sits in its
+## reconstruct animation). null only when no ship is in play.
+static func nearest(tree: SceneTree, from: Vector2) -> Ship:
+	var best: Ship = null
+	var best_alive := false
+	var best_d := INF
+	for n in tree.get_nodes_in_group("player"):
+		var s := n as Ship
+		if s == null:
+			continue
+		var d := s.global_position.distance_squared_to(from)
+		if (s._alive and not best_alive) or (s._alive == best_alive and d < best_d):
+			best = s
+			best_alive = s._alive
+			best_d = d
+	return best
+
+## Any living ship (null when every ship is dead/respawning).
+static func any_alive(tree: SceneTree) -> Ship:
+	for n in tree.get_nodes_in_group("player"):
+		var s := n as Ship
+		if s != null and s._alive:
+			return s
+	return null
+
+## Co-op: fly with this player's own p1_*/p2_* actions (see coop_input.gd);
+## otherwise the plain move_left/move_right/shoot ones.
+func set_coop_actions(on: bool) -> void:
+	act = CoopInput.action_names(player_index) if on else \
+		{"left": "move_left", "right": "move_right", "shoot": "shoot"}
+
+## Takes the ship out of play without freeing it — used for the co-op ship 2
+## while a single-player/alternating game runs.
+func park() -> void:
+	_alive = false
+	visible = false
+	set_deferred("monitoring", false)
+	if is_in_group("player"):
+		remove_from_group("player")
+
+func unpark() -> void:
+	if not is_in_group("player"):
+		add_to_group("player")

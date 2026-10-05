@@ -9,7 +9,7 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_PAUSABLE  # freeze on pause, not inherit Game's ALWAYS
 	add_to_group("enemy_shots")
 	area_entered.connect(_on_area_entered)
-	var player := get_tree().get_first_node_in_group("player")
+	var player := Ship.nearest(get_tree(), global_position)
 	if player:
 		var dx: float = clampf(player.global_position.x - global_position.x, -140.0, 140.0)
 		_vel.x = dx * 0.9

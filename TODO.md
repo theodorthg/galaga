@@ -8,17 +8,19 @@ offene Punkte stehen ggf. noch in `CLAUDE.md`.
 
 - [ ] Alte, von Hand hochgeladene Dateien auf itch.io löschen (macht der Nutzer: https://itch.io/game/edit/…, Seite `galaga-clone`) und beim Upload des Channels `web` „This file will be played in the browser“ setzen.
 
-Ideen für später (Einschätzung 2026-10-03, noch nicht beauftragt):
-- [ ] 2 Spieler abwechselnd (wie der Automat): günstig, eigene Leben und
-      Stage pro Spieler, Wechsel bei Lebensverlust.
-- [ ] Coop gleichzeitig: zwei Schiffe nebeneinander, gemeinsamer
-      Gegnerschwarm, Gegner zielen auf das nächste Schiff. Reizvoll: wird
-      ein Schiff vom Traktorstrahl gefangen, kann der PARTNER es befreien
-      (statt nur der Spieler selbst). Doppelschiff dann nur für den
-      Befreiten. Eigene Leben, Team-Bestenliste.
+Mehrspieler (Einschätzung 2026-10-03; lokal umgesetzt am 2026-10-03, Rest offen):
+- [x] 2 Spieler abwechselnd (wie der Automat) — Einstellung „Players: 2 (turns)“,
+      siehe CLAUDE.md „Fünfunddreißigste Playtest-Runde“. Noch nicht auf
+      Gerät/von Hand gespielt, nur headless geprüft.
+- [x] Coop gleichzeitig am selben Gerät (zwei Schiffe, gemeinsamer Schwarm und
+      Punktestand, eigene Leben je Spieler, Befreien durch den Partner) —
+      Einstellung „Players: 2 (co-op)“ + Beitreten-Bildschirm. Nur headless
+      geprüft, noch nicht live gespielt.
+- [ ] Coop live spielen und nachjustieren (Tastenbelegung, Schiff-Farbe P2,
+      HUD-Reihen, ob ein verlorenes Schiff im Bonuslevel den Level beenden soll).
+- [x] 2026-10-05 Hilfe-Seite „2 Players“ (coop.svg/coop.png) ergänzt.
 - [ ] Coop per LAN/Online nach dem mario-clone-Prinzip (Snapshots der
       Schiffe/Gegner/Schüsse — wenige, kleine Objekte).
-- Empfehlung: lohnt sich — Galaga ist der natürlichste Kandidat für Coop.
 
 Gemeinsam für die Serie (Vorlage: mario-clone v1.6–v1.9):
 - [ ] Bausteine aus mario-clone übernehmen statt neu erfinden: `CoopInput`

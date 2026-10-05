@@ -20,6 +20,9 @@ const BEAM_LEN := 16.0 * (2.0 / 3.0)
 const BEAM_HEAD_LEN := 5.0 * (2.0 / 3.0)
 
 var accent_color := ACCENT_NORMAL
+## Which ship fired this (Ship.player_index) — the per-ship laser cap in ship.gd
+## counts only its own beams (co-op: two ships share the "player_lasers" group).
+var owner_idx := 0
 
 func _ready() -> void:
 	# Game.process_mode=ALWAYS (fürs Pausenmenü) würde sich sonst vererben —

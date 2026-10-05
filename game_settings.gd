@@ -8,6 +8,9 @@ const CFG_PATH := "user://settings.cfg"
 
 const DEF := {
 	"lives": 3,          # LIVES_MIN..LIVES_MAX
+	"coop": false,       # nur mit players == 2: gleichzeitig zu zweit statt abwechselnd
+	"players": 1,        # 1 oder 2 (2 = abwechselnd wie am Automaten: eigene Leben/
+	                     # Stage/Punkte je Spieler, Wechsel bei Schiffsverlust)
 	"extra_life": 5000,  # 0 = off, sonst EXTRA_STEP..EXTRA_MAX in EXTRA_STEP-Schritten
 	                     # (user request 2026-09-13; bewusst NICHT mehr an boss_interval
 	                     # gekoppelt, seit der auf 10000 hochging — 2026-09-14)
@@ -26,6 +29,7 @@ const DEF := {
 	                        # "_stage % interval == 0" — siehe dort)
 }
 
+const PLAYERS_MAX := 2
 const LIVES_MIN := 2
 const LIVES_MAX := 9
 const EXTRA_MAX := 30000

@@ -20,8 +20,9 @@ var _t := 0.0
 var _phase := 0  # 0 grow, 1 hold, 2 shrink
 var _len := 0.0
 var _caught := false
+var _caught_ship: Node
 
-signal caught
+signal caught(ship)
 
 @onready var _col: CollisionShape2D = $CollisionShape2D
 
@@ -29,17 +30,25 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_PAUSABLE  # freeze on pause, not inherit Game's ALWAYS
 	add_to_group("enemy_shots")
 	add_to_group("capture_beam")
-	area_entered.connect(_on_area_entered)
 	var shape := RectangleShape2D.new()
 	shape.size = Vector2(WIDTH, 1.0)
 	_col.shape = shape
 	_update_shape()
 	queue_redraw()
 
-func _on_area_entered(area: Area2D) -> void:
-	if not _caught and area.is_in_group("player"):
-		_caught = true
-		caught.emit()
+## The first ship to touch the beam claims it (called from ship.gd::
+## _on_area_entered(), which fires for the same physical overlap anyway — doing
+## it there instead of in a separate beam-side handler makes "who got caught"
+## deterministic with two ships: the claim either succeeds for exactly one of
+## them, or fails and the other one passes through unharmed). Returns whether
+## `ship` is the caught one.
+func try_claim(ship: Node) -> bool:
+	if _caught:
+		return _caught_ship == ship
+	_caught = true
+	_caught_ship = ship
+	caught.emit(ship)
+	return true
 
 func _process(delta: float) -> void:
 	_t += delta

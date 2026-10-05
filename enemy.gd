@@ -54,6 +54,14 @@ var _bombs_left := 0
 var _bomb_t := 0.0
 
 var _carrying_captive := false
+## Ship.player_index of the ship this Boss is carrying (co-op: either player's
+## ship can be the captive; the rescue reward goes to THAT player, whoever
+## fires the freeing shot).
+var _captive_owner := 0
+## The ship a capture attempt is homing in on (nearest living one when it
+## starts) — kept so the capture-invulnerability can be switched on AND off on
+## the same ship even if the other one is closer by then.
+var _capture_target: Ship = null
 var _captive_visual: Sprite2D = null
 var _captive_glow_tween: Tween
 
@@ -67,7 +75,7 @@ var _flap_frames: Array = []  # 2 texture paths for a real flap (EnemyKinds vari
 signal locked_in(enemy)
 signal killed(points, kind, variant_idx, was_carrying_captive)
 signal resolved
-signal ship_rescued(at_position: Vector2)
+signal ship_rescued(at_position: Vector2, owner_idx: int)
 
 func setup(p_kind: int, p_formation: Formation, p_slot: int, p_curve: Curve2D, start_delay: float, p_stage: int = 1) -> void:
 	kind = p_kind
@@ -125,7 +133,7 @@ func dive() -> void:
 	if _snd:
 		_snd.play("dive")
 	var vp := Vector2(DESIGN_WIDTH, get_viewport_rect().size.y)
-	var player := get_tree().get_first_node_in_group("player")
+	var player := Ship.nearest(get_tree(), global_position)
 	var ppos: Vector2 = player.global_position if player else Vector2(vp.x * 0.5, vp.y * 0.82)
 	_start_path(AttackPaths.dive(global_position, ppos, vp), DIVE_SPEED, _begin_return)
 
@@ -144,6 +152,7 @@ func capture_dive() -> void:
 		return
 	_formation.release(self)
 	_state = CAPTURE_APPROACH
+	_capture_target = Ship.nearest(get_tree(), global_position)
 	_set_player_capture_invuln(true)
 	# No "dive" sound here (user report 2026-09-15: heard it play right before
 	# a Boss capture) — this is a capture approach, not a plain dive, and it
@@ -155,12 +164,18 @@ func capture_dive() -> void:
 ## See ship.gd::set_capture_invulnerable() for why the whole attempt (not just
 ## the beam itself) needs to make the ship immune to any OTHER source of death.
 func _set_player_capture_invuln(on: bool) -> void:
-	var player := get_tree().get_first_node_in_group("player")
-	if player:
-		player.set_capture_invulnerable(on)
+	if is_instance_valid(_capture_target):
+		_capture_target.set_capture_invulnerable(on)
+
+## The ship to follow while homing/holding the beam: the chosen target, unless
+## that one is gone (then simply the nearest ship).
+func _capture_aim_ship() -> Ship:
+	if is_instance_valid(_capture_target):
+		return _capture_target
+	return Ship.nearest(get_tree(), global_position)
 
 func _home_toward_player(delta: float) -> void:
-	var player := get_tree().get_first_node_in_group("player")
+	var player := _capture_aim_ship()
 	var vp := get_viewport_rect().size
 	var target_x: float = player.global_position.x if player else global_position.x
 	var target_y: float = vp.y * CAPTURE_HOVER_Y_FRAC
@@ -174,7 +189,7 @@ func _home_toward_player(delta: float) -> void:
 ## sideways dodge during the grow/hold window doesn't let the player slip out
 ## from under it.
 func _track_player_x(delta: float) -> void:
-	var player := get_tree().get_first_node_in_group("player")
+	var player := _capture_aim_ship()
 	if player:
 		global_position.x = move_toward(global_position.x, player.global_position.x, CAPTURE_HOMING_SPEED * delta)
 
@@ -190,8 +205,9 @@ func _begin_capture_beam() -> void:
 	# the beam's hold/shrink finishes — a bullet already in flight can still
 	# blow up this boss during that tail end, and _explode() only grants the
 	# twin-ship reward if _carrying_captive is already true by then.
-	beam.caught.connect(func():
+	beam.caught.connect(func(caught_ship):
 		_carrying_captive = true
+		_captive_owner = caught_ship.player_index if caught_ship else 0
 		_spawn_captive_visual()
 		if _snd:
 			_snd.play("beam-sound"))
@@ -311,10 +327,10 @@ func _is_invulnerable() -> bool:
 		or (_state == RETURNING and _carrying_captive):
 		return true
 	if _state == FLYING_IN:
-		var player := get_tree().get_first_node_in_group("player")
+		var player := Ship.nearest(get_tree(), global_position)
 		if player:
 			var enemy_height: float = float(EnemyKinds.DATA[kind]["half"]) * 2.0
-			var gun_y: float = player.global_position.y + player.GUN_MUZZLE_OFFSET_Y
+			var gun_y: float = player.global_position.y + Ship.GUN_MUZZLE_OFFSET_Y
 			if global_position.y > gun_y - enemy_height:
 				return true
 	return false
@@ -366,7 +382,7 @@ func _explode() -> void:
 			_captive_glow_tween.kill()
 		if is_instance_valid(_captive_visual):
 			_captive_visual.queue_free()
-		ship_rescued.emit(global_position)
+		ship_rescued.emit(global_position, _captive_owner)
 	_finish()
 	var t := create_tween()
 	t.set_parallel(true)

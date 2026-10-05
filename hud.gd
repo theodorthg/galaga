@@ -99,6 +99,7 @@ const BANNER_FADE := 0.9
 const BANNER_TOTAL := BANNER_HOLD + BANNER_FADE
 
 var _lives := 0
+var _lives2 := -1  # >= 0 only in co-op, see set_coop_lives()
 var _banner_tween: Tween
 var _bonus_icons: Array[Texture2D] = []
 var _bonus_icon_indices: Array[int] = []
@@ -126,8 +127,17 @@ func _ready() -> void:
 	_stage.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
 	_stage.add_theme_constant_override("outline_size", 4)
 
+## "P1"/"P2" prefix in front of the score in 2-player mode; "" = single player.
+var _player_tag := ""
+var _score_value := 0
+
+func set_player_tag(tag: String) -> void:
+	_player_tag = tag
+	set_score(_score_value)
+
 func set_score(n: int) -> void:
-	_score.text = "%06d" % n
+	_score_value = n
+	_score.text = ("%s  %06d" % [_player_tag, n]) if _player_tag != "" else "%06d" % n
 
 func set_stage(n: int) -> void:
 	_stage.text = "STAGE %d" % n
@@ -135,6 +145,17 @@ func set_stage(n: int) -> void:
 func set_lives(n: int) -> void:
 	_lives = maxi(n, 0)
 	queue_redraw()
+
+## Co-op: two tagged reserve rows instead of one (set_lives() switches back to
+## the single row by clearing _lives2).
+func set_coop_lives(p1: int, p2: int) -> void:
+	_lives = maxi(p1, 0)
+	_lives2 = maxi(p2, 0)
+	queue_redraw()
+
+func set_single_lives(n: int) -> void:
+	_lives2 = -1
+	set_lives(n)
 
 ## Returns true if THIS icon completed a full row (lap) — the caller (game.gd)
 ## awards BONUS_LAP_POINTS and flashes the "LAP!" banner right away when that
@@ -166,6 +187,19 @@ func current_lap_indices() -> Array[int]:
 	if _lap_pending:
 		return []
 	return _bonus_icon_indices.duplicate()
+
+## Snapshot/restore of the achievement row — 2-player alternating mode keeps
+## one row (and lap count) per player.
+func get_bonus_state() -> Dictionary:
+	return {"icons": _bonus_icons.duplicate(), "indices": _bonus_icon_indices.duplicate(),
+		"laps": _bonus_laps, "pending": _lap_pending}
+
+func set_bonus_state(d: Dictionary) -> void:
+	_bonus_icons.assign(d.icons)
+	_bonus_icon_indices.assign(d.indices)
+	_bonus_laps = int(d.laps)
+	_lap_pending = bool(d.pending)
+	queue_redraw()
 
 func clear_bonus_icons() -> void:
 	_bonus_icons.clear()
@@ -266,21 +300,34 @@ func _draw() -> void:
 	_draw_bonus_icons()
 
 func _draw_lives() -> void:
-	if _lives <= 0:
-		return
 	var y := size.y - ICON_H - 6.0
+	if _lives2 < 0:
+		_draw_lives_row(_lives, y, "")
+		return
+	# Co-op: one row per player, tagged — player 2's sits above player 1's.
+	_draw_lives_row(_lives, y, "1")
+	_draw_lives_row(_lives2, y - ICON_H - 6.0, "2")
+
+func _draw_lives_row(count: int, y: float, tag: String) -> void:
+	var font := get_theme_default_font()
+	var x0 := 12.0
+	if tag != "":
+		draw_string_outline(font, Vector2(x0, y + ICON_H - 4.0), tag, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, 4, Color(0, 0, 0, 0.85))
+		draw_string(font, Vector2(x0, y + ICON_H - 4.0), tag, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color.WHITE)
+		x0 += 22.0
+	if count <= 0:
+		return
 	var icon_w := ICON_H * (SHIP_ICON.get_width() / float(SHIP_ICON.get_height()))
-	if _lives < MANY_THRESHOLD:
-		for i in _lives:
-			var x := 12.0 + i * (icon_w + ICON_GAP)
+	if count < MANY_THRESHOLD:
+		for i in count:
+			var x := x0 + i * (icon_w + ICON_GAP)
 			draw_texture_rect(SHIP_ICON, Rect2(x, y, icon_w, ICON_H), false)
 		return
-	draw_texture_rect(SHIP_ICON, Rect2(12.0, y, icon_w, ICON_H), false)
-	var font := get_theme_default_font()
+	draw_texture_rect(SHIP_ICON, Rect2(x0, y, icon_w, ICON_H), false)
 	var fsize := 20
-	var label_pos := Vector2(12.0 + icon_w + 6.0, y + ICON_H - 4.0)
-	draw_string_outline(font, label_pos, "× %d" % _lives, HORIZONTAL_ALIGNMENT_LEFT, -1, fsize, 4, Color(0, 0, 0, 0.85))
-	draw_string(font, label_pos, "× %d" % _lives, HORIZONTAL_ALIGNMENT_LEFT, -1, fsize, UiStyle.ACCENT)
+	var label_pos := Vector2(x0 + icon_w + 6.0, y + ICON_H - 4.0)
+	draw_string_outline(font, label_pos, "× %d" % count, HORIZONTAL_ALIGNMENT_LEFT, -1, fsize, 4, Color(0, 0, 0, 0.85))
+	draw_string(font, label_pos, "× %d" % count, HORIZONTAL_ALIGNMENT_LEFT, -1, fsize, UiStyle.ACCENT)
 
 ## Bottom-centre — plenty of free space there per the user's own suggestion.
 ## Centered within the space LEFT of the fixed lap-marker zone (not the full
