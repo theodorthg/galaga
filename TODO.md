@@ -6,7 +6,6 @@ offene Punkte stehen ggf. noch in `CLAUDE.md`.
 
 ## Offen
 
-- [ ] itch.io-Channel `web`: prüfen, dass „This file will be played in the browser“ noch gesetzt ist (butler behält die Einstellung normalerweise).
 
 Mehrspieler (Einschätzung 2026-10-03; lokal umgesetzt am 2026-10-03, Rest offen):
 - [x] 2 Spieler abwechselnd (wie der Automat) — Einstellung „Players: 2 (turns)“,
@@ -60,6 +59,7 @@ Gemeinsam für die Serie (Vorlage: mario-clone v1.6–v1.9):
 
 ## Erledigt
 
+- [x] 2026-10-17 itch.io-Upload-Listen geprüft: nur die 4 butler-Channel-Uploads (+ Doku-PDFs), kein alter APK/ZIP; „played in the browser“ beim Web-Upload gesetzt.
 - [x] 2026-10-17 Release-Keystore war öffentlich eingecheckt (alle 5 Repos) → aus dem Index entfernt, `*.keystore`/`*.jks` ignoriert, neuer Schlüssel `~/keys/theodorthg-release.keystore` (außerhalb des Repos), Patch-Release mit neuem Schlüssel; alte von Hand hochgeladene itch.io-Dateien vom Nutzer gelöscht.
 - [x] 2026-09-29 itch.io jetzt per `butler` in die Channels linux / android / windows / web (`theodorthg/galaga-clone`, wie bei mario-clone)
 - [x] 2026-09-27 RG552: alte, anders signierte Galaga-Version auf
